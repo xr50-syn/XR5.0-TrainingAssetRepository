@@ -316,6 +316,9 @@ docker-compose --profile [lab|prod|minio] up --build
 
 **Source Code**: https://github.com/xr50-syn/XR5.0-TrainingAssetRepository
 
+## Support
+For any issues contact Emmanouil Mavrogiorgis (emaurog@synelixis.com)
+
 ## License
 
 MIT License
