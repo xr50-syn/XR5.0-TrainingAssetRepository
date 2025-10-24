@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Path to the SQL file
-SQL_FILE="/docker-entrypoint-initdb.d/create-database.sql"
+# Path to the SQL template file
+SQL_FILE="/docker-entrypoint-initdb.d/create-database.sql.template"
 
 # Check if the SQL file exists
 if [ ! -f "$SQL_FILE" ]; then

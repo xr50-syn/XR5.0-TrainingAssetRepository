@@ -29,6 +29,10 @@ services:
       MYSQL_PASSWORD: ${XR50_REPO_DB_PASSWORD}
       MYSQL_DATABASE: ${XR50_REPO_DB_NAME}
       MARIADB_AUTO_UPGRADE: 1
+      # Pass these to init scripts
+      XR50_REPO_DB_USER: ${XR50_REPO_DB_USER}
+      XR50_REPO_DB_PASSWORD: ${XR50_REPO_DB_PASSWORD}
+      XR50_REPO_DB_NAME: ${XR50_REPO_DB_NAME}
     command: ["--max-allowed-packet=128M", "--innodb-log-file-size=64M"]
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-u", "${XR50_REPO_DB_USER}", "--password=${XR50_REPO_DB_PASSWORD}"]
