@@ -16,8 +16,7 @@ The XR5.0 Training Asset Repository is a cloud-based storage and management syst
 
 - **AWS S3** - For production environments with cloud storage
 - **OwnCloud** - For lab/development environments with self-hosted storage
-- **MinIO** - For local S3-compatible testing (WIP)
-- **LocalStack** - For AWS sandbox testing without costs (for partners)
+- **MinIO** - For sandbox S3 testing without AWS costs (for partners)
 
 The system provides secure, scalable storage for training assets, including 3D models, documents, videos, and XR applications used in the XR5.0 Training Platform.
 
@@ -65,21 +64,21 @@ The application does NOT require:
 ### For Lab (OwnCloud) Deployment
 - No additional requirements (all services run in containers)
 
-### For Sandbox (LocalStack) Deployment
+### For Sandbox (MinIO) Deployment
 - Docker and Docker Compose
 - No AWS account needed
-- Buckets are automatically pre-created by init scripts (see `localstack-init/` directory)
+- Buckets must be created using the provided script or via MinIO Console
+- Data persists across container restarts (stored in Docker volume)
 
 ## Installation Options
 
-The repository supports four deployment profiles:
+The repository supports three deployment profiles:
 
 | Profile | Storage Backend | Use Case |
 |---------|----------------|----------|
 | `prod` | AWS S3 | Production environments with cloud storage |
 | `lab` | OwnCloud | Development/testing with self-hosted storage |
-| `minio` | MinIO | Local S3-compatible testing (WIP) |
-| `sandbox` | LocalStack | AWS sandbox testing without costs (for partners) |
+| `sandbox` | MinIO | S3 sandbox testing without AWS costs (for partners) |
 
 ## Quick Start
 
@@ -172,16 +171,22 @@ docker-compose --profile prod up -d
 docker-compose --profile lab up -d
 ```
 
-#### Sandbox with LocalStack (AWS Testing):
+#### Sandbox with MinIO (S3 Testing):
 ```bash
 # Copy the sandbox environment file
 cp .env.sandbox .env
 
 # Start with sandbox profile
 docker-compose --profile sandbox up -d
+
+# Create sample buckets (run after containers start)
+chmod +x sandbox-init-buckets.sh
+./sandbox-init-buckets.sh
 ```
 
-The sandbox environment automatically creates these sample S3 buckets:
+Access MinIO Console at http://localhost:9001 (minioadmin/minioadmin)
+
+The init script creates these sample S3 buckets:
 - `xr50-sandbox-tenant-demo`
 - `xr50-sandbox-tenant-pilot1`
 - `xr50-sandbox-tenant-pilot2`
@@ -191,7 +196,7 @@ Wait for all services to start (approximately 30-60 seconds), then verify:
 
 - **Repository API**: http://localhost:5286/swagger
 - **OwnCloud** (lab profile only): http://localhost:8080
-- **LocalStack** (sandbox profile only): http://localhost:4566/_localstack/health
+- **MinIO Console** (sandbox profile only): http://localhost:9001
 
 
 ## Detailed Configuration
@@ -229,15 +234,17 @@ Wait for all services to start (approximately 30-60 seconds), then verify:
 | `XR50_REPO_DB_PASSWORD` | Repository database password | Required |
 | `XR50_REPO_DB_NAME` | Repository database name | `xr50_repository` |
 
-#### LocalStack Configuration (Sandbox Profile)
+#### MinIO Configuration (Sandbox Profile)
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `AWS_HOST` | LocalStack endpoint URL | `http://localstack:4566` |
-| `AWS_ACCESS_KEY_ID` | LocalStack access key (any value works) | `test` |
-| `AWS_SECRET_ACCESS_KEY` | LocalStack secret key (any value works) | `test` |
-| `LOCALSTACK_SERVICES` | AWS services to emulate | `s3,dynamodb,sqs,sns,lambda` |
-| `LOCALSTACK_PERSISTENCE` | Enable data persistence | `1` |
-| `LOCALSTACK_DEBUG` | Enable debug logging | `0` |
+| `AWS_HOST` | MinIO endpoint URL | `http://minio:9000` |
+| `AWS_ACCESS_KEY_ID` | MinIO access key | `minioadmin` |
+| `AWS_SECRET_ACCESS_KEY` | MinIO secret key | `minioadmin` |
+| `MINIO_ROOT_USER` | MinIO console username | `minioadmin` |
+| `MINIO_ROOT_PASSWORD` | MinIO console password | `minioadmin` |
+| `S3_FORCE_PATH_STYLE` | Use path-style URLs (required for MinIO) | `true` |
+
+**Note**: MinIO provides full data persistence. Files are stored in Docker volume `minio_data` and survive container restarts.
 
 ### Network Configuration
 
@@ -352,19 +359,26 @@ aws s3 ls s3://xr50-tenant-test-company/
 2. Login with the admin credentials from your `.env` file
 3. Verify the tenant directory has been created
 
-#### For LocalStack (Sandbox):
-Check that the bucket exists using awslocal CLI (if installed) or through the LocalStack API:
-```bash
-# Using awslocal (requires awscli-local package)
-awslocal s3 ls s3://xr50-sandbox-tenant-test-company/
+#### For MinIO (Sandbox):
+Check that the bucket exists using AWS CLI or MinIO Console:
 
-# Or using AWS CLI with LocalStack endpoint
-aws --endpoint-url=http://localhost:4566 s3 ls
+**Via AWS CLI**:
+```bash
+# List all buckets
+aws --endpoint-url=http://localhost:9000 s3 ls
+
+# List contents of specific bucket
+aws --endpoint-url=http://localhost:9000 s3 ls s3://xr50-sandbox-tenant-demo/ --recursive
 ```
 
-You can also verify LocalStack health:
+**Via MinIO Console** (easier):
+1. Go to http://localhost:9001
+2. Login with minioadmin/minioadmin
+3. Browse buckets and files visually
+
+You can also verify MinIO health:
 ```bash
-curl http://localhost:4566/_localstack/health
+curl http://localhost:9000/minio/health/live
 ```
 
 ### 4. Upload Test Asset

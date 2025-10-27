@@ -1,13 +1,14 @@
 # Sandbox Setup Guide for Partners
 
-This guide helps you set up a local AWS sandbox environment for testing the XR5.0 Training Asset Repository **without any AWS costs**.
+This guide helps you set up a local S3-compatible sandbox environment for testing the XR5.0 Training Asset Repository **without any AWS costs**.
 
-## What is LocalStack?
+## What is MinIO?
 
-LocalStack is a fully functional local AWS cloud stack that emulates AWS services (S3, DynamoDB, Lambda, SQS, SNS, etc.) on your local machine. This allows you to test the repository without:
+MinIO is a high-performance, S3-compatible object storage system that runs locally. It provides full AWS S3 API compatibility and allows you to test the repository without:
 - Creating an AWS account
 - Incurring any AWS charges
 - Needing internet connectivity (after initial setup)
+- **Bonus**: Includes a web-based console for easy file management!
 
 ## Prerequisites
 
@@ -44,40 +45,49 @@ docker-compose --profile sandbox up -d
 # Check all containers are running
 docker-compose ps
 
-# Verify LocalStack is healthy
-curl http://localhost:4566/_localstack/health
+# Verify MinIO is healthy
+curl http://localhost:9000/minio/health/live
 
 # Check Repository API
 curl http://localhost:5286/health
 ```
 
-### Pre-created S3 Buckets
+### Create Sample S3 Buckets
 
 **IMPORTANT**: The application does NOT create S3 buckets automatically. All buckets must be pre-provisioned.
 
-For the sandbox environment, this is handled automatically by init scripts. On startup, the following buckets are created in LocalStack:
+Run the provided script to create sample buckets:
+
+```bash
+# Make the script executable
+chmod +x sandbox-init-buckets.sh
+
+# Run the bucket creation script
+./sandbox-init-buckets.sh
+```
+
+This creates the following buckets in MinIO:
 - `xr50-sandbox-tenant-demo`
 - `xr50-sandbox-tenant-pilot1`
 - `xr50-sandbox-tenant-pilot2`
 
-You can verify these buckets exist:
+**Alternative**: Create buckets manually via MinIO Console or AWS CLI:
 ```bash
-# View init script logs
-docker-compose logs localstack | grep "Creating bucket"
+# Using AWS CLI
+aws --endpoint-url=http://localhost:9000 s3 mb s3://xr50-sandbox-tenant-demo
+aws --endpoint-url=http://localhost:9000 s3 mb s3://xr50-sandbox-tenant-pilot1
+aws --endpoint-url=http://localhost:9000 s3 mb s3://xr50-sandbox-tenant-pilot2
 
-# List all buckets (if you have awslocal installed)
-awslocal s3 ls
-
-# Or using standard AWS CLI
-aws --endpoint-url=http://localhost:4566 s3 ls
+# Verify buckets were created
+aws --endpoint-url=http://localhost:9000 s3 ls
 ```
 
 **Note**: In a real AWS environment, you would need to create these buckets manually or through infrastructure-as-code before creating tenants.
 
 ### Access the Services
 - **Repository API (Swagger)**: http://localhost:5286/swagger
-- **LocalStack Gateway**: http://localhost:4566
-- **LocalStack Health**: http://localhost:4566/_localstack/health
+- **MinIO Console (Web UI)**: http://localhost:9001 (Login: minioadmin/minioadmin)
+- **MinIO API**: http://localhost:9000
 
 ## Testing the Repository
 
@@ -113,61 +123,84 @@ Example request body (using pre-created bucket):
 - `xr50-sandbox-tenant-pilot1`
 - `xr50-sandbox-tenant-pilot2`
 
-If you need additional buckets, you can create them manually:
+If you need additional buckets, you can create them:
+
+**Option 1 - Via MinIO Console (Easiest)**:
+1. Go to http://localhost:9001
+2. Login with minioadmin/minioadmin
+3. Click "Create Bucket"
+4. Enter bucket name (e.g., `xr50-sandbox-tenant-newcompany`)
+
+**Option 2 - Via AWS CLI**:
 ```bash
-# Using awslocal
-awslocal s3 mb s3://xr50-sandbox-tenant-newcompany
-
-# Or using AWS CLI
-aws --endpoint-url=http://localhost:4566 s3 mb s3://xr50-sandbox-tenant-newcompany
+aws --endpoint-url=http://localhost:9000 s3 mb s3://xr50-sandbox-tenant-newcompany
 ```
-
-Or add them to the init script in `localstack-init/01-create-buckets.sh` and restart LocalStack.
 
 ### 2. Upload Test Assets
 
 Use the Asset Management endpoints in Swagger to upload test files and experiment with the API.
 
-### 3. Verify Data in LocalStack
+### 3. Verify Data in MinIO
 
-Install AWS CLI and awslocal (optional but helpful):
-```bash
-pip install awscli-local
-```
+**Option 1 - Via MinIO Console (Visual)**:
+1. Go to http://localhost:9001
+2. Login with minioadmin/minioadmin
+3. Click on your bucket
+4. Browse files visually, download, upload, etc.
 
-Then you can interact with LocalStack like real AWS:
+**Option 2 - Via AWS CLI**:
 ```bash
 # List all S3 buckets
-awslocal s3 ls
+aws --endpoint-url=http://localhost:9000 s3 ls
 
 # List contents of a specific bucket
-awslocal s3 ls s3://xr50-sandbox-tenant-test-company/
+aws --endpoint-url=http://localhost:9000 s3 ls s3://xr50-sandbox-tenant-demo/
 
-# Copy a file to S3
-awslocal s3 cp myfile.txt s3://xr50-sandbox-tenant-test-company/
+# List with details
+aws --endpoint-url=http://localhost:9000 s3 ls s3://xr50-sandbox-tenant-demo/ --recursive
+
+# Download a file
+aws --endpoint-url=http://localhost:9000 s3 cp s3://xr50-sandbox-tenant-demo/myfile.pdf ./
 ```
 
 ## Important Notes
 
 ### Sandbox vs Production
-- **Sandbox credentials**: Any values work (default: test/test)
+- **Sandbox credentials**: minioadmin/minioadmin (MinIO defaults)
 - **Production credentials**: Must be valid AWS credentials
-- **Sandbox endpoint**: http://localstack:4566
+- **Sandbox endpoint**: http://minio:9000 (inside Docker) or http://localhost:9000 (from host)
 - **Production endpoint**: Uses real AWS endpoints
 
-### Data Persistence
-The sandbox configuration enables persistence, meaning your data will be saved even after stopping the containers. Data is stored in the `.localstack` directory.
+### Data Persistence ✅
 
-To reset and start fresh:
+**MinIO provides excellent data persistence!** Your uploaded files will survive container restarts.
+
+Data is stored in a Docker volume named `minio_data` and persists until you explicitly delete it.
+
+**To verify persistence**:
 ```bash
-# Stop containers
+# Upload a file via Swagger
+
+# Stop the sandbox
 docker-compose --profile sandbox down
 
-# Remove all data (optional)
-rm -rf .localstack
+# Restart the sandbox
+docker-compose --profile sandbox up -d
+
+# File is still there!
+aws --endpoint-url=http://localhost:9000 s3 ls s3://your-bucket/ --recursive
+```
+
+**To reset and start fresh** (WARNING: Deletes all data):
+```bash
+# Stop containers and remove volumes
+docker-compose --profile sandbox down -v
 
 # Start fresh
 docker-compose --profile sandbox up -d
+
+# Recreate buckets
+./sandbox-init-buckets.sh
 ```
 
 ## Troubleshooting
@@ -181,15 +214,31 @@ The application requires buckets to be pre-provisioned. This is by design for se
 
 1. Check if the bucket exists:
 ```bash
-awslocal s3 ls
+aws --endpoint-url=http://localhost:9000 s3 ls
 ```
 
-2. If missing, create the bucket:
+2. If missing, create the bucket via MinIO Console or CLI:
 ```bash
-awslocal s3 mb s3://your-bucket-name
+aws --endpoint-url=http://localhost:9000 s3 mb s3://your-bucket-name
 ```
 
 3. Verify the bucket name in your tenant creation request matches exactly.
+
+### Cannot Access MinIO Console
+
+**Problem**: http://localhost:9001 doesn't load.
+
+**Solution**:
+```bash
+# Check if MinIO is running
+docker-compose ps | grep minio
+
+# Check MinIO logs
+docker-compose logs minio
+
+# Restart MinIO
+docker-compose restart minio
+```
 
 ### Services Won't Start
 ```bash
@@ -198,15 +247,15 @@ docker-compose logs -f
 
 # Check specific service
 docker-compose logs training-repo
-docker-compose logs localstack
+docker-compose logs minio
 ```
 
 ### Port Conflicts
-If ports 4566, 5286, or 3306 are already in use:
+If ports 9000, 9001, 5286, or 3306 are already in use:
 ```bash
-# Find what's using the port (example for port 4566)
-netstat -ano | findstr :4566    # Windows
-lsof -i :4566                    # Linux/Mac
+# Find what's using the port (example for port 9000)
+netstat -ano | findstr :9000    # Windows
+lsof -i :9000                    # Linux/Mac
 ```
 
 ### Reset Everything
@@ -217,23 +266,23 @@ rm -rf .localstack
 docker-compose --profile sandbox up -d --build
 ```
 
-## Limitations
+## MinIO Features
 
-LocalStack Community Edition (free) supports:
-- S3 (object storage)
-- DynamoDB (NoSQL database)
-- SQS (message queuing)
-- SNS (notifications)
-- Lambda (serverless functions)
-- And many more...
+MinIO provides:
+- ✅ Full S3 API compatibility
+- ✅ Excellent data persistence (unlike LocalStack free version)
+- ✅ Web-based console for easy file management
+- ✅ High performance
+- ✅ 100% free and open source
+- ✅ Production-ready (used by many companies)
 
-Some advanced AWS features require LocalStack Pro (paid), but all features needed for this repository work with the free Community Edition.
+All S3 features needed for this repository work perfectly with MinIO!
 
 ## Support
 
 For issues related to:
 - **Repository setup**: Contact Emmanouil Mavrogiorgis (emaurog@synelixis.com)
-- **LocalStack**: Visit https://docs.localstack.cloud/
+- **MinIO**: Visit https://min.io/docs/minio/linux/index.html
 
 ## Next Steps
 

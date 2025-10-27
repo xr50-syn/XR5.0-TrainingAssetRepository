@@ -13,6 +13,9 @@ volumes:
   # MinIO volumes (for S3 testing)
   minio_data:
     driver: local
+  # LocalStack volume (for sandbox S3 testing)
+  localstack_data:
+    driver: local
 
 services:
   mariadb:
@@ -183,20 +186,19 @@ services:
     profiles:
       - lab      # Only start with lab profile
 
-  # Optional: MinIO for local S3 testing (alternative to real S3)
+  # MinIO for sandbox S3 testing (S3-compatible storage with full persistence)
   minio:
     image: minio/minio:latest
     container_name: minio
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9000:9000"   # MinIO API
+      - "9001:9001"   # MinIO Console (Web UI)
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
-    # Added: Health check for MinIO
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
@@ -204,9 +206,12 @@ services:
       retries: 3
       start_period: 30s
     profiles:
-      - minio    # Only start with --profile minio
+      - sandbox  # Sandbox testing (used instead of LocalStack for reliable persistence)
+      - minio    # Can also be started with --profile minio
 
-  # LocalStack for AWS sandbox testing (for partners to test without real AWS costs)
+  # LocalStack - Alternative AWS emulator (NOTE: Free version has limited S3 persistence)
+  # Currently NOT used for sandbox profile - MinIO is used instead for better persistence
+  # Uncomment the 'localstack' profile below if you want to use LocalStack
   localstack:
     image: localstack/localstack:latest
     container_name: localstack
@@ -217,16 +222,18 @@ services:
       # Core LocalStack configuration
       - SERVICES=${LOCALSTACK_SERVICES:-s3,dynamodb,sqs,sns,lambda}
       - DEBUG=${LOCALSTACK_DEBUG:-0}
-      - DATA_DIR=/tmp/localstack/data
+      # IMPORTANT: DATA_DIR must match the volume mount location for persistence
+      - DATA_DIR=/var/lib/localstack
       - DOCKER_HOST=unix:///var/run/docker.sock
       # AWS-compatible credentials (can be any value for LocalStack)
       - AWS_DEFAULT_REGION=${AWS_REGION:-eu-west-1}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
-      # Enable persistence
+      # Enable persistence (requires DATA_DIR to match volume mount)
       - PERSISTENCE=${LOCALSTACK_PERSISTENCE:-1}
     volumes:
-      - "${LOCALSTACK_VOLUME_DIR:-./.localstack}:/var/lib/localstack"
+      # Use named volume for better persistence (data survives container removal)
+      - localstack_data:/var/lib/localstack
       - "/var/run/docker.sock:/var/run/docker.sock"
       # Mount init scripts to create sample buckets on startup
       - "./localstack-init:/etc/localstack/init/ready.d"
@@ -237,4 +244,4 @@ services:
       retries: 5
       start_period: 30s
     profiles:
-      - sandbox  # Only start with --profile sandbox
+      - localstack  # Use --profile localstack to start (not included in sandbox)

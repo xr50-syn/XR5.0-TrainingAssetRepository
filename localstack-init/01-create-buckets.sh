@@ -15,15 +15,24 @@ BUCKETS=(
 )
 
 for BUCKET in "${BUCKETS[@]}"; do
-  echo "Creating bucket: $BUCKET"
-  awslocal s3 mb "s3://$BUCKET" 2>/dev/null || echo "  Bucket already exists or creation failed"
+  # Check if bucket already exists (to preserve data from previous runs)
+  if awslocal s3 ls "s3://$BUCKET" 2>/dev/null; then
+    echo "Bucket $BUCKET already exists (preserving existing data)"
+  else
+    echo "Creating bucket: $BUCKET"
+    if awslocal s3 mb "s3://$BUCKET" 2>/dev/null; then
+      echo "  ✓ Successfully created bucket: $BUCKET"
 
-  # Set bucket to allow public ACLs (optional, useful for testing)
-  awslocal s3api put-public-access-block \
-    --bucket "$BUCKET" \
-    --public-access-block-configuration \
-    "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false" \
-    2>/dev/null || echo "  Could not set public access block"
+      # Set bucket to allow public ACLs (optional, useful for testing)
+      awslocal s3api put-public-access-block \
+        --bucket "$BUCKET" \
+        --public-access-block-configuration \
+        "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false" \
+        2>/dev/null && echo "  ✓ Configured bucket access settings"
+    else
+      echo "  ✗ Failed to create bucket: $BUCKET"
+    fi
+  fi
 done
 
 echo ""
