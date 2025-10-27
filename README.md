@@ -17,27 +17,69 @@ The XR5.0 Training Asset Repository is a cloud-based storage and management syst
 - **AWS S3** - For production environments with cloud storage
 - **OwnCloud** - For lab/development environments with self-hosted storage
 - **MinIO** - For local S3-compatible testing (WIP)
+- **LocalStack** - For AWS sandbox testing without costs (for partners)
 
 The system provides secure, scalable storage for training assets, including 3D models, documents, videos, and XR applications used in the XR5.0 Training Platform.
 
 ## Prerequisites For S3 Deployment
+
+### AWS Account Setup
 - AWS Account with S3 access
 - AWS Access Key ID and Secret Access Key
-- Pre-provisioned S3 bucket(s) following naming convention: `xr50-tenant-[name]`
-- Appropriate IAM permissions for bucket operations
+- Appropriate IAM permissions for bucket operations (see below)
+
+### S3 Bucket Pre-Provisioning (REQUIRED)
+
+**IMPORTANT**: The application does NOT create S3 buckets automatically. All buckets must be pre-provisioned before creating tenants.
+
+#### Bucket Naming Convention
+
+When creating a tenant, you must specify an existing S3 bucket name in the tenant configuration. The recommended naming convention is:
+
+```
+{prefix}-tenant-{tenant-name}
+```
+
+Where:
+- `{prefix}` is your base bucket prefix (default: `xr50`, configurable via `S3_BASE_BUCKET_PREFIX`)
+- `{tenant-name}` is the sanitized tenant name (lowercase, alphanumeric and hyphens only)
+
+**Examples**:
+- Tenant: "demo-company" → Bucket: `xr50-tenant-demo-company`
+- Tenant: "pilot1" → Bucket: `xr50-tenant-pilot1`
+- Tenant: "Acme Corp" → Bucket: `xr50-tenant-acme-corp` (sanitized)
+
+#### Required IAM Permissions
+
+Your AWS credentials must have the following S3 permissions on the pre-provisioned buckets:
+- `s3:GetObject`
+- `s3:PutObject`
+- `s3:DeleteObject`
+- `s3:ListBucket`
+- `s3:GetBucketLocation`
+
+The application does NOT require:
+- `s3:CreateBucket` (buckets must be pre-created)
+- `s3:DeleteBucket` (optional, only if you want to allow tenant deletion)
 
 ### For Lab (OwnCloud) Deployment
 - No additional requirements (all services run in containers)
 
+### For Sandbox (LocalStack) Deployment
+- Docker and Docker Compose
+- No AWS account needed
+- Buckets are automatically pre-created by init scripts (see `localstack-init/` directory)
+
 ## Installation Options
 
-The repository supports three deployment profiles:
+The repository supports four deployment profiles:
 
 | Profile | Storage Backend | Use Case |
 |---------|----------------|----------|
 | `prod` | AWS S3 | Production environments with cloud storage |
 | `lab` | OwnCloud | Development/testing with self-hosted storage |
-| `minio` | MinIO | Local S3-compatible testing | (Still in progress)
+| `minio` | MinIO | Local S3-compatible testing (WIP) |
+| `sandbox` | LocalStack | AWS sandbox testing without costs (for partners) |
 
 ## Quick Start
 
@@ -92,6 +134,32 @@ XR50_REPO_DB_NAME=xr50_repository
 ASPNETCORE_ENVIRONMENT=Development
 ```
 
+#### For LocalStack Sandbox Deployment:
+```env
+# Storage Configuration
+STORAGE_TYPE=S3
+
+# LocalStack AWS Settings (Sandbox - no real AWS costs)
+AWS_HOST=http://localstack:4566
+AWS_ACCESS_KEY_ID=test
+AWS_SECRET_ACCESS_KEY=test
+AWS_REGION=eu-west-1
+
+# S3 Settings
+S3_BASE_BUCKET_PREFIX=xr50-sandbox
+S3_FORCE_PATH_STYLE=true
+
+# Database Configuration
+XR50_REPO_DB_USER=sandbox_user
+XR50_REPO_DB_PASSWORD=sandbox_password
+XR50_REPO_DB_NAME=magical_library
+
+# Application Settings
+ASPNETCORE_ENVIRONMENT=Development
+```
+
+> Note: For sandbox testing, use the provided `.env.sandbox` file or copy the configuration above. LocalStack emulates AWS services locally, so you won't incur any AWS costs.
+
 ### 3. Start the Services
 
 #### Production with S3:
@@ -104,12 +172,26 @@ docker-compose --profile prod up -d
 docker-compose --profile lab up -d
 ```
 
+#### Sandbox with LocalStack (AWS Testing):
+```bash
+# Copy the sandbox environment file
+cp .env.sandbox .env
+
+# Start with sandbox profile
+docker-compose --profile sandbox up -d
+```
+
+The sandbox environment automatically creates these sample S3 buckets:
+- `xr50-sandbox-tenant-demo`
+- `xr50-sandbox-tenant-pilot1`
+- `xr50-sandbox-tenant-pilot2`
 
 ### 4. Verify Installation
 Wait for all services to start (approximately 30-60 seconds), then verify:
 
 - **Repository API**: http://localhost:5286/swagger
 - **OwnCloud** (lab profile only): http://localhost:8080
+- **LocalStack** (sandbox profile only): http://localhost:4566/_localstack/health
 
 
 ## Detailed Configuration
@@ -146,6 +228,16 @@ Wait for all services to start (approximately 30-60 seconds), then verify:
 | `XR50_REPO_DB_USER` | Repository database user | `xr50admin` |
 | `XR50_REPO_DB_PASSWORD` | Repository database password | Required |
 | `XR50_REPO_DB_NAME` | Repository database name | `xr50_repository` |
+
+#### LocalStack Configuration (Sandbox Profile)
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `AWS_HOST` | LocalStack endpoint URL | `http://localstack:4566` |
+| `AWS_ACCESS_KEY_ID` | LocalStack access key (any value works) | `test` |
+| `AWS_SECRET_ACCESS_KEY` | LocalStack secret key (any value works) | `test` |
+| `LOCALSTACK_SERVICES` | AWS services to emulate | `s3,dynamodb,sqs,sns,lambda` |
+| `LOCALSTACK_PERSISTENCE` | Enable data persistence | `1` |
+| `LOCALSTACK_DEBUG` | Enable debug logging | `0` |
 
 ### Network Configuration
 
@@ -184,7 +276,7 @@ Use the Swagger UI to create a test tenant:
 3. Click "Try it out"
 4. Use this example request:
 
-For S3:
+For S3 (ensure bucket is pre-created in AWS):
 ```json
 {
   "tenantName": "test-company",
@@ -204,6 +296,8 @@ For S3:
   }
 }
 ```
+
+**IMPORTANT**: The bucket `xr50-tenant-test-company` must already exist in your AWS account before creating this tenant. The application will verify the bucket exists but will NOT create it.
 
 For OwnCloud:
 ```json
@@ -231,15 +325,47 @@ For OwnCloud:
 ### 3. Storage Verification
 
 #### For S3:
-Check that the bucket exists in your AWS S3 console or using AWS CLI:
+
+First, ensure your bucket is created:
+
+**Using AWS Console:**
+1. Go to AWS S3 Console
+2. Click "Create bucket"
+3. Enter bucket name (e.g., `xr50-tenant-test-company`)
+4. Select region (e.g., `eu-west-1`)
+5. Keep default settings or adjust as needed
+6. Click "Create bucket"
+
+**Using AWS CLI:**
 ```bash
+# Create the bucket
+aws s3 mb s3://xr50-tenant-test-company --region eu-west-1
+
+# Verify it exists
 aws s3 ls s3://xr50-tenant-test-company/
 ```
+
+**Note**: In production, you typically create buckets with specific settings (encryption, versioning, lifecycle policies, etc.) using infrastructure-as-code tools like Terraform or CloudFormation.
 
 #### For OwnCloud:
 1. Access OwnCloud at http://localhost:8080
 2. Login with the admin credentials from your `.env` file
 3. Verify the tenant directory has been created
+
+#### For LocalStack (Sandbox):
+Check that the bucket exists using awslocal CLI (if installed) or through the LocalStack API:
+```bash
+# Using awslocal (requires awscli-local package)
+awslocal s3 ls s3://xr50-sandbox-tenant-test-company/
+
+# Or using AWS CLI with LocalStack endpoint
+aws --endpoint-url=http://localhost:4566 s3 ls
+```
+
+You can also verify LocalStack health:
+```bash
+curl http://localhost:4566/_localstack/health
+```
 
 ### 4. Upload Test Asset
 Use the Asset Management endpoints in Swagger to upload a test file:
@@ -268,16 +394,28 @@ Use the Asset Management endpoints in Swagger to upload a test file:
 - Verify database credentials match in all configuration locations
 - Check MariaDB container logs: `docker-compose logs mariadb`
 
-#### 3. S3 Access Denied
+#### 3. S3 Bucket Does Not Exist
+**Problem**: Tenant creation fails with "S3 bucket does NOT exist" error
+
+**Solution**:
+The application does NOT create buckets automatically. You must pre-provision them:
+1. Create the bucket in AWS S3 Console or using AWS CLI:
+   ```bash
+   aws s3 mb s3://xr50-tenant-yourname --region eu-west-1
+   ```
+2. Verify the bucket name in your tenant creation request matches exactly
+3. Ensure your AWS credentials have access to the bucket
+
+#### 4. S3 Access Denied
 **Problem**: AWS S3 operations fail with permission errors
 
 **Solution**:
 - Verify AWS credentials are correct
-- Ensure IAM user has appropriate S3 permissions
+- Ensure IAM user has appropriate S3 permissions (GetObject, PutObject, DeleteObject, ListBucket, GetBucketLocation)
 - Check bucket naming follows convention: `xr50-tenant-[name]`
 - Verify bucket exists and is in the correct region
 
-#### 4. OwnCloud Access Issues
+#### 5. OwnCloud Access Issues
 **Problem**: Cannot access OwnCloud web interface
 
 **Solution**:

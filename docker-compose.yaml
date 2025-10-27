@@ -1,5 +1,3 @@
-version: '3.8'
-
 volumes:
   repodb_mysql:
     driver: local
@@ -107,6 +105,7 @@ services:
       - lab      # For lab environment with OwnCloud
       - prod     # For production environment with S3
       - minio    # For MinIO testing environment
+      - sandbox  # For LocalStack sandbox environment
       - default  # Always included
 
   # OwnCloud services (only for lab environment)
@@ -206,3 +205,36 @@ services:
       start_period: 30s
     profiles:
       - minio    # Only start with --profile minio
+
+  # LocalStack for AWS sandbox testing (for partners to test without real AWS costs)
+  localstack:
+    image: localstack/localstack:latest
+    container_name: localstack
+    ports:
+      - "4566:4566"            # LocalStack Gateway
+      - "4510-4559:4510-4559"  # External services port range
+    environment:
+      # Core LocalStack configuration
+      - SERVICES=${LOCALSTACK_SERVICES:-s3,dynamodb,sqs,sns,lambda}
+      - DEBUG=${LOCALSTACK_DEBUG:-0}
+      - DATA_DIR=/tmp/localstack/data
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      # AWS-compatible credentials (can be any value for LocalStack)
+      - AWS_DEFAULT_REGION=${AWS_REGION:-eu-west-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
+      # Enable persistence
+      - PERSISTENCE=${LOCALSTACK_PERSISTENCE:-1}
+    volumes:
+      - "${LOCALSTACK_VOLUME_DIR:-./.localstack}:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      # Mount init scripts to create sample buckets on startup
+      - "./localstack-init:/etc/localstack/init/ready.d"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    profiles:
+      - sandbox  # Only start with --profile sandbox

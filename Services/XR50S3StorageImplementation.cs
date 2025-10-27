@@ -70,32 +70,30 @@ namespace XR50TrainingAssetRepo.Services
         {
             try
             {
-                _logger.LogInformation("Creating S3 storage for tenant: {TenantName}", tenantName);
+                _logger.LogInformation("Verifying S3 storage for tenant: {TenantName}", tenantName);
 
                 var bucketName = await GetTenantBucketName(tenantName, tenant);
 
-                // Check if bucket already exists
+                // Check if bucket exists (pre-provisioning required)
                 var bucketExists = await DoesBucketExistAsync(bucketName);
                 if (bucketExists)
                 {
-                    _logger.LogInformation("S3 bucket already exists: {BucketName}", bucketName);
+                    _logger.LogInformation("S3 bucket exists and is ready: {BucketName}", bucketName);
                     return true;
                 }
 
-                var request = new PutBucketRequest
-                {
-                    BucketName = bucketName,
-                    UseClientRegion = true
-                };
+                // Bucket does not exist - this is an error since we require pre-provisioning
+                _logger.LogError(
+                    "S3 bucket does NOT exist: {BucketName}. " +
+                    "Buckets must be pre-provisioned. The application does not create buckets automatically. " +
+                    "Please create the bucket manually and ensure the application has access to it.",
+                    bucketName);
 
-                var response = await _s3Client.PutBucketAsync(request);
-
-                _logger.LogInformation("Created S3 bucket: {BucketName}", bucketName);
-                return response.HttpStatusCode == System.Net.HttpStatusCode.OK;
+                return false;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to create S3 storage for tenant: {TenantName}", tenantName);
+                _logger.LogError(ex, "Failed to verify S3 storage for tenant: {TenantName}", tenantName);
                 return false;
             }
         }

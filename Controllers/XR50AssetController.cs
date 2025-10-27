@@ -15,7 +15,8 @@ namespace XR50TrainingAssetRepo.Controllers
             public string? Description { get; set; }
             public string? Src { get; set; }
             public string? Filetype { get; set; }
-            public string Filename  { get; set; }
+            // Filename is optional and not used - UUID is generated automatically
+            public string? Filename { get; set; }
             public IFormFile File { get; set; }
         }
 
