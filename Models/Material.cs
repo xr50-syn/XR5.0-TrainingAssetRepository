@@ -20,6 +20,7 @@ namespace XR50TrainingAssetRepo.Models
         public int Id { get; set; }
         [Required]
         public Type Type { get; set; }
+        public int? UniqueId { get; set; }
         public virtual ICollection<ProgramMaterial> ProgramMaterials { get; set; } = new List<ProgramMaterial>();
         public virtual ICollection<MaterialRelationship> MaterialRelationships { get; set; } = new List<MaterialRelationship>();
         public Material()
@@ -181,14 +182,14 @@ namespace XR50TrainingAssetRepo.Models
     {
         [Key]
         public int Id { get; set; }
-        
+
         public int MaterialId { get; set; }
         public string RelatedEntityId { get; set; }
-        public string RelatedEntityType { get; set; }  
-        public string? RelationshipType { get; set; }  
+        public string RelatedEntityType { get; set; }
+        public string? RelationshipType { get; set; }
         public int? DisplayOrder { get; set; }
-        
-  
+
+
         public virtual Material Material { get; set; }
     }
 }

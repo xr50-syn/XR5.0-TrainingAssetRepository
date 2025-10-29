@@ -1,7 +1,7 @@
 {
   "name": "Pre-Deployment Checklist",
   "description": "Essential checks before deploying MDUINO devices in the field",
-  "type": "Checklist",
+  "type": "checklist",
   "entries": [
     {
       "text": "Verify sensor calibration",

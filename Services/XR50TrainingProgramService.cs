@@ -110,6 +110,11 @@ namespace XR50TrainingAssetRepo.Services
                 {
                     Name = request.Name,
                     Description = request.Description,
+                    Objectives = request.Objectives,
+                    Requirements = request.Requirements,
+                    min_level_rank = request.min_level_rank,
+                    max_level_rank = request.max_level_rank,
+                    required_upto_level_rank = request.required_upto_level_rank,
                     Created_at = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")
                 };
 
@@ -223,6 +228,11 @@ namespace XR50TrainingAssetRepo.Services
                     Id = trainingProgram.Id,
                     Name = trainingProgram.Name,
                     Description = trainingProgram.Description,
+                    Objectives = trainingProgram.Objectives,
+                    Requirements = trainingProgram.Requirements,
+                    min_level_rank = trainingProgram.min_level_rank,
+                    max_level_rank = trainingProgram.max_level_rank,
+                    required_upto_level_rank = trainingProgram.required_upto_level_rank,
                     CreatedAt = trainingProgram.Created_at,
                     MaterialCount = materialAssignments.Count(m => m.AssignmentSuccessful),
                     LearningPathCount = learningPathAssignments.Count(lp => lp.AssignmentSuccessful),
@@ -409,6 +419,9 @@ namespace XR50TrainingAssetRepo.Services
                     Description = request.Description,
                     Objectives = request.Objectives,
                     Requirements = request.Requirements,
+                    min_level_rank = request.min_level_rank,
+                    max_level_rank = request.max_level_rank,
+                    required_upto_level_rank = request.required_upto_level_rank,
                     Created_at = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")
                 };
 
@@ -532,6 +545,7 @@ namespace XR50TrainingAssetRepo.Services
             // Set common properties
             material.Name = request.Name;
             material.Description = request.Description;
+            material.UniqueId = request.UniqueId;
             material.Created_at = DateTime.UtcNow;
             material.Updated_at = DateTime.UtcNow;
 
@@ -615,6 +629,9 @@ namespace XR50TrainingAssetRepo.Services
                 Description=program.Description,
                 Objectives=program.Objectives,
                 Requirements=program.Requirements,
+                min_level_rank = program.min_level_rank,
+                max_level_rank = program.max_level_rank,
+                required_upto_level_rank = program.required_upto_level_rank,
                 Created_at = program.Created_at,
                 Materials = materials,
                 LearningPaths = learningPaths,
@@ -684,6 +701,7 @@ namespace XR50TrainingAssetRepo.Services
 
             material.Name = request.Name;
             material.Description = request.Description;
+            material.UniqueId = request.UniqueId;
             material.Created_at = DateTime.UtcNow;
             material.Updated_at = DateTime.UtcNow;
 
@@ -698,6 +716,7 @@ namespace XR50TrainingAssetRepo.Services
                 Name = material.Name,
                 Description = material.Description,
                 Type = material.Type.ToString(),
+                UniqueId = material.UniqueId,
                 Created_at = material.Created_at,
                 Updated_at = material.Updated_at,
                 Assignment = new AssignmentMetadata { AssignmentType = "Simple" }

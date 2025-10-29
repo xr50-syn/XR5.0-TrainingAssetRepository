@@ -13,16 +13,16 @@ namespace XR50TrainingAssetRepo.Controllers
 {
     [Route("api/{tenantName}/[controller]")]
     [ApiController]
-    public class TrainingProgramsController : ControllerBase
+    public class programsController : ControllerBase
     {
         private readonly ITrainingProgramService _trainingProgramService;
         private readonly IMaterialService _materialService;
-        private readonly ILogger<TrainingProgramsController> _logger;
+        private readonly ILogger<programsController> _logger;
 
-        public TrainingProgramsController(
+        public programsController(
             ITrainingProgramService trainingProgramService,
             IMaterialService materialService,
-            ILogger<TrainingProgramsController> logger)
+            ILogger<programsController> logger)
         {
             _trainingProgramService = trainingProgramService;
             _materialService = materialService;

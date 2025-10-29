@@ -18,6 +18,9 @@ namespace XR50TrainingAssetRepo.Models
         public string? Description { get; set; }
         public string? Objectives { get; set; }
         public string? Requirements { get; set; }
+        public int? min_level_rank { get; set; }                     
+        public int? max_level_rank { get; set; }                  
+         public int? required_upto_level_rank { get; set; }
         public virtual ICollection<ProgramMaterial> Materials { get; set; } = new List<ProgramMaterial>();
     public virtual ICollection<ProgramLearningPath> LearningPaths { get; set; } = new List<ProgramLearningPath>();
         public TrainingProgram()

@@ -94,7 +94,7 @@ The XR5.0 Training Asset Repository is a research prototype developed as part of
 - **XR50AssetController**: Asset upload, download, sharing operations
 - **XR50MaterialsController**: Training material management (videos, documents, workflows)
 - **XR50TenantController**: Tenant provisioning and management
-- **XR50TrainingProgramController**: Training program lifecycle
+- **XR50programController**: Training program lifecycle
 - **XR50LearningPathController**: Learning path creation and assignment
 - **XR50UserController**: User management within tenants
 

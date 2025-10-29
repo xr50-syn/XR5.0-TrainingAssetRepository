@@ -21,18 +21,18 @@ namespace XR50TrainingAssetRepo.Controllers
         }
     [Route("api/{tenantName}/[controller]")]
     [ApiController]
-    public class MaterialsController : ControllerBase
+    public class materialsController : ControllerBase
     {
         private readonly IMaterialService _materialService;
         private readonly IAssetService _assetService;
         private readonly ILearningPathService _learningPathService;
-        private readonly ILogger<MaterialsController> _logger;
+        private readonly ILogger<materialsController> _logger;
 
-        public MaterialsController(
+        public materialsController(
             IMaterialService materialService,
             IAssetService assetService,
             ILearningPathService learningPathService,
-            ILogger<MaterialsController> logger)
+            ILogger<materialsController> logger)
         {
             _materialService = materialService;
             _assetService = assetService;
@@ -465,7 +465,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 return StatusCode(500, $"Error creating material: {ex.Message}");
             }
         }
-        // NEW Enhanced endpoint in XR50MaterialsController.cs
+        // NEW Enhanced endpoint in XR50materialsController.cs
         // This accepts both JSON data AND file uploads for complete asset creation during material creation
         // Keeps the existing PostMaterialDetailed intact for backward compatibility
 

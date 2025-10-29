@@ -261,6 +261,9 @@ namespace XR50TrainingAssetRepo.Services
                     `Requirements` varchar(1000) DEFAULT NULL,
                     `Objectives` varchar(1000) DEFAULT NULL,
                     `Created_at` varchar(255) DEFAULT NULL,
+                    `min_level_rank` int DEFAULT NULL,
+                    `max_level_rank` int DEFAULT NULL,
+                    `required_upto_level_rank` int DEFAULT NULL,
                     PRIMARY KEY (`Id`)
                 )",
 
@@ -281,7 +284,8 @@ namespace XR50TrainingAssetRepo.Services
             `Updated_at` datetime DEFAULT NULL,
             `Type` int NOT NULL,
             `Discriminator` varchar(50) NOT NULL,
-            
+            `UniqueId` int DEFAULT NULL,
+
             -- MQTT_TemplateMaterial specific columns
             `message_type` varchar(255) DEFAULT NULL,
             `message_text` text DEFAULT NULL,
@@ -323,6 +327,7 @@ namespace XR50TrainingAssetRepo.Services
             PRIMARY KEY (`Id`),
             INDEX `idx_discriminator` (`Discriminator`),
             INDEX `idx_type` (`Type`),
+            INDEX `idx_unique_id` (`UniqueId`),
             INDEX `idx_asset_id` (`AssetId`),
             INDEX `idx_video_path` (`VideoPath`),
             INDEX `idx_image_path` (`ImagePath`),

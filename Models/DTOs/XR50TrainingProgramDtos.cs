@@ -7,14 +7,17 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         [Required]
         [StringLength(255)]
         public string Name { get; set; } = "";
-        
+
         [StringLength(1000)]
         public string? Description { get; set; }
         public string? Objectives { get; set; }
         public string? Requirements { get; set; }
+        public int? min_level_rank { get; set; }
+        public int? max_level_rank { get; set; }
+        public int? required_upto_level_rank { get; set; }
         [Required]
         public List<int> Materials { get; set; } = new();
-        
+
         // Optional: Learning path IDs to assign as well
         public List<int>? LearningPaths { get; set; }
     }
@@ -26,6 +29,9 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string? Description { get; set; }
         public string? Objectives { get; set; }
         public string? Requirements { get; set; }
+        public int? min_level_rank { get; set; }
+        public int? max_level_rank { get; set; }
+        public int? required_upto_level_rank { get; set; }
         public string? CreatedAt { get; set; }
         public int MaterialCount { get; set; }
         public int LearningPathCount { get; set; }
@@ -64,6 +70,9 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string? Description { get; set; }
         public string? Objectives { get; set; }
         public string? Requirements { get; set; }
+        public int? min_level_rank { get; set; }
+        public int? max_level_rank { get; set; }
+        public int? required_upto_level_rank { get; set; }
         // Materials to assign during creation
         public List<int> Materials { get; set; } = new();
 
@@ -79,6 +88,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string Name { get; set; } = "";
         public string? Description { get; set; }
         public string MaterialType { get; set; } = "Default"; // Video, Image, Checklist, etc.
+        public int? UniqueId { get; set; }
 
         // Type-specific properties (only set what's needed based on MaterialType)
         public int? AssetId { get; set; }
@@ -130,6 +140,9 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string? Description { get; set; }
         public string? Objectives { get; set; }
         public string? Requirements { get; set; }
+        public int? min_level_rank { get; set; }
+        public int? max_level_rank { get; set; }
+        public int? required_upto_level_rank { get; set; }
         public string? Created_at { get; set; }
 
         // Complete material information
@@ -148,6 +161,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string? Name { get; set; }
         public string? Description { get; set; }
         public string Type { get; set; } = "";
+        public int? UniqueId { get; set; }
         public DateTime? Created_at { get; set; }
         public DateTime? Updated_at { get; set; }
 

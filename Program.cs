@@ -176,9 +176,9 @@ builder.Services.AddSwaggerGen(c =>
         return docName switch
         {
             "tenants" => controllerName.Contains("Tenants"),
-            "programs" => controllerName.Contains("TrainingPrograms"),
+            "programs" => controllerName.Contains("programs"),
             "paths" => controllerName.Contains("LearningPaths"),
-            "materials" => controllerName.Contains("Materials"),
+            "materials" => controllerName.Contains("materials"),
             "assets" => controllerName.Contains("Assets"),
             "users" => controllerName.Contains("Users"),
             "test" => controllerName.Contains("test"),
