@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics.Internal;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 using XR50TrainingAssetRepo.Controllers;
 using XR50TrainingAssetRepo.Models;
 
@@ -21,7 +22,9 @@ namespace XR50TrainingAssetRepo.Models
         [Required]
         public Type Type { get; set; }
         public int? UniqueId { get; set; }
+        [JsonIgnore]
         public virtual ICollection<ProgramMaterial> ProgramMaterials { get; set; } = new List<ProgramMaterial>();
+        [JsonIgnore]
         public virtual ICollection<MaterialRelationship> MaterialRelationships { get; set; } = new List<MaterialRelationship>();
         public Material()
         {
@@ -29,6 +32,7 @@ namespace XR50TrainingAssetRepo.Models
         }
     }
 
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum Type
     {
         Image,

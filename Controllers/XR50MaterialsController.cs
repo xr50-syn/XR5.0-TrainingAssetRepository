@@ -433,13 +433,62 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
         }
         // POST: api/{tenantName}/materials - Generic material creation
+        // Accepts both JSON (application/json) and form-data (application/x-www-form-urlencoded, multipart/form-data)
         [HttpPost]
-
-        public async Task<ActionResult<Material>> PostMaterial(string tenantName, [FromBody] JsonElement materialData)
+        public async Task<ActionResult<Material>> PostMaterial(string tenantName)
         {
             try
             {
-                // Parse the incoming JSON to determine material type
+                JsonElement materialData;
+                var contentType = Request.ContentType?.ToLower() ?? "";
+
+                _logger.LogInformation("Received material creation request with Content-Type: {ContentType}", contentType);
+
+                // Handle different content types
+                if (contentType.Contains("application/json"))
+                {
+                    // JSON request
+                    using var reader = new StreamReader(Request.Body);
+                    var body = await reader.ReadToEndAsync();
+                    materialData = JsonSerializer.Deserialize<JsonElement>(body);
+                    _logger.LogInformation("Parsed JSON request body");
+                }
+                else if (contentType.Contains("multipart/form-data") || contentType.Contains("application/x-www-form-urlencoded"))
+                {
+                    // Form data request - convert to JSON
+                    var formDict = new Dictionary<string, object>();
+
+                    foreach (var key in Request.Form.Keys)
+                    {
+                        var value = Request.Form[key].ToString();
+
+                        // Try to parse numeric values
+                        if (int.TryParse(value, out int intValue))
+                        {
+                            formDict[key] = intValue;
+                        }
+                        else if (bool.TryParse(value, out bool boolValue))
+                        {
+                            formDict[key] = boolValue;
+                        }
+                        else
+                        {
+                            formDict[key] = value;
+                        }
+                    }
+
+                    // Convert to JSON
+                    var jsonString = JsonSerializer.Serialize(formDict);
+                    materialData = JsonSerializer.Deserialize<JsonElement>(jsonString);
+                    _logger.LogInformation("Converted form data to JSON: {Json}", jsonString);
+                }
+                else
+                {
+                    _logger.LogWarning("Unsupported Content-Type: {ContentType}", contentType);
+                    return StatusCode(415, $"Unsupported Media Type. Please use 'application/json', 'multipart/form-data', or 'application/x-www-form-urlencoded'. Received: {contentType}");
+                }
+
+                // Parse the incoming data to determine material type
                 var material = ParseMaterialFromJson(materialData);
 
                 if (material == null)
@@ -1163,8 +1212,62 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
             else if (TryGetPropertyCaseInsensitive(jsonElement, "type", out var typeProp))
             {
-                typeValue = typeProp.GetString();
-                _logger.LogInformation("Found type: {Type}", typeValue);
+                // Handle both string and numeric type values
+                if (typeProp.ValueKind == JsonValueKind.String)
+                {
+                    typeValue = typeProp.GetString();
+                    _logger.LogInformation("Found type (string): {Type}", typeValue);
+                }
+                else if (typeProp.ValueKind == JsonValueKind.Number)
+                {
+                    // Convert numeric type to string equivalent
+                    var numericType = typeProp.GetInt32();
+                    typeValue = numericType switch
+                    {
+                        0 => "image",
+                        1 => "video",
+                        2 => "pdf",
+                        3 => "unitydemo",
+                        4 => "chatbot",
+                        5 => "questionnaire",
+                        6 => "checklist",
+                        7 => "workflow",
+                        8 => "mqtt_template",
+                        9 => "answers",
+                        10 => "default",
+                        _ => "default"
+                    };
+                    _logger.LogInformation("Found type (numeric {NumericType}), converted to: {Type}", numericType, typeValue);
+                }
+            }
+            else if (TryGetPropertyCaseInsensitive(jsonElement, "materialType", out var matTypeProp))
+            {
+                // Some requests use "materialType" instead of "type"
+                if (matTypeProp.ValueKind == JsonValueKind.String)
+                {
+                    typeValue = matTypeProp.GetString();
+                    _logger.LogInformation("Found materialType (string): {Type}", typeValue);
+                }
+                else if (matTypeProp.ValueKind == JsonValueKind.Number)
+                {
+                    var numericType = matTypeProp.GetInt32();
+                    typeValue = numericType switch
+                    {
+                        0 => "image",
+                        1 => "video",
+                        2 => "pdf",
+                        3 => "unitydemo",
+                        4 => "chatbot",
+                        5 => "questionnaire",
+                        6 => "checklist",
+                        7 => "workflow",
+                        8 => "mqtt_template",
+                        9 => "answers",
+                        10 => "default",
+                        _ => "default"
+                    };
+                    _logger.LogInformation("Found materialType (numeric {NumericType}), converted to: {Type}", numericType, typeValue);
+                }
             }
 
             // Create the appropriate material type

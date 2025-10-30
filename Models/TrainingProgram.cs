@@ -3,6 +3,7 @@ using Mono.TextTemplating;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Security.Permissions;
+using System.Text.Json.Serialization;
 using XR50TrainingAssetRepo.Models;
 
 namespace XR50TrainingAssetRepo.Models
@@ -18,10 +19,12 @@ namespace XR50TrainingAssetRepo.Models
         public string? Description { get; set; }
         public string? Objectives { get; set; }
         public string? Requirements { get; set; }
-        public int? min_level_rank { get; set; }                     
-        public int? max_level_rank { get; set; }                  
+        public int? min_level_rank { get; set; }
+        public int? max_level_rank { get; set; }
          public int? required_upto_level_rank { get; set; }
+        [JsonIgnore]
         public virtual ICollection<ProgramMaterial> Materials { get; set; } = new List<ProgramMaterial>();
+        [JsonIgnore]
     public virtual ICollection<ProgramLearningPath> LearningPaths { get; set; } = new List<ProgramLearningPath>();
         public TrainingProgram()
         {

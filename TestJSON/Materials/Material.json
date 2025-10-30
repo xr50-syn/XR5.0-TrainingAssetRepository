@@ -1,7 +1,7 @@
 {
   "description": "A non-rigorous description of Amethyst's custom-made epic spells'",
   "Name": "Epic_Spellbook",
-  "materialType": 7,
+  "materialType": "workflow",
   "steps": [
       {
           "title": "Necromancy",

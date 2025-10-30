@@ -18,8 +18,9 @@ sleep 5
 # Sample buckets to create
 BUCKETS=(
   "xr50-sandbox-tenant-demo"
-  "xr50-sandbox-tenant-pilot1"
-  "xr50-sandbox-tenant-pilot2"
+  "xr50-sandbox-tenant-pilot4"
+  "xr50-sandbox-tenant-pilot5"
+
 )
 
 echo ""

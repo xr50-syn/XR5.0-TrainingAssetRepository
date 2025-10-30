@@ -291,7 +291,7 @@ For S3 (ensure bucket is pre-created in AWS):
   "description": "Test tenant for Pilot 1",
   "storageType": "S3",
   "s3Config": {
-    "bucketName": "xr50-tenant-test-company",
+    "bucketName": "xr50-sandbox-tenant-pilot5",
     "bucketRegion": "eu-west-1"
   },
   "owner": {

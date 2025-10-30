@@ -30,11 +30,11 @@ namespace XR50TrainingAssetRepo.Controllers
         }
 
         [HttpPost]
-        public async Task<ActionResult<CreateTrainingProgramWithMaterialsResponse>> PostTrainingProgram(
-            string tenantName, 
+        public async Task<ActionResult<CompleteTrainingProgramResponse>> PostTrainingProgram(
+            string tenantName,
             [FromBody] CreateTrainingProgramWithMaterialsRequest request)
         {
-            _logger.LogInformation("Creating training program '{Name}' with {MaterialCount} materials for tenant: {TenantName}", 
+            _logger.LogInformation("Creating training program '{Name}' with {MaterialCount} materials for tenant: {TenantName}",
                 request.Name, request.Materials.Count, tenantName);
 
             try
@@ -46,14 +46,14 @@ namespace XR50TrainingAssetRepo.Controllers
                 }
 
                 // Create the training program with materials (empty list is fine)
-                var result = await _trainingProgramService.CreateTrainingProgramWithMaterialsAsync(request);
+                var result = await _trainingProgramService.CreateTrainingProgramAsync(request);
 
-                _logger.LogInformation("Successfully created training program {Id} with {MaterialCount} materials for tenant: {TenantName}", 
-                    result.Id, result.MaterialCount, tenantName);
+                _logger.LogInformation("Successfully created training program {Id} for tenant: {TenantName}",
+                    result.Id, tenantName);
 
                 return CreatedAtAction(
-                    nameof(GetTrainingProgram), 
-                    new { tenantName, id = result.Id }, 
+                    nameof(GetTrainingProgram),
+                    new { tenantName, id = result.Id },
                     result);
             }
             catch (ArgumentException ex)
@@ -213,7 +213,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 var result = await _trainingProgramService.CreateCompleteTrainingProgramAsync(request);
 
                 _logger.LogInformation("Successfully created complete training program {Id} with {MaterialCount} materials",
-                    result.Id, result.Summary.TotalMaterials);
+                    result.Id, result.Materials.Count);
 
                 return CreatedAtAction(
                     nameof(GetCompleteTrainingProgram),
@@ -243,7 +243,7 @@ namespace XR50TrainingAssetRepo.Controllers
             }
 
             _logger.LogInformation("Retrieved complete training program {Id}: {MaterialCount} materials, {PathCount} learning paths",
-                id, result.Summary.TotalMaterials, result.Summary.TotalLearningPaths);
+                id, result.Materials.Count, result.LearningPaths.Count);
 
             return Ok(result);
         }

@@ -150,9 +150,6 @@ namespace XR50TrainingAssetRepo.Models.DTOs
 
         // Complete learning path information
         public List<LearningPathResponse> LearningPaths { get; set; } = new();
-
-        // Summary information
-        public TrainingProgramSummary Summary { get; set; } = new();
     }
 
     public class MaterialResponse
