@@ -128,7 +128,7 @@ private async Task<object?> GetWorkflowDetails(int materialId)
 
     return new
     {
-        material_id = workflow.material_id,
+        id = workflow.id,
         Name = workflow.Name,
         Description = workflow.Description,
         Type = workflow.Type.ToString(),
@@ -150,7 +150,7 @@ private async Task<object?> GetVideoDetails(int materialId)
 
     return new
     {
-        material_id = video.material_id,
+        id = video.id,
         Name = video.Name,
         Description = video.Description,
         Type = video.Type.ToString(),
@@ -177,7 +177,7 @@ private async Task<object?> GetChecklistDetails(int materialId)
 
     return new
     {
-        material_id = checklist.material_id,
+        id = checklist.id,
         Name = checklist.Name,
         Description = checklist.Description,
         Type = checklist.Type.ToString(),
@@ -199,7 +199,7 @@ private async Task<object?> GetQuestionnaireDetails(int materialId)
 
     return new
     {
-        material_id = questionnaire.material_id,
+        id = questionnaire.id,
         Name = questionnaire.Name,
         Description = questionnaire.Description,
         Type = questionnaire.Type.ToString(),
@@ -224,7 +224,7 @@ private async Task<object?> GetImageDetails(int materialId)
 
     return new
     {
-        material_id = image.material_id,
+        id = image.id,
         Name = image.Name,
         Description = image.Description,
         Type = image.Type.ToString(),
@@ -245,7 +245,7 @@ private async Task<object?> GetPDFDetails(int materialId)
 
     return new
     {
-        material_id = pdf.material_id,
+        id = pdf.id,
         Name = pdf.Name,
         Description = pdf.Description,
         Type = pdf.Type.ToString(),
@@ -265,7 +265,7 @@ private async Task<object?> GetUnityDetails(int materialId)
 
     return new
     {
-        material_id = unity.material_id,
+        id = unity.id,
         Name = unity.Name,
         Description = unity.Description,
         Type = unity.Type.ToString(),
@@ -285,7 +285,7 @@ private async Task<object?> GetChatbotDetails(int materialId)
 
     return new
     {
-        material_id = chatbot.material_id,
+        id = chatbot.id,
         Name = chatbot.Name,
         Description = chatbot.Description,
         Type = chatbot.Type.ToString(),
@@ -304,7 +304,7 @@ private async Task<object?> GetMQTTTemplateDetails(int materialId)
 
     return new
     {
-        material_id = mqtt.material_id,
+        id = mqtt.id,
         Name = mqtt.Name,
         Description = mqtt.Description,
         Type = mqtt.Type.ToString(),
@@ -322,7 +322,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
     return new
     {
-        material_id = material.material_id,
+        id = material.id,
         Name = material.Name,
         Description = material.Description,
         Type = material.Type.ToString(),
@@ -379,7 +379,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var completeMaterials = new List<object>();
                 foreach (var material in materials)
                 {
-                    var completeDetails = await _materialService.GetCompleteMaterialDetailsAsync(material.material_id);
+                    var completeDetails = await _materialService.GetCompleteMaterialDetailsAsync(material.id);
                     if (completeDetails != null)
                     {
                         completeMaterials.Add(completeDetails);
@@ -414,7 +414,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 var summary = new
                 {
-                    material_id = material.material_id,
+                    id = material.id,
                     Name = material.Name,
                     Description = material.Description,
                     Type = material.Type.ToString(),
@@ -445,13 +445,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var createdMaterial = await _materialService.CreateMaterialAsync(material);
 
                 _logger.LogInformation("Created material {Name} with ID {Id} for tenant: {TenantName}",
-                    createdMaterial.Name, createdMaterial.material_id, tenantName);
+                    createdMaterial.Name, createdMaterial.id, tenantName);
 
                 var response = new CreateMaterialResponse
                 {
                     Status = "success",
                     Message = $"Material '{createdMaterial.Name}' created successfully",
-                    material_id = createdMaterial.material_id,
+                    id = createdMaterial.id,
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
                     Type = createdMaterial.Type.ToString(),
@@ -469,7 +469,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 };
 
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.material_id },
+                    new { tenantName, id = createdMaterial.id },
                     response);
             }
             catch (Exception ex)
@@ -549,13 +549,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var createdMaterial = await _materialService.CreateMaterialAsync(material);
 
                 _logger.LogInformation("Created material {Name} with ID {Id} for tenant: {TenantName}",
-                    createdMaterial.Name, createdMaterial.material_id, tenantName);
+                    createdMaterial.Name, createdMaterial.id, tenantName);
 
                 var response = new CreateMaterialResponse
                 {
                     Status = "success",
                     Message = $"Material '{createdMaterial.Name}' created successfully",
-                    material_id = createdMaterial.material_id,
+                    id = createdMaterial.id,
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
                     Type = createdMaterial.Type.ToString(),
@@ -573,7 +573,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 };
 
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.material_id },
+                    new { tenantName, id = createdMaterial.id },
                     response);
             }
             catch (Exception ex)
@@ -746,13 +746,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     var createdMaterial = await _materialService.CreateMaterialAsyncComplete(material);
 
                     _logger.LogInformation("Created material {MaterialId} ({Name}) with asset {AssetId}",
-                        createdMaterial.material_id, createdMaterial.Name, createdAsset.Id);
+                        createdMaterial.id, createdMaterial.Name, createdAsset.Id);
 
                     var response = new CreateMaterialResponse
                     {
                         Status = "success",
                         Message = "Material with asset created successfully",
-                        material_id = createdMaterial.material_id,
+                        id = createdMaterial.id,
                         Name = createdMaterial.Name,
                         Description = createdMaterial.Description,
                         Type = createdMaterial.Type.ToString(),
@@ -762,7 +762,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     };
 
                     return CreatedAtAction(nameof(GetMaterial),
-                        new { tenantName, id = createdMaterial.material_id },
+                        new { tenantName, id = createdMaterial.id },
                         response);
                 }
                 catch (Exception ex)
@@ -1053,13 +1053,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var createdMaterial = await _materialService.CreateWorkflowWithStepsAsync(workflow, steps);
 
                 _logger.LogInformation("Created workflow material {Name} with ID {Id}",
-                    createdMaterial.Name, createdMaterial.material_id);
+                    createdMaterial.Name, createdMaterial.id);
 
                 var response = new CreateMaterialResponse
                 {
                     Status = "success",
                     Message = "Workflow material created successfully",
-                    material_id = createdMaterial.material_id,
+                    id = createdMaterial.id,
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
                     Type = createdMaterial.Type.ToString(),
@@ -1068,7 +1068,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 };
 
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.material_id },
+                    new { tenantName, id = createdMaterial.id },
                     response);
             }
             catch (Exception ex)
@@ -1133,13 +1133,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var createdMaterial = await _materialService.CreateVideoWithTimestampsAsync(video, timestamps);
                 
                 _logger.LogInformation("Created video material {Name} with ID {Id}",
-                    createdMaterial.Name, createdMaterial.material_id);
+                    createdMaterial.Name, createdMaterial.id);
 
                 var response = new CreateMaterialResponse
                 {
                     Status = "success",
                     Message = "Video material created successfully",
-                    material_id = createdMaterial.material_id,
+                    id = createdMaterial.id,
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
                     Type = createdMaterial.Type.ToString(),
@@ -1149,7 +1149,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 };
 
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.material_id },
+                    new { tenantName, id = createdMaterial.id },
                     response);
             }
             catch (Exception ex)
@@ -1199,13 +1199,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var createdMaterial = await _materialService.CreateChecklistWithEntriesAsync(checklist, entries);
                 
                 _logger.LogInformation("Created checklist material {Name} with ID {Id}",
-                    createdMaterial.Name, createdMaterial.material_id);
+                    createdMaterial.Name, createdMaterial.id);
 
                 var response = new CreateMaterialResponse
                 {
                     Status = "success",
                     Message = "Checklist material created successfully",
-                    material_id = createdMaterial.material_id,
+                    id = createdMaterial.id,
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
                     Type = createdMaterial.Type.ToString(),
@@ -1214,7 +1214,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 };
 
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.material_id },
+                    new { tenantName, id = createdMaterial.id },
                     response);
             }
             catch (Exception ex)
@@ -1273,13 +1273,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var createdMaterial = await _materialService.CreateQuestionnaireMaterialWithEntriesAsync(questionnaire, entries);
                 
                 _logger.LogInformation("Created questionnaire material {Name} with ID {Id}",
-                    createdMaterial.Name, createdMaterial.material_id);
+                    createdMaterial.Name, createdMaterial.id);
 
                 var response = new CreateMaterialResponse
                 {
                     Status = "success",
                     Message = "Questionnaire material created successfully",
-                    material_id = createdMaterial.material_id,
+                    id = createdMaterial.id,
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
                     Type = createdMaterial.Type.ToString(),
@@ -1288,7 +1288,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 };
 
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.material_id },
+                    new { tenantName, id = createdMaterial.id },
                     response);
             }
             catch (Exception ex)
@@ -1415,13 +1415,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var createdMaterial = await _materialService.CreateQuizWithQuestionsAsync(quiz, questions);
 
                 _logger.LogInformation("Created quiz material {Name} with ID {Id}",
-                    createdMaterial.Name, createdMaterial.material_id);
+                    createdMaterial.Name, createdMaterial.id);
 
                 var response = new CreateMaterialResponse
                 {
                     Status = "success",
                     Message = "Quiz material created successfully",
-                    material_id = createdMaterial.material_id,
+                    id = createdMaterial.id,
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
                     Type = createdMaterial.Type.ToString(),
@@ -1430,7 +1430,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 };
 
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.material_id },
+                    new { tenantName, id = createdMaterial.id },
                     response);
             }
             catch (Exception ex)
@@ -1458,13 +1458,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var createdMaterial = await _materialService.CreateMaterialAsync(material);
 
                 _logger.LogInformation("Created basic material {Name} with ID {Id}",
-                    createdMaterial.Name, createdMaterial.material_id);
+                    createdMaterial.Name, createdMaterial.id);
 
                 var response = new CreateMaterialResponse
                 {
                     Status = "success",
                     Message = "Material created successfully",
-                    material_id = createdMaterial.material_id,
+                    id = createdMaterial.id,
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
                     Type = createdMaterial.Type.ToString(),
@@ -1478,7 +1478,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 };
 
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.material_id },
+                    new { tenantName, id = createdMaterial.id },
                     response);
             }
             catch (Exception ex)
@@ -1925,7 +1925,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         [HttpPut("{id}")]
         public async Task<IActionResult> PutMaterial(string tenantName, int id, Material material)
         {
-            if (id != material.material_id)
+            if (id != material.id)
             {
                 return BadRequest("ID mismatch");
             }
@@ -2112,7 +2112,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     request.Steps);
 
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.material_id },
+                    new { tenantName, id = createdMaterial.id },
                     createdMaterial);
             }
             catch (Exception ex)
@@ -2138,7 +2138,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     request.Timestamps);
 
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.material_id },
+                    new { tenantName, id = createdMaterial.id },
                     createdMaterial);
             }
             catch (Exception ex)
@@ -2164,7 +2164,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     request.Entries);
 
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.material_id },
+                    new { tenantName, id = createdMaterial.id },
                     createdMaterial);
             }
             catch (Exception ex)

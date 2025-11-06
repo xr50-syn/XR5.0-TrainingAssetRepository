@@ -201,7 +201,7 @@ namespace XR50TrainingAssetRepo.Services
                 foreach (var trainingProgramId in trainingProgramIds)
                 {
                     // Verify training program exists
-                    var programExists = await context.TrainingPrograms.AnyAsync(tp => tp.program_id == trainingProgramId);
+                    var programExists = await context.TrainingPrograms.AnyAsync(tp => tp.id == trainingProgramId);
                     if (programExists)
                     {
                         associations.Add(new ProgramLearningPath
@@ -292,10 +292,10 @@ namespace XR50TrainingAssetRepo.Services
                 }
 
                 var existingMaterials = await context.Materials
-                    .Where(m => materialIds.Contains(m.material_id))
+                    .Where(m => materialIds.Contains(m.id))
                     .ToListAsync();
 
-                var missingMaterials = materialIds.Except(existingMaterials.Select(m => m.material_id)).ToList();
+                var missingMaterials = materialIds.Except(existingMaterials.Select(m => m.id)).ToList();
                 if (missingMaterials.Any())
                 {
                     throw new ArgumentException($"Materials not found: {string.Join(", ", missingMaterials)}");
@@ -334,12 +334,12 @@ namespace XR50TrainingAssetRepo.Services
                 if (request.TrainingPrograms?.Any() == true)
                 {
                     var existingPrograms = await context.TrainingPrograms
-                        .Where(tp => request.TrainingPrograms.Contains(tp.program_id))
+                        .Where(tp => request.TrainingPrograms.Contains(tp.id))
                         .ToListAsync();
 
                     foreach (var programId in request.TrainingPrograms)
                     {
-                        var program = existingPrograms.FirstOrDefault(p => p.program_id == programId);
+                        var program = existingPrograms.FirstOrDefault(p => p.id == programId);
                         if (program != null)
                         {
                             try
@@ -428,7 +428,7 @@ namespace XR50TrainingAssetRepo.Services
             List<AssignedMaterialDetails> assignments,
             List<Material> existingMaterials)
         {
-            var material = existingMaterials.First(m => m.material_id == materialId);
+            var material = existingMaterials.First(m => m.id == materialId);
             
             try
             {
@@ -495,7 +495,7 @@ namespace XR50TrainingAssetRepo.Services
             // Get training programs
             var trainingPrograms = learningPath.ProgramLearningPaths?.Select(plp => new TrainingProgramResponse
             {
-                program_id = plp.TrainingProgram.program_id,
+                id = plp.TrainingProgram.id,
                 Name = plp.TrainingProgram.Name,
                 Description = plp.TrainingProgram.Description,
                 Created_at = DateTime.TryParse(plp.TrainingProgram.Created_at, out var createdDate) ? createdDate : null
@@ -556,7 +556,7 @@ namespace XR50TrainingAssetRepo.Services
         {
             // Query MaterialRelationships to get materials assigned to this learning path
             var query = from mr in context.MaterialRelationships
-                        join m in context.Materials on mr.MaterialId equals m.material_id
+                        join m in context.Materials on mr.MaterialId equals m.id
                         where mr.RelatedEntityType == "LearningPath" &&
                               mr.RelatedEntityId == learningPathId.ToString()
                         orderby mr.DisplayOrder ?? int.MaxValue
@@ -566,7 +566,7 @@ namespace XR50TrainingAssetRepo.Services
             
             return results.Select(r => new MaterialResponse
             {
-                material_id = r.Material.material_id,
+                id = r.Material.id,
                 Name = r.Material.Name,
                 Description = r.Material.Description,
                 Type = GetMaterialTypeString((int)r.Material.Type),

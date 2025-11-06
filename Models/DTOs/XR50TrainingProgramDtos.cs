@@ -26,7 +26,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
     {
         public string Status { get; set; } = "success";
         public string Message { get; set; } = "";
-        public int program_id { get; set; }
+        public int id { get; set; }
         public string Name { get; set; } = "";
         public string? Description { get; set; }
         public string? Objectives { get; set; }
@@ -139,7 +139,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
     {
         public string Status { get; set; } = "success";
         public string Message { get; set; } = "";
-        public int program_id { get; set; }
+        public int id { get; set; }
         public string Name { get; set; } = "";
         public string? Description { get; set; }
         public string? Objectives { get; set; }
@@ -158,7 +158,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
 
     public class MaterialResponse
     {
-        public int material_id { get; set; }
+        public int id { get; set; }
         public string? Name { get; set; }
         public string? Description { get; set; }
         public string Type { get; set; } = "";

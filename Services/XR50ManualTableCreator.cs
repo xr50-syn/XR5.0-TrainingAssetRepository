@@ -255,7 +255,7 @@ namespace XR50TrainingAssetRepo.Services
                 )",
 
                 @"CREATE TABLE IF NOT EXISTS `TrainingPrograms` (
-                    `program_id` int NOT NULL AUTO_INCREMENT,
+                    `id` int NOT NULL AUTO_INCREMENT,
                     `Name` varchar(255) NOT NULL,
                     `Description` varchar(1000) DEFAULT NULL,
                     `Requirements` varchar(1000) DEFAULT NULL,
@@ -264,7 +264,7 @@ namespace XR50TrainingAssetRepo.Services
                     `min_level_rank` int DEFAULT NULL,
                     `max_level_rank` int DEFAULT NULL,
                     `required_upto_level_rank` int DEFAULT NULL,
-                    PRIMARY KEY (`program_id`)
+                    PRIMARY KEY (`id`)
                 )",
 
                 @"CREATE TABLE IF NOT EXISTS `LearningPaths` (
@@ -277,7 +277,7 @@ namespace XR50TrainingAssetRepo.Services
         // Replace the Materials table creation in GetCreateTableStatements() method
 
         @"CREATE TABLE IF NOT EXISTS `Materials` (
-            `material_id` int NOT NULL AUTO_INCREMENT,
+            `id` int NOT NULL AUTO_INCREMENT,
             `Description` varchar(1000) DEFAULT NULL,
             `Name` varchar(255) DEFAULT NULL,
             `Created_at` datetime DEFAULT NULL,
@@ -324,7 +324,7 @@ namespace XR50TrainingAssetRepo.Services
             `UnityBuildTarget` varchar(50) DEFAULT NULL,
             `UnitySceneName` varchar(255) DEFAULT NULL,
 
-            PRIMARY KEY (`material_id`),
+            PRIMARY KEY (`id`),
             INDEX `idx_discriminator` (`Discriminator`),
             INDEX `idx_type` (`Type`),
             INDEX `idx_unique_id` (`UniqueId`),
@@ -469,7 +469,7 @@ namespace XR50TrainingAssetRepo.Services
                     `RelationshipType` varchar(50) DEFAULT NULL,
                     `DisplayOrder` int DEFAULT NULL,
                     PRIMARY KEY (`Id`),
-                    INDEX `idx_material_id` (`MaterialId`),
+                    INDEX `idx_id` (`MaterialId`),
                     INDEX `idx_related_entity` (`RelatedEntityId`, `RelatedEntityType`),
                     INDEX `idx_relationship_type` (`RelationshipType`)
                 )"

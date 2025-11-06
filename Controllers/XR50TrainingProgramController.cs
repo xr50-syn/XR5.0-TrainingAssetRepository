@@ -49,11 +49,11 @@ namespace XR50TrainingAssetRepo.Controllers
                 var result = await _trainingProgramService.CreateTrainingProgramAsync(request);
 
                 _logger.LogInformation("Successfully created training program {Id} for tenant: {TenantName}",
-                    result.program_id, tenantName);
+                    result.id, tenantName);
 
                 return CreatedAtAction(
                     nameof(GetTrainingProgram),
-                    new { tenantName, id = result.program_id },
+                    new { tenantName, id = result.id },
                     result);
             }
             catch (ArgumentException ex)
@@ -72,7 +72,7 @@ namespace XR50TrainingAssetRepo.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> PutTrainingProgram(string tenantName, int id, TrainingProgram program)
         {
-            if (id != program.program_id)
+            if (id != program.id)
             {
                 return BadRequest("ID mismatch");
             }
@@ -213,11 +213,11 @@ namespace XR50TrainingAssetRepo.Controllers
                 var result = await _trainingProgramService.CreateCompleteTrainingProgramAsync(request);
 
                 _logger.LogInformation("Successfully created complete training program {Id} with {MaterialCount} materials",
-                    result.program_id, result.Materials.Count);
+                    result.id, result.Materials.Count);
 
                 return CreatedAtAction(
                     nameof(GetCompleteTrainingProgram),
-                    new { tenantName, id = result.program_id },
+                    new { tenantName, id = result.id },
                     result);
             }
             catch (Exception ex)

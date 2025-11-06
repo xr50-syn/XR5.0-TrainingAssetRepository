@@ -80,7 +80,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
 
     public class TrainingProgramResponse
     {
-        public int program_id { get; set; }
+        public int id { get; set; }
         public string? Name { get; set; }
         public string? Description { get; set; }
         public DateTime? Created_at { get; set; }

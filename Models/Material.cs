@@ -18,7 +18,7 @@ namespace XR50TrainingAssetRepo.Models
         public DateTime? Updated_at { get; set; }
 
         [Key]
-        public int material_id { get; set; }
+        public int id { get; set; }
         [Required]
         public Type Type { get; set; }
         public int? UniqueId { get; set; }

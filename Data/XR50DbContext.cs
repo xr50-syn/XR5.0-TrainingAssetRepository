@@ -109,12 +109,12 @@ namespace XR50TrainingAssetRepo.Data
         {
             // Configure primary keys with custom column names
             modelBuilder.Entity<TrainingProgram>()
-                .Property(tp => tp.program_id)
-                .HasColumnName("program_id");
+                .Property(tp => tp.id)
+                .HasColumnName("id");
 
             modelBuilder.Entity<Material>()
-                .Property(m => m.material_id)
-                .HasColumnName("material_id");
+                .Property(m => m.id)
+                .HasColumnName("id");
 
             modelBuilder.Entity<LearningPath>()
                 .Property(lp => lp.learningPath_id)
