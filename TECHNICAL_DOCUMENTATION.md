@@ -280,7 +280,7 @@ public class Material
     // Type-specific collections
     public List<VideoTimestamp> VideoTimestamps { get; set; }
     public List<WorkflowStep> WorkflowSteps { get; set; }
-    public List<ChecklistEntry> ChecklistEntries { get; set; }
+    public List<ChecklistEntry> Entries { get; set; }
     public List<QuestionnaireEntry> QuestionnaireEntries { get; set; }
 }
 ```

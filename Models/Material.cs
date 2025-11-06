@@ -18,7 +18,7 @@ namespace XR50TrainingAssetRepo.Models
         public DateTime? Updated_at { get; set; }
 
         [Key]
-        public int Id { get; set; }
+        public int material_id { get; set; }
         [Required]
         public Type Type { get; set; }
         public int? UniqueId { get; set; }
@@ -38,24 +38,25 @@ namespace XR50TrainingAssetRepo.Models
         Image,
         Video,
         PDF,
-        UnityDemo,
+        Unity,
         Chatbot,
         Questionnaire,
         Checklist,
         Workflow,
         MQTT_Template,
         Answers,
+        Quiz,
         Default
     }
 
     public class ChecklistMaterial : Material
     {
 
-        public List<ChecklistEntry> ChecklistEntries { get; set; }
-        
+        public List<ChecklistEntry> Entries { get; set; }
+
         public ChecklistMaterial()
         {
-            ChecklistEntries = new List<ChecklistEntry>();
+            Entries = new List<ChecklistEntry>();
             Type = Type.Checklist;
         }
     }
@@ -130,16 +131,16 @@ namespace XR50TrainingAssetRepo.Models
         }
     }
 
-    public class UnityDemoMaterial : Material
+    public class UnityMaterial : Material
     {
         public int? AssetId { get; set; }
         public string? UnityVersion { get; set; }
-        public string? UnityBuildTarget { get; set; }  
+        public string? UnityBuildTarget { get; set; }
         public string? UnitySceneName { get; set; }
-        
-        public UnityDemoMaterial()
+
+        public UnityMaterial()
         {
-            Type = Type.UnityDemo;
+            Type = Type.Unity;
         }
     }
 
@@ -175,10 +176,21 @@ namespace XR50TrainingAssetRepo.Models
     {
         // Generic material with asset support
         public int? AssetId { get; set; }
-        
+
         public DefaultMaterial()
         {
             Type = Type.Default;
+        }
+    }
+
+    public class QuizMaterial : Material
+    {
+        public List<QuizQuestion> Questions { get; set; }
+
+        public QuizMaterial()
+        {
+            Questions = new List<QuizQuestion>();
+            Type = Type.Quiz;
         }
     }
 
@@ -195,5 +207,59 @@ namespace XR50TrainingAssetRepo.Models
 
 
         public virtual Material Material { get; set; }
+    }
+
+    public class QuizQuestion
+    {
+        [Key]
+        public int QuizQuestionId { get; set; }
+
+        public int QuestionNumber { get; set; }
+
+        [Required]
+        [StringLength(50)]
+        public string QuestionType { get; set; } = "text"; // text, multiple-choice, scale, etc.
+
+        [Required]
+        [StringLength(2000)]
+        public string Text { get; set; } = "";
+
+        [StringLength(2000)]
+        public string? Description { get; set; }
+
+        public decimal? Score { get; set; }
+
+        [StringLength(1000)]
+        public string? HelpText { get; set; }
+
+        public bool AllowMultiple { get; set; } = false;
+
+        [StringLength(500)]
+        public string? ScaleConfig { get; set; } // JSON for scale configuration
+
+        public int QuizMaterialId { get; set; }
+
+        public List<QuizAnswer> Answers { get; set; }
+
+        public QuizQuestion()
+        {
+            Answers = new List<QuizAnswer>();
+        }
+    }
+
+    public class QuizAnswer
+    {
+        [Key]
+        public int QuizAnswerId { get; set; }
+
+        [Required]
+        [StringLength(1000)]
+        public string Text { get; set; } = "";
+
+        public bool IsCorrect { get; set; } = false;
+
+        public int? DisplayOrder { get; set; }
+
+        public int QuizQuestionId { get; set; }
     }
 }

@@ -35,12 +35,15 @@ namespace XR50TrainingAssetRepo.Data
         public DbSet<VideoMaterial> Videos { get; set; } = null!;
         public DbSet<ChecklistMaterial> Checklists { get; set; } = null!;
         public DbSet<ImageMaterial> Images { get; set; } = null!;
+        public DbSet<QuizMaterial> Quizzes { get; set; } = null!;
         public DbSet<Asset> Assets { get; set; } = null!;
         public DbSet<Share> Shares { get; set; } = null!;
-        public DbSet<ChecklistEntry> ChecklistEntries { get; set; } = null!;
+        public DbSet<ChecklistEntry> Entries { get; set; } = null!;
         public DbSet<QuestionnaireEntry> QuestionnaireEntries { get; set; } = null!;
         public DbSet<VideoTimestamp> VideoTimestamps { get; set; } = null!;
         public DbSet<WorkflowStep> WorkflowSteps { get; set; } = null!;
+        public DbSet<QuizQuestion> QuizQuestions { get; set; } = null!;
+        public DbSet<QuizAnswer> QuizAnswers { get; set; } = null!;
         public DbSet<ProgramMaterial> ProgramMaterials { get; set; } = null!;
         public DbSet<ProgramLearningPath> ProgramLearningPaths { get; set; } = null!;
         public DbSet<GroupUser> GroupUsers { get; set; } = null!;
@@ -104,6 +107,18 @@ namespace XR50TrainingAssetRepo.Data
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            // Configure primary keys with custom column names
+            modelBuilder.Entity<TrainingProgram>()
+                .Property(tp => tp.program_id)
+                .HasColumnName("program_id");
+
+            modelBuilder.Entity<Material>()
+                .Property(m => m.material_id)
+                .HasColumnName("material_id");
+
+            modelBuilder.Entity<LearningPath>()
+                .Property(lp => lp.learningPath_id)
+                .HasColumnName("learningPath_id");
 
             modelBuilder.Entity<Material>()
                 .HasDiscriminator<string>("Discriminator")
@@ -113,7 +128,7 @@ namespace XR50TrainingAssetRepo.Data
                 .HasValue<ChecklistMaterial>("ChecklistMaterial")
                 .HasValue<WorkflowMaterial>("WorkflowMaterial")
                 .HasValue<PDFMaterial>("PDFMaterial")
-                .HasValue<UnityDemoMaterial>("UnityDemoMaterial")
+                .HasValue<UnityMaterial>("UnityMaterial")
                 .HasValue<ChatbotMaterial>("ChatbotMaterial")
                 .HasValue<QuestionnaireMaterial>("QuestionnaireMaterial")
                 .HasValue<MQTT_TemplateMaterial>("MQTT_TemplateMaterial")
@@ -191,16 +206,16 @@ namespace XR50TrainingAssetRepo.Data
                 .Property(m => m.PassingScore)
                 .HasColumnName("PassingScore");
 
-            modelBuilder.Entity<UnityDemoMaterial>()
+            modelBuilder.Entity<UnityMaterial>()
                 .Property(m => m.AssetId)
                 .HasColumnName("AssetId");
-            modelBuilder.Entity<UnityDemoMaterial>()
+            modelBuilder.Entity<UnityMaterial>()
                 .Property(m => m.UnityVersion)
                 .HasColumnName("UnityVersion");
-            modelBuilder.Entity<UnityDemoMaterial>()
+            modelBuilder.Entity<UnityMaterial>()
                 .Property(m => m.UnityBuildTarget)
                 .HasColumnName("UnityBuildTarget");
-            modelBuilder.Entity<UnityDemoMaterial>()
+            modelBuilder.Entity<UnityMaterial>()
                 .Property(m => m.UnitySceneName)
                 .HasColumnName("UnitySceneName");
                 
@@ -221,7 +236,7 @@ namespace XR50TrainingAssetRepo.Data
                 .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<ChecklistMaterial>()
-                .HasMany(c => c.ChecklistEntries)
+                .HasMany(c => c.Entries)
                 .WithOne()
                 .HasForeignKey("ChecklistMaterialId")
                 .OnDelete(DeleteBehavior.Cascade);
@@ -230,6 +245,18 @@ namespace XR50TrainingAssetRepo.Data
                 .HasMany(w => w.WorkflowSteps)
                 .WithOne()
                 .HasForeignKey("WorkflowMaterialId")
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<QuizMaterial>()
+                .HasMany(q => q.Questions)
+                .WithOne()
+                .HasForeignKey("QuizMaterialId")
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<QuizQuestion>()
+                .HasMany(q => q.Answers)
+                .WithOne()
+                .HasForeignKey("QuizQuestionId")
                 .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<ProgramMaterial>()

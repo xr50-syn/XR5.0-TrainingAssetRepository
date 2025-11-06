@@ -98,7 +98,7 @@ public async Task<ActionResult<object>> GetCompleteMaterialDetails(string tenant
             MaterialType.Questionnaire => await GetQuestionnaireDetails(id),
             MaterialType.Image => await GetImageDetails(id),
             MaterialType.PDF => await GetPDFDetails(id),
-            MaterialType.UnityDemo => await GetUnityDemoDetails(id),
+            MaterialType.Unity => await GetUnityDetails(id),
             MaterialType.Chatbot => await GetChatbotDetails(id),
             MaterialType.MQTT_Template => await GetMQTTTemplateDetails(id),
             _ => await GetBasicMaterialDetails(id)
@@ -128,7 +128,7 @@ private async Task<object?> GetWorkflowDetails(int materialId)
 
     return new
     {
-        Id = workflow.Id,
+        material_id = workflow.material_id,
         Name = workflow.Name,
         Description = workflow.Description,
         Type = workflow.Type.ToString(),
@@ -150,7 +150,7 @@ private async Task<object?> GetVideoDetails(int materialId)
 
     return new
     {
-        Id = video.Id,
+        material_id = video.material_id,
         Name = video.Name,
         Description = video.Description,
         Type = video.Type.ToString(),
@@ -177,13 +177,13 @@ private async Task<object?> GetChecklistDetails(int materialId)
 
     return new
     {
-        Id = checklist.Id,
+        material_id = checklist.material_id,
         Name = checklist.Name,
         Description = checklist.Description,
         Type = checklist.Type.ToString(),
         Created_at = checklist.Created_at,
         Updated_at = checklist.Updated_at,
-        ChecklistEntries = checklist.ChecklistEntries?.Select(ce => new
+        Entries = checklist.Entries?.Select(ce => new
         {
             Id = ce.ChecklistEntryId,
             Text = ce.Text,
@@ -199,7 +199,7 @@ private async Task<object?> GetQuestionnaireDetails(int materialId)
 
     return new
     {
-        Id = questionnaire.Id,
+        material_id = questionnaire.material_id,
         Name = questionnaire.Name,
         Description = questionnaire.Description,
         Type = questionnaire.Type.ToString(),
@@ -224,7 +224,7 @@ private async Task<object?> GetImageDetails(int materialId)
 
     return new
     {
-        Id = image.Id,
+        material_id = image.material_id,
         Name = image.Name,
         Description = image.Description,
         Type = image.Type.ToString(),
@@ -245,7 +245,7 @@ private async Task<object?> GetPDFDetails(int materialId)
 
     return new
     {
-        Id = pdf.Id,
+        material_id = pdf.material_id,
         Name = pdf.Name,
         Description = pdf.Description,
         Type = pdf.Type.ToString(),
@@ -258,14 +258,14 @@ private async Task<object?> GetPDFDetails(int materialId)
     };
 }
 
-private async Task<object?> GetUnityDemoDetails(int materialId)
+private async Task<object?> GetUnityDetails(int materialId)
 {
-    var unity = await _materialService.GetUnityDemoMaterialAsync(materialId);
+    var unity = await _materialService.GetUnityMaterialAsync(materialId);
     if (unity == null) return null;
 
     return new
     {
-        Id = unity.Id,
+        material_id = unity.material_id,
         Name = unity.Name,
         Description = unity.Description,
         Type = unity.Type.ToString(),
@@ -285,7 +285,7 @@ private async Task<object?> GetChatbotDetails(int materialId)
 
     return new
     {
-        Id = chatbot.Id,
+        material_id = chatbot.material_id,
         Name = chatbot.Name,
         Description = chatbot.Description,
         Type = chatbot.Type.ToString(),
@@ -304,7 +304,7 @@ private async Task<object?> GetMQTTTemplateDetails(int materialId)
 
     return new
     {
-        Id = mqtt.Id,
+        material_id = mqtt.material_id,
         Name = mqtt.Name,
         Description = mqtt.Description,
         Type = mqtt.Type.ToString(),
@@ -322,7 +322,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
     return new
     {
-        Id = material.Id,
+        material_id = material.material_id,
         Name = material.Name,
         Description = material.Description,
         Type = material.Type.ToString(),
@@ -379,7 +379,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var completeMaterials = new List<object>();
                 foreach (var material in materials)
                 {
-                    var completeDetails = await _materialService.GetCompleteMaterialDetailsAsync(material.Id);
+                    var completeDetails = await _materialService.GetCompleteMaterialDetailsAsync(material.material_id);
                     if (completeDetails != null)
                     {
                         completeMaterials.Add(completeDetails);
@@ -414,7 +414,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 var summary = new
                 {
-                    Id = material.Id,
+                    material_id = material.material_id,
                     Name = material.Name,
                     Description = material.Description,
                     Type = material.Type.ToString(),
@@ -435,7 +435,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         // POST: api/{tenantName}/materials - Generic material creation
         // Accepts both JSON (application/json) and form-data (application/x-www-form-urlencoded, multipart/form-data)
         [HttpPost]
-        public async Task<ActionResult<Material>> PostMaterial(string tenantName)
+        public async Task<ActionResult<CreateMaterialResponse>> PostMaterial(string tenantName)
         {
             try
             {
@@ -502,11 +502,32 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var createdMaterial = await _materialService.CreateMaterialAsync(material);
 
                 _logger.LogInformation("Created material {Name} with ID {Id} for tenant: {TenantName}",
-                    createdMaterial.Name, createdMaterial.Id, tenantName);
+                    createdMaterial.Name, createdMaterial.material_id, tenantName);
+
+                var response = new CreateMaterialResponse
+                {
+                    Status = "success",
+                    Message = $"Material '{createdMaterial.Name}' created successfully",
+                    material_id = createdMaterial.material_id,
+                    Name = createdMaterial.Name,
+                    Description = createdMaterial.Description,
+                    Type = createdMaterial.Type.ToString(),
+                    UniqueId = createdMaterial.UniqueId,
+                    AssetId = createdMaterial switch
+                    {
+                        VideoMaterial v => v.AssetId,
+                        ImageMaterial i => i.AssetId,
+                        PDFMaterial p => p.AssetId,
+                        UnityMaterial u => u.AssetId,
+                        DefaultMaterial d => d.AssetId,
+                        _ => null
+                    },
+                    Created_at = createdMaterial.Created_at
+                };
 
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.Id },
-                    createdMaterial);
+                    new { tenantName, id = createdMaterial.material_id },
+                    response);
             }
             catch (Exception ex)
             {
@@ -674,13 +695,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 try
                 {
                     material = CreateMaterialWithAssetId(materialData, materialType, createdAsset.Id);
-                    var createdMaterial = await _materialService.CreateMaterialAsync(material);
+                    var createdMaterial = await _materialService.CreateMaterialAsyncComplete(material);
                     
-                    _logger.LogInformation("Created material {MaterialId} ({Name}) with asset {AssetId}", 
-                        createdMaterial.Id, createdMaterial.Name, createdAsset.Id);
+                    _logger.LogInformation("Created material {MaterialId} ({Name}) with asset {AssetId}",
+                        createdMaterial.material_id, createdMaterial.Name, createdAsset.Id);
 
                     return CreatedAtAction(nameof(GetMaterial),
-                        new { tenantName, id = createdMaterial.Id },
+                        new { tenantName, id = createdMaterial.material_id },
                         createdMaterial);
                 }
                 catch (Exception ex)
@@ -853,7 +874,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 case PDFMaterial pdf:
                     pdf.AssetId = assetId;
                     break;
-                case UnityDemoMaterial unity:
+                case UnityMaterial unity:
                     unity.AssetId = assetId;
                     break;
                 case DefaultMaterial defaultMat:
@@ -969,11 +990,11 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 // Use the service method directly instead of the controller method
                 var createdMaterial = await _materialService.CreateWorkflowWithStepsAsync(workflow, steps);
                 
-                _logger.LogInformation("Created workflow material {Name} with ID {Id}", 
-                    createdMaterial.Name, createdMaterial.Id);
-                
+                _logger.LogInformation("Created workflow material {Name} with ID {Id}",
+                    createdMaterial.Name, createdMaterial.material_id);
+
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.Id },
+                    new { tenantName, id = createdMaterial.material_id },
                     createdMaterial);
             }
             catch (Exception ex)
@@ -1037,11 +1058,11 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 // Use the service method directly instead of the controller method
                 var createdMaterial = await _materialService.CreateVideoWithTimestampsAsync(video, timestamps);
                 
-                _logger.LogInformation("Created video material {Name} with ID {Id}", 
-                    createdMaterial.Name, createdMaterial.Id);
-                
+                _logger.LogInformation("Created video material {Name} with ID {Id}",
+                    createdMaterial.Name, createdMaterial.material_id);
+
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.Id },
+                    new { tenantName, id = createdMaterial.material_id },
                     createdMaterial);
             }
             catch (Exception ex)
@@ -1090,11 +1111,11 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 // Use the service method directly instead of the controller method
                 var createdMaterial = await _materialService.CreateChecklistWithEntriesAsync(checklist, entries);
                 
-                _logger.LogInformation("Created checklist material {Name} with ID {Id}", 
-                    createdMaterial.Name, createdMaterial.Id);
-                
+                _logger.LogInformation("Created checklist material {Name} with ID {Id}",
+                    createdMaterial.Name, createdMaterial.material_id);
+
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.Id },
+                    new { tenantName, id = createdMaterial.material_id },
                     createdMaterial);
             }
             catch (Exception ex)
@@ -1152,11 +1173,11 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 // For questionnaires, we can use the existing service method directly
                 var createdMaterial = await _materialService.CreateQuestionnaireMaterialWithEntriesAsync(questionnaire, entries);
                 
-                _logger.LogInformation("Created questionnaire material {Name} with ID {Id}", 
-                    createdMaterial.Name, createdMaterial.Id);
-                
+                _logger.LogInformation("Created questionnaire material {Name} with ID {Id}",
+                    createdMaterial.Name, createdMaterial.material_id);
+
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.Id },
+                    new { tenantName, id = createdMaterial.material_id },
                     createdMaterial);
             }
             catch (Exception ex)
@@ -1183,11 +1204,11 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 // Use the basic creation method (not the complete one)
                 var createdMaterial = await _materialService.CreateMaterialAsync(material);
                 
-                _logger.LogInformation("Created basic material {Name} with ID {Id}", 
-                    createdMaterial.Name, createdMaterial.Id);
-                
+                _logger.LogInformation("Created basic material {Name} with ID {Id}",
+                    createdMaterial.Name, createdMaterial.material_id);
+
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.Id },
+                    new { tenantName, id = createdMaterial.material_id },
                     createdMaterial);
             }
             catch (Exception ex)
@@ -1234,7 +1255,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         7 => "workflow",
                         8 => "mqtt_template",
                         9 => "answers",
-                        10 => "default",
+                        10 => "quiz",
+                        11 => "default",
                         _ => "default"
                     };
                     _logger.LogInformation("Found type (numeric {NumericType}), converted to: {Type}", numericType, typeValue);
@@ -1263,7 +1285,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         7 => "workflow",
                         8 => "mqtt_template",
                         9 => "answers",
-                        10 => "default",
+                        10 => "quiz",
+                        11 => "default",
                         _ => "default"
                     };
                     _logger.LogInformation("Found materialType (numeric {NumericType}), converted to: {Type}", numericType, typeValue);
@@ -1278,9 +1301,10 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 ("checklistmaterial", _) or (_, "checklist") => new ChecklistMaterial(),
                 ("workflowmaterial", _) or (_, "workflow") => new WorkflowMaterial(),
                 ("pdfmaterial", _) or (_, "pdf") => new PDFMaterial(),
-                ("unitydemo", _) or (_, "unitydemo") => new UnityDemoMaterial(),
+                ("unitydemo", _) or (_, "unitydemo") => new UnityMaterial(),
                 ("chatbotmaterial", _) or (_, "chatbot") => new ChatbotMaterial(),
                 ("questionnairematerial", _) or (_, "questionnaire") => new QuestionnaireMaterial(),
+                ("quizmaterial", _) or (_, "quiz") => new QuizMaterial(),
                 ("mqtt_templatematerial", _) or (_, "mqtt_template") => new MQTT_TemplateMaterial(),
                 ("defaultmaterial", _) or (_, "default") => new DefaultMaterial(),
                 _ => new DefaultMaterial() // Default fallback
@@ -1409,18 +1433,116 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                             foreach (var entryElement in entriesElement.EnumerateArray())
                             {
                                 var entry = new ChecklistEntry();
-                                
+
                                 if (TryGetPropertyCaseInsensitive(entryElement, "text", out var textProp))
                                     entry.Text = textProp.GetString() ?? "";
-                                
+
                                 if (TryGetPropertyCaseInsensitive(entryElement, "description", out var descProp))
                                     entry.Description = descProp.GetString();
-                                
+
                                 entries.Add(entry);
                             }
                         }
-                        checklist.ChecklistEntries = entries;
+                        checklist.Entries = entries;
                         _logger.LogInformation("Added {Count} checklist entries", entries.Count);
+                    }
+                    break;
+
+                case QuizMaterial quiz:
+                    _logger.LogInformation("Processing quiz material...");
+
+                    // Try to get questions from "config" object first, then try direct "questions" array
+                    JsonElement questionsElement;
+                    bool hasQuestions = false;
+
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var configElement))
+                    {
+                        if (TryGetPropertyCaseInsensitive(configElement, "questions", out questionsElement))
+                        {
+                            hasQuestions = true;
+                            _logger.LogInformation("Found questions in config object");
+                        }
+                    }
+                    else if (TryGetPropertyCaseInsensitive(jsonElement, "questions", out questionsElement))
+                    {
+                        hasQuestions = true;
+                        _logger.LogInformation("Found questions directly");
+                    }
+
+                    if (hasQuestions && questionsElement.ValueKind == JsonValueKind.Array)
+                    {
+                        var questions = new List<QuizQuestion>();
+                        _logger.LogInformation("Questions array has {Count} elements", questionsElement.GetArrayLength());
+
+                        foreach (var questionElement in questionsElement.EnumerateArray())
+                        {
+                            var question = new QuizQuestion();
+
+                            if (TryGetPropertyCaseInsensitive(questionElement, "id", out var idProp))
+                                question.QuestionNumber = idProp.GetInt32();
+
+                            if (TryGetPropertyCaseInsensitive(questionElement, "type", out var typeProp))
+                                question.QuestionType = typeProp.GetString() ?? "text";
+
+                            if (TryGetPropertyCaseInsensitive(questionElement, "text", out var textProp))
+                                question.Text = textProp.GetString() ?? "";
+
+                            if (TryGetPropertyCaseInsensitive(questionElement, "description", out var descProp))
+                                question.Description = descProp.GetString();
+
+                            if (TryGetPropertyCaseInsensitive(questionElement, "score", out var scoreProp))
+                            {
+                                if (scoreProp.ValueKind == JsonValueKind.String)
+                                {
+                                    if (decimal.TryParse(scoreProp.GetString(), out var scoreValue))
+                                        question.Score = scoreValue;
+                                }
+                                else if (scoreProp.ValueKind == JsonValueKind.Number)
+                                {
+                                    question.Score = scoreProp.GetDecimal();
+                                }
+                            }
+
+                            if (TryGetPropertyCaseInsensitive(questionElement, "helpText", out var helpProp))
+                                question.HelpText = helpProp.GetString();
+
+                            if (TryGetPropertyCaseInsensitive(questionElement, "allowMultiple", out var multiProp))
+                                question.AllowMultiple = multiProp.GetBoolean();
+
+                            if (TryGetPropertyCaseInsensitive(questionElement, "scaleConfig", out var scaleProp))
+                                question.ScaleConfig = scaleProp.GetString();
+
+                            // Handle answers (checking for both "answers" and "anwsers" typo)
+                            if (TryGetPropertyCaseInsensitive(questionElement, "answers", out var answersElement) ||
+                                TryGetPropertyCaseInsensitive(questionElement, "anwsers", out answersElement))
+                            {
+                                if (answersElement.ValueKind == JsonValueKind.Array)
+                                {
+                                    var answers = new List<QuizAnswer>();
+                                    foreach (var answerElement in answersElement.EnumerateArray())
+                                    {
+                                        var answer = new QuizAnswer();
+
+                                        if (TryGetPropertyCaseInsensitive(answerElement, "text", out var ansTextProp))
+                                            answer.Text = ansTextProp.GetString() ?? "";
+
+                                        if (TryGetPropertyCaseInsensitive(answerElement, "isCorrect", out var correctProp))
+                                            answer.IsCorrect = correctProp.GetBoolean();
+
+                                        if (TryGetPropertyCaseInsensitive(answerElement, "displayOrder", out var orderProp))
+                                            answer.DisplayOrder = orderProp.GetInt32();
+
+                                        answers.Add(answer);
+                                    }
+                                    question.Answers = answers;
+                                    _logger.LogInformation("Added {Count} answers to question", answers.Count);
+                                }
+                            }
+
+                            questions.Add(question);
+                        }
+                        quiz.Questions = questions;
+                        _logger.LogInformation("Added {Count} questions to quiz", questions.Count);
                     }
                     break;
 
@@ -1469,7 +1591,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         mqtt.message_text = msgText.GetString();
                     break;
 
-                case UnityDemoMaterial unity:
+                case UnityMaterial unity:
                     if (TryGetPropertyCaseInsensitive(jsonElement, "assetId", out var unityAssetId))
                         unity.AssetId = unityAssetId.GetInt32();
                     if (TryGetPropertyCaseInsensitive(jsonElement, "unityVersion", out var version))
@@ -1533,7 +1655,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         [HttpPut("{id}")]
         public async Task<IActionResult> PutMaterial(string tenantName, int id, Material material)
         {
-            if (id != material.Id)
+            if (id != material.material_id)
             {
                 return BadRequest("ID mismatch");
             }
@@ -1692,16 +1814,16 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         // GET: api/{tenantName}/materials/unity-demos
         [HttpGet("unity-demos")]
-        public async Task<ActionResult<IEnumerable<UnityDemoMaterial>>> GetUnityDemoMaterials(string tenantName)
+        public async Task<ActionResult<IEnumerable<UnityMaterial>>> GetUnityMaterials(string tenantName)
         {
             _logger.LogInformation("🎮 Getting Unity demo materials for tenant: {TenantName}", tenantName);
 
-            var unityDemos = await _materialService.GetAllUnityDemoMaterialsAsync();
+            var unitys = await _materialService.GetAllUnityMaterialsAsync();
 
             _logger.LogInformation("Found {Count} Unity demo materials for tenant: {TenantName}",
-                unityDemos.Count(), tenantName);
+                unitys.Count(), tenantName);
 
-            return Ok(unityDemos);
+            return Ok(unitys);
         }
 
         // POST: api/{tenantName}/materials/workflow-complete
@@ -1720,7 +1842,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     request.Steps);
 
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.Id },
+                    new { tenantName, id = createdMaterial.material_id },
                     createdMaterial);
             }
             catch (Exception ex)
@@ -1746,7 +1868,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     request.Timestamps);
 
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.Id },
+                    new { tenantName, id = createdMaterial.material_id },
                     createdMaterial);
             }
             catch (Exception ex)
@@ -1772,7 +1894,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     request.Entries);
 
                 return CreatedAtAction(nameof(GetMaterial),
-                    new { tenantName, id = createdMaterial.Id },
+                    new { tenantName, id = createdMaterial.material_id },
                     createdMaterial);
             }
             catch (Exception ex)
@@ -1862,7 +1984,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
 
             _logger.LogInformation("Retrieved checklist material {Id} with {Count} entries for tenant: {TenantName}",
-                id, checklist.ChecklistEntries?.Count() ?? 0, tenantName);
+                id, checklist.Entries?.Count() ?? 0, tenantName);
 
             return Ok(checklist);
         }
@@ -2127,7 +2249,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     Chatbots = (await _materialService.GetAllChatbotMaterialsAsync()).Count(),
                     Questionnaires = (await _materialService.GetAllQuestionnaireMaterialsAsync()).Count(),
                     MQTTTemplates = (await _materialService.GetAllMQTTTemplateMaterialsAsync()).Count(),
-                    UnityDemos = (await _materialService.GetAllUnityDemoMaterialsAsync()).Count(),
+                    Unitys = (await _materialService.GetAllUnityMaterialsAsync()).Count(),
                     Total = (await _materialService.GetAllMaterialsAsync()).Count()
                 };
 
@@ -2230,7 +2352,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 MaterialType.Checklist => typeof(ChecklistMaterial),
                 MaterialType.Workflow => typeof(WorkflowMaterial),
                 MaterialType.Questionnaire => typeof(QuestionnaireMaterial),
-                MaterialType.UnityDemo => typeof(UnityDemoMaterial),
+                MaterialType.Unity => typeof(UnityMaterial),
                 MaterialType.Chatbot => typeof(ChatbotMaterial),
                 MaterialType.MQTT_Template => typeof(MQTT_TemplateMaterial),
                 _ => typeof(Material)
@@ -2285,7 +2407,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             public int Chatbots { get; set; }
             public int Questionnaires { get; set; }
             public int MQTTTemplates { get; set; }
-            public int UnityDemos { get; set; }
+            public int Unitys { get; set; }
             public int Total { get; set; }
         }
 

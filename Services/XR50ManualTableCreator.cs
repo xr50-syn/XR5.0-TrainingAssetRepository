@@ -255,7 +255,7 @@ namespace XR50TrainingAssetRepo.Services
                 )",
 
                 @"CREATE TABLE IF NOT EXISTS `TrainingPrograms` (
-                    `Id` int NOT NULL AUTO_INCREMENT,
+                    `program_id` int NOT NULL AUTO_INCREMENT,
                     `Name` varchar(255) NOT NULL,
                     `Description` varchar(1000) DEFAULT NULL,
                     `Requirements` varchar(1000) DEFAULT NULL,
@@ -264,20 +264,20 @@ namespace XR50TrainingAssetRepo.Services
                     `min_level_rank` int DEFAULT NULL,
                     `max_level_rank` int DEFAULT NULL,
                     `required_upto_level_rank` int DEFAULT NULL,
-                    PRIMARY KEY (`Id`)
+                    PRIMARY KEY (`program_id`)
                 )",
 
                 @"CREATE TABLE IF NOT EXISTS `LearningPaths` (
-                    `Id` int NOT NULL AUTO_INCREMENT,
+                    `learningPath_id` int NOT NULL AUTO_INCREMENT,
                     `Description` varchar(1000) NOT NULL,
                     `LearningPathName` varchar(255) NOT NULL,
-                    PRIMARY KEY (`Id`)
+                    PRIMARY KEY (`learningPath_id`)
                 )",
 
         // Replace the Materials table creation in GetCreateTableStatements() method
 
         @"CREATE TABLE IF NOT EXISTS `Materials` (
-            `Id` int NOT NULL AUTO_INCREMENT,
+            `material_id` int NOT NULL AUTO_INCREMENT,
             `Description` varchar(1000) DEFAULT NULL,
             `Name` varchar(255) DEFAULT NULL,
             `Created_at` datetime DEFAULT NULL,
@@ -289,42 +289,42 @@ namespace XR50TrainingAssetRepo.Services
             -- MQTT_TemplateMaterial specific columns
             `message_type` varchar(255) DEFAULT NULL,
             `message_text` text DEFAULT NULL,
-            
+
             -- Asset-based materials (Video, Image, Unity, Default, PDF)
             `AssetId` int DEFAULT NULL,
-            
+
             -- Video-specific columns
             `VideoPath` varchar(500) DEFAULT NULL,
             `VideoDuration` int DEFAULT NULL,
             `VideoResolution` varchar(20) DEFAULT NULL,
-            
-            -- Image-specific columns  
+
+            -- Image-specific columns
             `ImagePath` varchar(500) DEFAULT NULL,
             `ImageWidth` int DEFAULT NULL,
             `ImageHeight` int DEFAULT NULL,
             `ImageFormat` varchar(20) DEFAULT NULL,
-            
+
             -- PDF-specific columns
             `PdfPath` varchar(500) DEFAULT NULL,
             `PdfPageCount` int DEFAULT NULL,
             `PdfFileSize` bigint DEFAULT NULL,
-            
+
             -- Chatbot-specific columns
             `ChatbotConfig` text DEFAULT NULL,
             `ChatbotModel` varchar(100) DEFAULT NULL,
             `ChatbotPrompt` text DEFAULT NULL,
-            
+
             -- Questionnaire-specific columns
             `QuestionnaireConfig` text DEFAULT NULL,
             `QuestionnaireType` varchar(50) DEFAULT NULL,
             `PassingScore` decimal(5,2) DEFAULT NULL,
-            
+
             -- Unity Demo specific columns
             `UnityVersion` varchar(50) DEFAULT NULL,
             `UnityBuildTarget` varchar(50) DEFAULT NULL,
             `UnitySceneName` varchar(255) DEFAULT NULL,
-            
-            PRIMARY KEY (`Id`),
+
+            PRIMARY KEY (`material_id`),
             INDEX `idx_discriminator` (`Discriminator`),
             INDEX `idx_type` (`Type`),
             INDEX `idx_unique_id` (`UniqueId`),
@@ -345,7 +345,7 @@ namespace XR50TrainingAssetRepo.Services
                     INDEX `idx_video_material` (`VideoMaterialId`)
                 )",
 
-                @"CREATE TABLE IF NOT EXISTS `ChecklistEntries` (
+                @"CREATE TABLE IF NOT EXISTS `Entries` (
                     `ChecklistEntryId` int NOT NULL AUTO_INCREMENT,
                     `Text` varchar(1000) NOT NULL,
                     `Description` varchar(1000) DEFAULT NULL,
@@ -361,6 +361,31 @@ namespace XR50TrainingAssetRepo.Services
                     `WorkflowMaterialId` int DEFAULT NULL,
                     PRIMARY KEY (`Id`),
                     INDEX `idx_workflow_material` (`WorkflowMaterialId`)
+                )",
+
+                @"CREATE TABLE IF NOT EXISTS `QuizQuestions` (
+                    `QuizQuestionId` int NOT NULL AUTO_INCREMENT,
+                    `QuestionNumber` int NOT NULL,
+                    `QuestionType` varchar(50) NOT NULL DEFAULT 'text',
+                    `Text` varchar(2000) NOT NULL,
+                    `Description` varchar(2000) DEFAULT NULL,
+                    `Score` decimal(10,2) DEFAULT NULL,
+                    `HelpText` varchar(1000) DEFAULT NULL,
+                    `AllowMultiple` tinyint(1) NOT NULL DEFAULT 0,
+                    `ScaleConfig` varchar(500) DEFAULT NULL,
+                    `QuizMaterialId` int DEFAULT NULL,
+                    PRIMARY KEY (`QuizQuestionId`),
+                    INDEX `idx_quiz_material` (`QuizMaterialId`)
+                )",
+
+                @"CREATE TABLE IF NOT EXISTS `QuizAnswers` (
+                    `QuizAnswerId` int NOT NULL AUTO_INCREMENT,
+                    `Text` varchar(1000) NOT NULL,
+                    `IsCorrect` tinyint(1) NOT NULL DEFAULT 0,
+                    `DisplayOrder` int DEFAULT NULL,
+                    `QuizQuestionId` int DEFAULT NULL,
+                    PRIMARY KEY (`QuizAnswerId`),
+                    INDEX `idx_quiz_question` (`QuizQuestionId`)
                 )",
 
                 @"CREATE TABLE IF NOT EXISTS `QuestionnaireEntries` (
@@ -517,13 +542,38 @@ CREATE TABLE IF NOT EXISTS `VideoTimestamps` (
     INDEX `idx_video_material` (`VideoMaterialId`)
 )
 
-CREATE TABLE IF NOT EXISTS `ChecklistEntries` (
+CREATE TABLE IF NOT EXISTS `Entries` (
     `ChecklistEntryId` int NOT NULL AUTO_INCREMENT,
     `Text` varchar(1000) NOT NULL,
     `Description` varchar(1000) DEFAULT NULL,
     `ChecklistMaterialId` int DEFAULT NULL,
     PRIMARY KEY (`ChecklistEntryId`),
     INDEX `idx_checklist_material` (`ChecklistMaterialId`)
+)
+
+CREATE TABLE IF NOT EXISTS `QuizQuestions` (
+    `QuizQuestionId` int NOT NULL AUTO_INCREMENT,
+    `QuestionNumber` int NOT NULL,
+    `QuestionType` varchar(50) NOT NULL DEFAULT 'text',
+    `Text` varchar(2000) NOT NULL,
+    `Description` varchar(2000) DEFAULT NULL,
+    `Score` decimal(10,2) DEFAULT NULL,
+    `HelpText` varchar(1000) DEFAULT NULL,
+    `AllowMultiple` tinyint(1) NOT NULL DEFAULT 0,
+    `ScaleConfig` varchar(500) DEFAULT NULL,
+    `QuizMaterialId` int DEFAULT NULL,
+    PRIMARY KEY (`QuizQuestionId`),
+    INDEX `idx_quiz_material` (`QuizMaterialId`)
+)
+
+CREATE TABLE IF NOT EXISTS `QuizAnswers` (
+    `QuizAnswerId` int NOT NULL AUTO_INCREMENT,
+    `Text` varchar(1000) NOT NULL,
+    `IsCorrect` tinyint(1) NOT NULL DEFAULT 0,
+    `DisplayOrder` int DEFAULT NULL,
+    `QuizQuestionId` int DEFAULT NULL,
+    PRIMARY KEY (`QuizAnswerId`),
+    INDEX `idx_quiz_question` (`QuizQuestionId`)
 )
 
 CREATE TABLE IF NOT EXISTS `WorkflowSteps` (

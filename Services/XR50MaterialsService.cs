@@ -35,8 +35,8 @@ namespace XR50TrainingAssetRepo.Services
         Task<IEnumerable<QuestionnaireMaterial>> GetAllQuestionnaireMaterialsAsync();
         Task<IEnumerable<MQTT_TemplateMaterial>> GetAllMQTTTemplateMaterialsAsync();
         Task<MQTT_TemplateMaterial?> GetMQTTTemplateMaterialAsync(int id);
-        Task<IEnumerable<UnityDemoMaterial>> GetAllUnityDemoMaterialsAsync();
-        Task<UnityDemoMaterial?> GetUnityDemoMaterialAsync(int id);
+        Task<IEnumerable<UnityMaterial>> GetAllUnityMaterialsAsync();
+        Task<UnityMaterial?> GetUnityMaterialAsync(int id);
         
         // Video Material Specific
         Task<VideoMaterial?> GetVideoMaterialWithTimestampsAsync(int id);
@@ -57,6 +57,14 @@ namespace XR50TrainingAssetRepo.Services
         // Questionnaire Material Specific
         Task<QuestionnaireMaterial?> GetQuestionnaireMaterialWithEntriesAsync(int id);
         Task<QuestionnaireMaterial> AddEntryToQuestionnaireAsync(int questionnaireId, QuestionnaireEntry entry);
+
+        // Quiz Material Specific
+        Task<QuizMaterial> CreateQuizWithQuestionsAsync(QuizMaterial quiz, IEnumerable<QuizQuestion>? initialQuestions = null);
+        Task<QuizMaterial?> GetQuizMaterialWithQuestionsAsync(int id);
+        Task<QuizQuestion> AddQuestionToQuizAsync(int quizId, QuizQuestion question);
+        Task<bool> RemoveQuestionFromQuizAsync(int quizId, int questionId);
+        Task<QuizAnswer> AddAnswerToQuestionAsync(int questionId, QuizAnswer answer);
+        Task<bool> RemoveAnswerFromQuestionAsync(int questionId, int answerId);
         Task<bool> RemoveEntryFromQuestionnaireAsync(int questionnaireId, int entryId);
         
         // Chatbot Material Specific
@@ -66,7 +74,7 @@ namespace XR50TrainingAssetRepo.Services
         Task<MQTT_TemplateMaterial> UpdateMQTTTemplateAsync(int templateId, string messageType, string messageText);
         
         // Unity Demo Material Specific
-        Task<UnityDemoMaterial> UpdateUnityDemoConfigAsync(int unityId, string? version = null, string? buildTarget = null, string? sceneName = null, int? assetId = null);
+        Task<UnityMaterial> UpdateUnityConfigAsync(int unityId, string? version = null, string? buildTarget = null, string? sceneName = null, int? assetId = null);
         
         // Complex Material Creation (One-shot creation with child entities)
         Task<WorkflowMaterial> CreateWorkflowWithStepsAsync(WorkflowMaterial workflow, IEnumerable<WorkflowStep>? initialSteps = null);
@@ -138,7 +146,7 @@ namespace XR50TrainingAssetRepo.Services
             await context.SaveChangesAsync();
 
             _logger.LogInformation("Created material: {Name} (Type: {Type}, Discriminator: {Discriminator}) with ID: {Id}",
-                material.Name, material.Type, material.GetType().Name, material.Id);
+                material.Name, material.Type, material.GetType().Name, material.material_id);
 
             return material;
         }
@@ -158,7 +166,7 @@ namespace XR50TrainingAssetRepo.Services
                 context.Materials.Add(material);
                 await context.SaveChangesAsync();
 
-                _logger.LogInformation("Created material with ID: {Id}", material.Id);
+                _logger.LogInformation("Created material with ID: {Id}", material.material_id);
                 switch (material)
                 {
                     case WorkflowMaterial workflow:
@@ -166,7 +174,7 @@ namespace XR50TrainingAssetRepo.Services
                         
                         if (workflow.WorkflowSteps?.Any() == true)
                         {
-                            _logger.LogInformation("Adding {Count} workflow steps to material {Id}", workflow.WorkflowSteps.Count, material.Id);
+                            _logger.LogInformation("Adding {Count} workflow steps to material {Id}", workflow.WorkflowSteps.Count, material.material_id);
                             
                             foreach (var step in workflow.WorkflowSteps)
                             {
@@ -180,7 +188,7 @@ namespace XR50TrainingAssetRepo.Services
                        
                                 };
 
-                                context.Entry(newStep).Property("WorkflowMaterialId").CurrentValue = material.Id;
+                                context.Entry(newStep).Property("WorkflowMaterialId").CurrentValue = material.material_id;
                                 context.WorkflowSteps.Add(newStep);
                                 
                                 _logger.LogInformation("Created new workflow step entity (ID will be auto-generated)");
@@ -189,7 +197,7 @@ namespace XR50TrainingAssetRepo.Services
                             // Save all steps at once
                             await context.SaveChangesAsync();
                             _logger.LogInformation("Successfully added {Count} workflow steps to material {Id}", 
-                                workflow.WorkflowSteps.Count, material.Id);
+                                workflow.WorkflowSteps.Count, material.material_id);
                         }
                         else
                         {
@@ -198,27 +206,27 @@ namespace XR50TrainingAssetRepo.Services
                         break;
 
                     case ChecklistMaterial checklist:
-                        _logger.LogInformation("Processing checklist material with {Count} entries", checklist.ChecklistEntries?.Count ?? 0);
-                        
-                        if (checklist.ChecklistEntries?.Any() == true)
+                        _logger.LogInformation("Processing checklist material with {Count} entries", checklist.Entries?.Count ?? 0);
+
+                        if (checklist.Entries?.Any() == true)
                         {
-                            foreach (var entry in checklist.ChecklistEntries)
+                            foreach (var entry in checklist.Entries)
                             {
                                 _logger.LogInformation("Adding entry: {Text}", entry.Text);
-                                
+
                                 var newEntry = new ChecklistEntry
                                 {
                                     Text = entry.Text,
                                     Description = entry.Description
                                 };
-                                
-                                context.Entry(newEntry).Property("ChecklistMaterialId").CurrentValue = material.Id;
-                                context.ChecklistEntries.Add(newEntry);
+
+                                context.Entry(newEntry).Property("ChecklistMaterialId").CurrentValue = material.material_id;
+                                context.Entries.Add(newEntry);
                             }
-                            
+
                             await context.SaveChangesAsync();
-                            _logger.LogInformation("Successfully added {Count} checklist entries to material {Id}", 
-                                checklist.ChecklistEntries.Count, material.Id);
+                            _logger.LogInformation("Successfully added {Count} checklist entries to material {Id}",
+                                checklist.Entries.Count, material.material_id);
                         }
                         break;
 
@@ -238,38 +246,87 @@ namespace XR50TrainingAssetRepo.Services
                                     Description = timestamp.Description
                                 };
                                 
-                                context.Entry(newTimestamp).Property("VideoMaterialId").CurrentValue = material.Id;
+                                context.Entry(newTimestamp).Property("VideoMaterialId").CurrentValue = material.material_id;
                                 context.VideoTimestamps.Add(newTimestamp);
                             }
                             
                             await context.SaveChangesAsync();
                             _logger.LogInformation("Successfully added {Count} video timestamps to material {Id}", 
-                                video.VideoTimestamps.Count, material.Id);
+                                video.VideoTimestamps.Count, material.material_id);
                         }
                         break;
 
                     case QuestionnaireMaterial questionnaire:
                         _logger.LogInformation("❓ Processing questionnaire material with {Count} entries", questionnaire.QuestionnaireEntries?.Count ?? 0);
-                        
+
                         if (questionnaire.QuestionnaireEntries?.Any() == true)
                         {
                             foreach (var entry in questionnaire.QuestionnaireEntries)
                             {
                                 _logger.LogInformation("Adding questionnaire entry: {Text}", entry.Text);
-                                
+
                                 var newEntry = new QuestionnaireEntry
                                 {
                                     Text = entry.Text,
                                     Description = entry.Description
                                 };
-                                
-                                context.Entry(newEntry).Property("QuestionnaireMaterialId").CurrentValue = material.Id;
+
+                                context.Entry(newEntry).Property("QuestionnaireMaterialId").CurrentValue = material.material_id;
                                 context.QuestionnaireEntries.Add(newEntry);
                             }
-                            
+
                             await context.SaveChangesAsync();
-                            _logger.LogInformation("Successfully added {Count} questionnaire entries to material {Id}", 
-                                questionnaire.QuestionnaireEntries.Count, material.Id);
+                            _logger.LogInformation("Successfully added {Count} questionnaire entries to material {Id}",
+                                questionnaire.QuestionnaireEntries.Count, material.material_id);
+                        }
+                        break;
+
+                    case QuizMaterial quiz:
+                        _logger.LogInformation("📝 Processing quiz material with {Count} questions", quiz.Questions?.Count ?? 0);
+
+                        if (quiz.Questions?.Any() == true)
+                        {
+                            foreach (var question in quiz.Questions)
+                            {
+                                _logger.LogInformation("Adding quiz question: {Text}", question.Text);
+
+                                var newQuestion = new QuizQuestion
+                                {
+                                    QuestionNumber = question.QuestionNumber,
+                                    QuestionType = question.QuestionType,
+                                    Text = question.Text,
+                                    Description = question.Description,
+                                    Score = question.Score,
+                                    HelpText = question.HelpText,
+                                    AllowMultiple = question.AllowMultiple,
+                                    ScaleConfig = question.ScaleConfig
+                                };
+
+                                context.Entry(newQuestion).Property("QuizMaterialId").CurrentValue = material.material_id;
+                                context.QuizQuestions.Add(newQuestion);
+                                await context.SaveChangesAsync(); // Save to get question ID
+
+                                // Add answers for this question
+                                if (question.Answers?.Any() == true)
+                                {
+                                    foreach (var answer in question.Answers)
+                                    {
+                                        var newAnswer = new QuizAnswer
+                                        {
+                                            Text = answer.Text,
+                                            IsCorrect = answer.IsCorrect,
+                                            DisplayOrder = answer.DisplayOrder
+                                        };
+
+                                        context.Entry(newAnswer).Property("QuizQuestionId").CurrentValue = newQuestion.QuizQuestionId;
+                                        context.QuizAnswers.Add(newAnswer);
+                                    }
+                                }
+                            }
+
+                            await context.SaveChangesAsync();
+                            _logger.LogInformation("Successfully added {Count} quiz questions to material {Id}",
+                                quiz.Questions.Count, material.material_id);
                         }
                         break;
 
@@ -281,7 +338,7 @@ namespace XR50TrainingAssetRepo.Services
                 // Commit the transaction only if everything succeeded
                 await transaction.CommitAsync();
                 
-                _logger.LogInformation("Completed creation of material {Id} ({Name}) - Transaction committed", material.Id, material.Name);
+                _logger.LogInformation("Completed creation of material {Id} ({Name}) - Transaction committed", material.material_id, material.Name);
                 return material;
             }
             catch (Exception ex)
@@ -302,7 +359,7 @@ namespace XR50TrainingAssetRepo.Services
                 ChecklistMaterial => MaterialType.Checklist,
                 WorkflowMaterial => MaterialType.Workflow,
                 PDFMaterial => MaterialType.PDF,
-                UnityDemoMaterial => MaterialType.UnityDemo,
+                UnityMaterial => MaterialType.Unity,
                 ChatbotMaterial => MaterialType.Chatbot,
                 QuestionnaireMaterial => MaterialType.Questionnaire,
                 MQTT_TemplateMaterial => MaterialType.MQTT_Template,
@@ -320,7 +377,7 @@ namespace XR50TrainingAssetRepo.Services
             await context.SaveChangesAsync();
 
             _logger.LogInformation("Updated material: {Id} (Type: {Type})",
-                material.Id, material.GetType().Name);
+                material.material_id, material.GetType().Name);
 
             return material;
         }
@@ -354,7 +411,7 @@ namespace XR50TrainingAssetRepo.Services
         public async Task<bool> MaterialExistsAsync(int id)
         {
             using var context = _dbContextFactory.CreateDbContext();
-            return await context.Materials.AnyAsync(e => e.Id == id);
+            return await context.Materials.AnyAsync(e => e.material_id == id);
         }
     
         public async Task<object?> GetCompleteMaterialDetailsAsync(int materialId)
@@ -377,7 +434,7 @@ namespace XR50TrainingAssetRepo.Services
                 MaterialType.Questionnaire => await GetQuestionnaireMaterialCompleteAsync(materialId),
                 MaterialType.Image => await GetImageMaterialCompleteAsync(materialId),
                 MaterialType.PDF => await GetPDFMaterialCompleteAsync(materialId),
-                MaterialType.UnityDemo => await GetUnityDemoMaterialCompleteAsync(materialId),
+                MaterialType.Unity => await GetUnityMaterialCompleteAsync(materialId),
                 MaterialType.Chatbot => await GetChatbotMaterialCompleteAsync(materialId),
                 MaterialType.MQTT_Template => await GetMQTTTemplateMaterialCompleteAsync(materialId),
                 _ => await GetBasicMaterialCompleteAsync(materialId)
@@ -404,7 +461,7 @@ namespace XR50TrainingAssetRepo.Services
                 MaterialType.Questionnaire => await GetQuestionnaireMaterialWithEntriesAsync(materialId),
                 MaterialType.Image => await GetImageMaterialAsync(materialId),
                 MaterialType.PDF => await GetPDFMaterialAsync(materialId),
-                MaterialType.UnityDemo => await GetUnityDemoMaterialAsync(materialId),
+                MaterialType.Unity => await GetUnityMaterialAsync(materialId),
                 MaterialType.Chatbot => await GetChatbotMaterialAsync(materialId),
                 MaterialType.MQTT_Template => await GetMQTTTemplateMaterialAsync(materialId),
                 _ => baseMaterial
@@ -416,7 +473,7 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
             return await context.Materials
                 .OfType<ImageMaterial>()
-                .FirstOrDefaultAsync(m => m.Id == id);
+                .FirstOrDefaultAsync(m => m.material_id == id);
         }
 
         private async Task<object> GetVideoMaterialCompleteAsync(int materialId)
@@ -424,10 +481,10 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
             
             var video = await context.Materials
-                .Where(m => m.Id == materialId)
+                .Where(m => m.material_id == materialId)
                 .Select(m => new
                 {
-                    Id = m.Id,
+                    material_id = m.material_id,
                     Name = m.Name,
                     Description = m.Description,
                     Type = m.Type.ToString(),
@@ -469,17 +526,17 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
             
             var checklist = await context.Materials
-                .Where(m => m.Id == materialId)
+                .Where(m => m.material_id == materialId)
                 .Select(m => new
                 {
-                    Id = m.Id,
+                    material_id = m.material_id,
                     Name = m.Name,
                     Description = m.Description,
                     Type = m.Type.ToString(),
                     Created_at = m.Created_at,
                     Updated_at = m.Updated_at,
                     
-                    ChecklistEntries = context.ChecklistEntries
+                    Entries = context.Entries
                         .Where(ce => ce.ChecklistMaterialId == materialId)
                         .Select(ce => new
                         {
@@ -506,10 +563,10 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
             
             var workflow = await context.Materials
-                .Where(m => m.Id == materialId)
+                .Where(m => m.material_id == materialId)
                 .Select(m => new
                 {
-                    Id = m.Id,
+                    material_id = m.material_id,
                     Name = m.Name,
                     Description = m.Description,
                     Type = m.Type.ToString(),
@@ -543,10 +600,10 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
             
             var questionnaire = await context.Materials
-                .Where(m => m.Id == materialId)
+                .Where(m => m.material_id == materialId)
                 .Select(m => new
                 {
-                    Id = m.Id,
+                    material_id = m.material_id,
                     Name = m.Name,
                     Description = m.Description,
                     Type = m.Type.ToString(),
@@ -585,10 +642,10 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
             
             var image = await context.Materials
-                .Where(m => m.Id == materialId)
+                .Where(m => m.material_id == materialId)
                 .Select(m => new
                 {
-                    Id = m.Id,
+                    material_id = m.material_id,
                     Name = m.Name,
                     Description = m.Description,
                     Type = m.Type.ToString(),
@@ -619,10 +676,10 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
             
             var pdf = await context.Materials
-                .Where(m => m.Id == materialId)
+                .Where(m => m.material_id == materialId)
                 .Select(m => new
                 {
-                    Id = m.Id,
+                    material_id = m.material_id,
                     Name = m.Name,
                     Description = m.Description,
                     Type = m.Type.ToString(),
@@ -648,15 +705,15 @@ namespace XR50TrainingAssetRepo.Services
             return pdf;
         }
 
-        private async Task<object> GetUnityDemoMaterialCompleteAsync(int materialId)
+        private async Task<object> GetUnityMaterialCompleteAsync(int materialId)
         {
             using var context = _dbContextFactory.CreateDbContext();
             
             var unity = await context.Materials
-                .Where(m => m.Id == materialId)
+                .Where(m => m.material_id == materialId)
                 .Select(m => new
                 {
-                    Id = m.Id,
+                    material_id = m.material_id,
                     Name = m.Name,
                     Description = m.Description,
                     Type = m.Type.ToString(),
@@ -687,10 +744,10 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
             
             var chatbot = await context.Materials
-                .Where(m => m.Id == materialId)
+                .Where(m => m.material_id == materialId)
                 .Select(m => new
                 {
-                    Id = m.Id,
+                    material_id = m.material_id,
                     Name = m.Name,
                     Description = m.Description,
                     Type = m.Type.ToString(),
@@ -720,10 +777,10 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
             
             var mqtt = await context.Materials
-                .Where(m => m.Id == materialId)
+                .Where(m => m.material_id == materialId)
                 .Select(m => new
                 {
-                    Id = m.Id,
+                    material_id = m.material_id,
                     Name = m.Name,
                     Description = m.Description,
                     Type = m.Type.ToString(),
@@ -752,10 +809,10 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
             
             var material = await context.Materials
-                .Where(m => m.Id == materialId)
+                .Where(m => m.material_id == materialId)
                 .Select(m => new
                 {
-                    Id = m.Id,
+                    material_id = m.material_id,
                     Name = m.Name,
                     Description = m.Description,
                     Type = m.Type.ToString(),
@@ -829,7 +886,7 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
             return await context.Materials
                 .OfType<PDFMaterial>()
-                .FirstOrDefaultAsync(p => p.Id == id);
+                .FirstOrDefaultAsync(p => p.material_id == id);
         }
 
         public async Task<IEnumerable<ChatbotMaterial>> GetAllChatbotMaterialsAsync()
@@ -845,7 +902,7 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
             return await context.Materials
                 .OfType<ChatbotMaterial>()
-                .FirstOrDefaultAsync(c => c.Id == id);
+                .FirstOrDefaultAsync(c => c.material_id == id);
         }
 
         public async Task<IEnumerable<QuestionnaireMaterial>> GetAllQuestionnaireMaterialsAsync()
@@ -869,23 +926,23 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
             return await context.Materials
                 .OfType<MQTT_TemplateMaterial>()
-                .FirstOrDefaultAsync(m => m.Id == id);
+                .FirstOrDefaultAsync(m => m.material_id == id);
         }
 
-        public async Task<IEnumerable<UnityDemoMaterial>> GetAllUnityDemoMaterialsAsync()
+        public async Task<IEnumerable<UnityMaterial>> GetAllUnityMaterialsAsync()
         {
             using var context = _dbContextFactory.CreateDbContext();
             return await context.Materials
-                .OfType<UnityDemoMaterial>()
+                .OfType<UnityMaterial>()
                 .ToListAsync();
         }
 
-        public async Task<UnityDemoMaterial?> GetUnityDemoMaterialAsync(int id)
+        public async Task<UnityMaterial?> GetUnityMaterialAsync(int id)
         {
             using var context = _dbContextFactory.CreateDbContext();
             return await context.Materials
-                .OfType<UnityDemoMaterial>()
-                .FirstOrDefaultAsync(u => u.Id == id);
+                .OfType<UnityMaterial>()
+                .FirstOrDefaultAsync(u => u.material_id == id);
         }
 
         public async Task<VideoMaterial?> GetVideoMaterialWithTimestampsAsync(int id)
@@ -895,7 +952,7 @@ namespace XR50TrainingAssetRepo.Services
             return await context.Materials
                 .OfType<VideoMaterial>()
                 .Include(v => v.VideoTimestamps)
-                .FirstOrDefaultAsync(v => v.Id == id);
+                .FirstOrDefaultAsync(v => v.material_id == id);
         }
 
         public async Task<VideoMaterial> AddTimestampToVideoAsync(int videoId, VideoTimestamp timestamp)
@@ -904,7 +961,7 @@ namespace XR50TrainingAssetRepo.Services
 
             var video = await context.Materials
                 .OfType<VideoMaterial>()
-                .FirstOrDefaultAsync(v => v.Id == videoId);
+                .FirstOrDefaultAsync(v => v.material_id == videoId);
 
             if (video == null)
             {
@@ -948,8 +1005,8 @@ namespace XR50TrainingAssetRepo.Services
 
             return await context.Materials
                 .OfType<ChecklistMaterial>()
-                .Include(c => c.ChecklistEntries)
-                .FirstOrDefaultAsync(c => c.Id == id);
+                .Include(c => c.Entries)
+                .FirstOrDefaultAsync(c => c.material_id == id);
         }
 
         public async Task<ChecklistMaterial> AddEntryToChecklistAsync(int checklistId, ChecklistEntry entry)
@@ -958,7 +1015,7 @@ namespace XR50TrainingAssetRepo.Services
 
             var checklist = await context.Materials
                 .OfType<ChecklistMaterial>()
-                .FirstOrDefaultAsync(c => c.Id == checklistId);
+                .FirstOrDefaultAsync(c => c.material_id == checklistId);
 
             if (checklist == null)
             {
@@ -968,7 +1025,7 @@ namespace XR50TrainingAssetRepo.Services
            
             context.Entry(entry).Property("ChecklistMaterialId").CurrentValue = checklistId;
 
-            context.ChecklistEntries.Add(entry);
+            context.Entries.Add(entry);
             await context.SaveChangesAsync();
 
             _logger.LogInformation("Added entry '{Text}' to checklist material {ChecklistId}",
@@ -981,13 +1038,13 @@ namespace XR50TrainingAssetRepo.Services
         {
             using var context = _dbContextFactory.CreateDbContext();
 
-            var entry = await context.ChecklistEntries.FindAsync(entryId);
+            var entry = await context.Entries.FindAsync(entryId);
             if (entry == null)
             {
                 return false;
             }
 
-            context.ChecklistEntries.Remove(entry);
+            context.Entries.Remove(entry);
             await context.SaveChangesAsync();
 
             _logger.LogInformation("Removed entry {EntryId} from checklist material {ChecklistId}",
@@ -1003,7 +1060,7 @@ namespace XR50TrainingAssetRepo.Services
             return await context.Materials
                 .OfType<WorkflowMaterial>()
                 .Include(w => w.WorkflowSteps)
-                .FirstOrDefaultAsync(w => w.Id == id);
+                .FirstOrDefaultAsync(w => w.material_id == id);
         }
 
         public async Task<WorkflowMaterial> AddStepToWorkflowAsync(int workflowId, WorkflowStep step)
@@ -1012,7 +1069,7 @@ namespace XR50TrainingAssetRepo.Services
 
             var workflow = await context.Materials
                 .OfType<WorkflowMaterial>()
-                .FirstOrDefaultAsync(w => w.Id == workflowId);
+                .FirstOrDefaultAsync(w => w.material_id == workflowId);
 
             if (workflow == null)
             {
@@ -1057,7 +1114,7 @@ namespace XR50TrainingAssetRepo.Services
             return await context.Materials
                 .OfType<QuestionnaireMaterial>()
                 .Include(q => q.QuestionnaireEntries)
-                .FirstOrDefaultAsync(q => q.Id == id);
+                .FirstOrDefaultAsync(q => q.material_id == id);
         }
 
         public async Task<QuestionnaireMaterial> AddEntryToQuestionnaireAsync(int questionnaireId, QuestionnaireEntry entry)
@@ -1066,7 +1123,7 @@ namespace XR50TrainingAssetRepo.Services
 
             var questionnaire = await context.Materials
                 .OfType<QuestionnaireMaterial>()
-                .FirstOrDefaultAsync(q => q.Id == questionnaireId);
+                .FirstOrDefaultAsync(q => q.material_id == questionnaireId);
 
             if (questionnaire == null)
             {
@@ -1101,13 +1158,106 @@ namespace XR50TrainingAssetRepo.Services
             return true;
         }
 
+        // Quiz Material Methods
+        public async Task<QuizMaterial?> GetQuizMaterialWithQuestionsAsync(int id)
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+
+            return await context.Materials
+                .OfType<QuizMaterial>()
+                .Include(q => q.Questions)
+                    .ThenInclude(q => q.Answers)
+                .FirstOrDefaultAsync(q => q.material_id == id);
+        }
+
+        public async Task<QuizQuestion> AddQuestionToQuizAsync(int quizId, QuizQuestion question)
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+
+            var quiz = await context.Materials
+                .OfType<QuizMaterial>()
+                .FirstOrDefaultAsync(q => q.material_id == quizId);
+
+            if (quiz == null)
+            {
+                throw new ArgumentException($"Quiz material with ID {quizId} not found");
+            }
+
+            context.Entry(question).Property("QuizMaterialId").CurrentValue = quizId;
+            context.QuizQuestions.Add(question);
+            await context.SaveChangesAsync();
+
+            _logger.LogInformation("Added question '{Text}' to quiz material {QuizId}",
+                question.Text, quizId);
+
+            return question;
+        }
+
+        public async Task<bool> RemoveQuestionFromQuizAsync(int quizId, int questionId)
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+
+            var question = await context.QuizQuestions.FindAsync(questionId);
+            if (question == null)
+            {
+                return false;
+            }
+
+            context.QuizQuestions.Remove(question);
+            await context.SaveChangesAsync();
+
+            _logger.LogInformation("Removed question {QuestionId} from quiz material {QuizId}",
+                questionId, quizId);
+
+            return true;
+        }
+
+        public async Task<QuizAnswer> AddAnswerToQuestionAsync(int questionId, QuizAnswer answer)
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+
+            var question = await context.QuizQuestions.FindAsync(questionId);
+            if (question == null)
+            {
+                throw new ArgumentException($"Quiz question with ID {questionId} not found");
+            }
+
+            context.Entry(answer).Property("QuizQuestionId").CurrentValue = questionId;
+            context.QuizAnswers.Add(answer);
+            await context.SaveChangesAsync();
+
+            _logger.LogInformation("Added answer to question {QuestionId}",
+                questionId);
+
+            return answer;
+        }
+
+        public async Task<bool> RemoveAnswerFromQuestionAsync(int questionId, int answerId)
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+
+            var answer = await context.QuizAnswers.FindAsync(answerId);
+            if (answer == null)
+            {
+                return false;
+            }
+
+            context.QuizAnswers.Remove(answer);
+            await context.SaveChangesAsync();
+
+            _logger.LogInformation("Removed answer {AnswerId} from question {QuestionId}",
+                answerId, questionId);
+
+            return true;
+        }
+
         public async Task<ChatbotMaterial> UpdateChatbotConfigAsync(int chatbotId, string config, string? model = null, string? prompt = null)
         {
             using var context = _dbContextFactory.CreateDbContext();
 
             var chatbot = await context.Materials
                 .OfType<ChatbotMaterial>()
-                .FirstOrDefaultAsync(c => c.Id == chatbotId);
+                .FirstOrDefaultAsync(c => c.material_id == chatbotId);
 
             if (chatbot == null)
             {
@@ -1132,7 +1282,7 @@ namespace XR50TrainingAssetRepo.Services
 
             var template = await context.Materials
                 .OfType<MQTT_TemplateMaterial>()
-                .FirstOrDefaultAsync(m => m.Id == templateId);
+                .FirstOrDefaultAsync(m => m.material_id == templateId);
 
             if (template == null)
             {
@@ -1151,13 +1301,13 @@ namespace XR50TrainingAssetRepo.Services
             return template;
         }
 
-        public async Task<UnityDemoMaterial> UpdateUnityDemoConfigAsync(int unityId, string? version = null, string? buildTarget = null, string? sceneName = null, int? assetId = null)
+        public async Task<UnityMaterial> UpdateUnityConfigAsync(int unityId, string? version = null, string? buildTarget = null, string? sceneName = null, int? assetId = null)
         {
             using var context = _dbContextFactory.CreateDbContext();
 
             var unity = await context.Materials
-                .OfType<UnityDemoMaterial>()
-                .FirstOrDefaultAsync(u => u.Id == unityId);
+                .OfType<UnityMaterial>()
+                .FirstOrDefaultAsync(u => u.material_id == unityId);
 
             if (unity == null)
             {
@@ -1190,25 +1340,70 @@ namespace XR50TrainingAssetRepo.Services
             await context.SaveChangesAsync();
 
             _logger.LogInformation("Created questionnaire material: {Name} with ID: {Id}",
-                questionnaire.Name, questionnaire.Id);
+                questionnaire.Name, questionnaire.material_id);
 
             // Add initial entries if provided
             if (initialEntries != null && initialEntries.Any())
             {
                 foreach (var entry in initialEntries)
                 {
-                    context.Entry(entry).Property("QuestionnaireMaterialId").CurrentValue = questionnaire.Id;
+                    context.Entry(entry).Property("QuestionnaireMaterialId").CurrentValue = questionnaire.material_id;
                     context.QuestionnaireEntries.Add(entry);
                 }
 
                 await context.SaveChangesAsync();
 
                 _logger.LogInformation("Added {EntryCount} initial entries to questionnaire {QuestionnaireId}",
-                    initialEntries.Count(), questionnaire.Id);
+                    initialEntries.Count(), questionnaire.material_id);
             }
 
             return questionnaire;
         }
+
+        public async Task<QuizMaterial> CreateQuizWithQuestionsAsync(QuizMaterial quiz, IEnumerable<QuizQuestion>? initialQuestions = null)
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+
+            // Set timestamps and type
+            quiz.Created_at = DateTime.UtcNow;
+            quiz.Updated_at = DateTime.UtcNow;
+            quiz.Type = MaterialType.Quiz;
+
+            context.Materials.Add(quiz);
+            await context.SaveChangesAsync();
+
+            _logger.LogInformation("Created quiz material: {Name} with ID: {Id}",
+                quiz.Name, quiz.material_id);
+
+            // Add initial questions if provided
+            if (initialQuestions != null && initialQuestions.Any())
+            {
+                foreach (var question in initialQuestions)
+                {
+                    context.Entry(question).Property("QuizMaterialId").CurrentValue = quiz.material_id;
+                    context.QuizQuestions.Add(question);
+                    await context.SaveChangesAsync(); // Save to get question ID
+
+                    // Add answers for this question
+                    if (question.Answers?.Any() == true)
+                    {
+                        foreach (var answer in question.Answers)
+                        {
+                            context.Entry(answer).Property("QuizQuestionId").CurrentValue = question.QuizQuestionId;
+                            context.QuizAnswers.Add(answer);
+                        }
+                    }
+                }
+
+                await context.SaveChangesAsync();
+
+                _logger.LogInformation("Added {QuestionCount} initial questions to quiz {QuizId}",
+                    initialQuestions.Count(), quiz.material_id);
+            }
+
+            return quiz;
+        }
+
         public async Task<WorkflowMaterial> CreateWorkflowWithStepsAsync(WorkflowMaterial workflow, IEnumerable<WorkflowStep>? initialSteps = null)
         {
             using var context = _dbContextFactory.CreateDbContext();
@@ -1222,21 +1417,21 @@ namespace XR50TrainingAssetRepo.Services
             await context.SaveChangesAsync();
 
             _logger.LogInformation("Created workflow material: {Name} with ID: {Id}",
-                workflow.Name, workflow.Id);
+                workflow.Name, workflow.material_id);
 
             // Add initial steps if provided
             if (initialSteps != null && initialSteps.Any())
             {
                 foreach (var step in initialSteps)
                 {
-                    context.Entry(step).Property("WorkflowMaterialId").CurrentValue = workflow.Id;
+                    context.Entry(step).Property("WorkflowMaterialId").CurrentValue = workflow.material_id;
                     context.WorkflowSteps.Add(step);
                 }
 
                 await context.SaveChangesAsync();
 
                 _logger.LogInformation("Added {StepCount} initial steps to workflow {WorkflowId}",
-                    initialSteps.Count(), workflow.Id);
+                    initialSteps.Count(), workflow.material_id);
             }
 
             return workflow;
@@ -1255,21 +1450,21 @@ namespace XR50TrainingAssetRepo.Services
             await context.SaveChangesAsync();
 
             _logger.LogInformation("Created video material: {Name} with ID: {Id}",
-                video.Name, video.Id);
+                video.Name, video.material_id);
 
             // Add initial timestamps if provided
             if (initialTimestamps != null && initialTimestamps.Any())
             {
                 foreach (var timestamp in initialTimestamps)
                 {
-                    context.Entry(timestamp).Property("VideoMaterialId").CurrentValue = video.Id;
+                    context.Entry(timestamp).Property("VideoMaterialId").CurrentValue = video.material_id;
                     context.VideoTimestamps.Add(timestamp);
                 }
 
                 await context.SaveChangesAsync();
 
                 _logger.LogInformation("Added {TimestampCount} initial timestamps to video {VideoId}",
-                    initialTimestamps.Count(), video.Id);
+                    initialTimestamps.Count(), video.material_id);
             }
 
             return video;
@@ -1288,21 +1483,21 @@ namespace XR50TrainingAssetRepo.Services
             await context.SaveChangesAsync();
 
             _logger.LogInformation("Created checklist material: {Name} with ID: {Id}",
-                checklist.Name, checklist.Id);
+                checklist.Name, checklist.material_id);
 
             // Add initial entries if provided
             if (initialEntries != null && initialEntries.Any())
             {
                 foreach (var entry in initialEntries)
                 {
-                    context.Entry(entry).Property("ChecklistMaterialId").CurrentValue = checklist.Id;
-                    context.ChecklistEntries.Add(entry);
+                    context.Entry(entry).Property("ChecklistMaterialId").CurrentValue = checklist.material_id;
+                    context.Entries.Add(entry);
                 }
 
                 await context.SaveChangesAsync();
 
                 _logger.LogInformation("Added {EntryCount} initial entries to checklist {ChecklistId}",
-                    initialEntries.Count(), checklist.Id);
+                    initialEntries.Count(), checklist.material_id);
             }
 
             return checklist;
@@ -1317,7 +1512,7 @@ namespace XR50TrainingAssetRepo.Services
                 .Where(m => (m is VideoMaterial && ((VideoMaterial)m).AssetId == assetId) ||
                            (m is ImageMaterial && ((ImageMaterial)m).AssetId == assetId) ||
                            (m is PDFMaterial && ((PDFMaterial)m).AssetId == assetId) ||
-                           (m is UnityDemoMaterial && ((UnityDemoMaterial)m).AssetId == assetId) ||
+                           (m is UnityMaterial && ((UnityMaterial)m).AssetId == assetId) ||
                            (m is DefaultMaterial && ((DefaultMaterial)m).AssetId == assetId))
                 .ToListAsync();
         }
@@ -1338,7 +1533,7 @@ namespace XR50TrainingAssetRepo.Services
                 VideoMaterial video => AssignAssetToVideoMaterial(video, assetId),
                 ImageMaterial image => AssignAssetToImageMaterial(image, assetId),
                 PDFMaterial pdf => AssignAssetToPDFMaterial(pdf, assetId),
-                UnityDemoMaterial unity => AssignAssetToUnityMaterial(unity, assetId),
+                UnityMaterial unity => AssignAssetToUnityMaterial(unity, assetId),
                 DefaultMaterial defaultMat => AssignAssetToDefaultMaterial(defaultMat, assetId),
                 _ => false
             };
@@ -1373,7 +1568,7 @@ namespace XR50TrainingAssetRepo.Services
             return true;
         }
 
-        private bool AssignAssetToUnityMaterial(UnityDemoMaterial unity, int assetId)
+        private bool AssignAssetToUnityMaterial(UnityMaterial unity, int assetId)
         {
             unity.AssetId = assetId;
             return true;
@@ -1400,7 +1595,7 @@ namespace XR50TrainingAssetRepo.Services
                 VideoMaterial video => RemoveAssetFromVideoMaterial(video),
                 ImageMaterial image => RemoveAssetFromImageMaterial(image),
                 PDFMaterial pdf => RemoveAssetFromPDFMaterial(pdf),
-                UnityDemoMaterial unity => RemoveAssetFromUnityMaterial(unity),
+                UnityMaterial unity => RemoveAssetFromUnityMaterial(unity),
                 DefaultMaterial defaultMat => RemoveAssetFromDefaultMaterial(defaultMat),
                 _ => false
             };
@@ -1435,7 +1630,7 @@ namespace XR50TrainingAssetRepo.Services
             return true;
         }
 
-        private bool RemoveAssetFromUnityMaterial(UnityDemoMaterial unity)
+        private bool RemoveAssetFromUnityMaterial(UnityMaterial unity)
         {
             unity.AssetId = null;
             return true;
@@ -1462,7 +1657,7 @@ namespace XR50TrainingAssetRepo.Services
                 VideoMaterial video => video.AssetId,
                 ImageMaterial image => image.AssetId,
                 PDFMaterial pdf => pdf.AssetId,
-                UnityDemoMaterial unity => unity.AssetId,
+                UnityMaterial unity => unity.AssetId,
                 DefaultMaterial defaultMat => defaultMat.AssetId,
                 _ => null
             };
@@ -1564,7 +1759,7 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
 
             var query = from mr in context.MaterialRelationships
-                        join m in context.Materials on mr.MaterialId equals m.Id
+                        join m in context.Materials on mr.MaterialId equals m.material_id
                         where mr.RelatedEntityType == "LearningPath" &&
                               mr.RelatedEntityId == learningPathId.ToString()
                         select new { Material = m, Relationship = mr };
@@ -1645,7 +1840,7 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
 
             return await (from mr in context.MaterialRelationships
-                          join m in context.Materials on mr.MaterialId equals m.Id
+                          join m in context.Materials on mr.MaterialId equals m.material_id
                           where mr.RelatedEntityType == "TrainingProgram" &&
                                 mr.RelatedEntityId == trainingProgramId.ToString()
                           select m).ToListAsync();
@@ -1693,7 +1888,7 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
 
             return await (from mr in context.MaterialRelationships
-                          join m in context.Materials on int.Parse(mr.RelatedEntityId) equals m.Id
+                          join m in context.Materials on int.Parse(mr.RelatedEntityId) equals m.material_id
                           where mr.MaterialId == materialId &&
                                 mr.RelatedEntityType == "Material" &&
                                 mr.RelationshipType == "prerequisite"
@@ -1705,7 +1900,7 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
 
             return await (from mr in context.MaterialRelationships
-                          join m in context.Materials on mr.MaterialId equals m.Id
+                          join m in context.Materials on mr.MaterialId equals m.material_id
                           where mr.RelatedEntityType == "Material" &&
                                 mr.RelatedEntityId == materialId.ToString() &&
                                 mr.RelationshipType == "prerequisite"
@@ -1795,7 +1990,7 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
             
             var query = from mr in context.MaterialRelationships
-                        join m in context.Materials on int.Parse(mr.RelatedEntityId) equals m.Id
+                        join m in context.Materials on int.Parse(mr.RelatedEntityId) equals m.material_id
                         where mr.MaterialId == parentMaterialId &&
                               mr.RelatedEntityType == "Material" &&
                               (relationshipType == null || mr.RelationshipType == relationshipType)
@@ -1816,7 +2011,7 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
             
             return await (from mr in context.MaterialRelationships
-                          join m in context.Materials on mr.MaterialId equals m.Id
+                          join m in context.Materials on mr.MaterialId equals m.material_id
                           where mr.RelatedEntityType == "Material" &&
                                 mr.RelatedEntityId == childMaterialId.ToString() &&
                                 (relationshipType == null || mr.RelationshipType == relationshipType)
@@ -1907,7 +2102,7 @@ namespace XR50TrainingAssetRepo.Services
             if (currentDepth >= maxDepth) return;
             
             var childRelationships = await (from mr in context.MaterialRelationships
-                                           join m in context.Materials on int.Parse(mr.RelatedEntityId) equals m.Id
+                                           join m in context.Materials on int.Parse(mr.RelatedEntityId) equals m.material_id
                                            where mr.MaterialId == parentId &&
                                                  mr.RelatedEntityType == "Material"
                                            orderby mr.DisplayOrder ?? int.MaxValue
@@ -1923,7 +2118,7 @@ namespace XR50TrainingAssetRepo.Services
                     Depth = currentDepth + 1
                 };
                 
-                await BuildHierarchyRecursive(context, node.Children, item.Material.Id, currentDepth + 1, maxDepth);
+                await BuildHierarchyRecursive(context, node.Children, item.Material.material_id, currentDepth + 1, maxDepth);
                 nodes.Add(node);
             }
         }

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using XR50TrainingAssetRepo.Models;
+using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Services;
 
@@ -69,7 +70,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
         // POST: api/{tenantName}/assets
         [HttpPost]
-        public async Task<ActionResult<Asset>> PostAsset(string tenantName, [FromForm] FileUploadFormData fileUpload)
+        public async Task<ActionResult<CreateAssetResponse>> PostAsset(string tenantName, [FromForm] FileUploadFormData fileUpload)
         {
             Asset asset = new Asset();
             asset.Src = fileUpload.Src;
@@ -89,9 +90,21 @@ namespace XR50TrainingAssetRepo.Controllers
             _logger.LogInformation("Created asset {Filename} with ID {Id} for tenant: {TenantName}",
                 createdAsset.Filename, createdAsset.Id, tenantName);
 
+            var response = new CreateAssetResponse
+            {
+                Status = "success",
+                Message = $"Asset '{createdAsset.Filename}' created successfully",
+                Id = createdAsset.Id,
+                Filename = createdAsset.Filename,
+                Description = createdAsset.Description,
+                Filetype = createdAsset.Filetype,
+                Src = createdAsset.Src,
+                URL = createdAsset.URL
+            };
+
             return CreatedAtAction(nameof(GetAsset),
                 new { tenantName, id = createdAsset.Id },
-                createdAsset);
+                response);
         }
 
         // PUT: api/{tenantName}/assets/5
@@ -237,7 +250,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
         // POST: api/{tenantName}/assets/upload
         [HttpPost("upload")]
-        public async Task<ActionResult<Asset>> UploadAsset(
+        public async Task<ActionResult<CreateAssetResponse>> UploadAsset(
             string tenantName,
             IFormFile file,
             [FromForm] string? description = null)
@@ -258,9 +271,21 @@ namespace XR50TrainingAssetRepo.Controllers
                 _logger.LogInformation("TODO: File uploaded as asset {Id} for tenant: {TenantName}",
                     asset.Id, tenantName);
 
+                var response = new CreateAssetResponse
+                {
+                    Status = "success",
+                    Message = $"Asset '{asset.Filename}' uploaded successfully",
+                    Id = asset.Id,
+                    Filename = asset.Filename,
+                    Description = asset.Description,
+                    Filetype = asset.Filetype,
+                    Src = asset.Src,
+                    URL = asset.URL
+                };
+
                 return CreatedAtAction(nameof(GetAsset),
                     new { tenantName, id = asset.Id },
-                    asset);
+                    response);
             }
             catch (Exception ex)
             {
