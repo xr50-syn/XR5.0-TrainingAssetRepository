@@ -1315,20 +1315,23 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 // Parse the questions - try to get from "config" object first, then direct "questions" array
                 var questions = new List<QuizQuestion>();
-                JsonElement questionsElement;
+
+                JsonElement questionsElement = default;
                 bool hasQuestions = false;
 
                 if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var configElement))
                 {
-                    if (TryGetPropertyCaseInsensitive(configElement, "questions", out questionsElement))
+                    if (TryGetPropertyCaseInsensitive(configElement, "questions", out var configQuestionsElement))
                     {
+                        questionsElement = configQuestionsElement;
                         hasQuestions = true;
                         _logger.LogInformation("Found questions in config object");
                     }
                 }
 
-                if (!hasQuestions && TryGetPropertyCaseInsensitive(jsonElement, "questions", out questionsElement))
+                if (!hasQuestions && TryGetPropertyCaseInsensitive(jsonElement, "questions", out var directQuestionsElement))
                 {
+                    questionsElement = directQuestionsElement;
                     hasQuestions = true;
                     _logger.LogInformation("Found questions directly");
                 }
