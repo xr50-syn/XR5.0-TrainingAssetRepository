@@ -434,8 +434,55 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         }
         // POST: api/{tenantName}/materials - Generic material creation
         // Accepts both JSON (application/json) and form-data (application/x-www-form-urlencoded, multipart/form-data)
-        [HttpPost]
-        public async Task<ActionResult<CreateMaterialResponse>> PostMaterial(string tenantName)
+        /*[HttpPost]
+        public async Task<ActionResult<CreateMaterialResponse>> PostMaterial(string tenantName, Material material)
+        {
+            try
+            {
+                _logger.LogInformation("Creating material {Name} (Type: {Type}) for tenant: {TenantName}",
+                    material.Name, material.Type, tenantName);
+
+                var createdMaterial = await _materialService.CreateMaterialAsync(material);
+
+                _logger.LogInformation("Created material {Name} with ID {Id} for tenant: {TenantName}",
+                    createdMaterial.Name, createdMaterial.material_id, tenantName);
+
+                var response = new CreateMaterialResponse
+                {
+                    Status = "success",
+                    Message = $"Material '{createdMaterial.Name}' created successfully",
+                    material_id = createdMaterial.material_id,
+                    Name = createdMaterial.Name,
+                    Description = createdMaterial.Description,
+                    Type = createdMaterial.Type.ToString(),
+                    UniqueId = createdMaterial.UniqueId,
+                    AssetId = createdMaterial switch
+                    {
+                        VideoMaterial v => v.AssetId,
+                        ImageMaterial i => i.AssetId,
+                        PDFMaterial p => p.AssetId,
+                        UnityMaterial u => u.AssetId,
+                        DefaultMaterial d => d.AssetId,
+                        _ => null
+                    },
+                    Created_at = createdMaterial.Created_at
+                };
+
+                return CreatedAtAction(nameof(GetMaterial),
+                    new { tenantName, id = createdMaterial.material_id },
+                    response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating material for tenant: {TenantName}", tenantName);
+                return StatusCode(500, new { Error = "Failed to create material", Details = ex.Message });
+            }
+        }
+*/
+        // POST: api/{tenantName}/materials/advanced - Advanced material creation with custom JSON handling
+        // Accepts both JSON (application/json) and form-data (application/x-www-form-urlencoded, multipart/form-data)
+        [HttpPost("advanced")]
+        public async Task<ActionResult<CreateMaterialResponse>> PostMaterialAdvanced(string tenantName)
         {
             try
             {
@@ -540,7 +587,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         // Keeps the existing PostMaterialDetailed intact for backward compatibility
 
         [HttpPost("detail-with-asset")]
-        public async Task<ActionResult<Material>> PostMaterialDetailedWithAsset(
+        public async Task<ActionResult<CreateMaterialResponse>> PostMaterialDetailedWithAsset(
             string tenantName, [FromForm] FileUploadFormDataWithMaterial materialaAssetData)  // Optional file upload
         {
             try
@@ -595,6 +642,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     "video" => await CreateVideoFromJson(tenantName, jsonMaterialData),
                     "checklist" => await CreateChecklistFromJson(tenantName, jsonMaterialData),
                     "questionnaire" => await CreateQuestionnaireFromJson(tenantName, jsonMaterialData),
+                    "quiz" => await CreateQuizFromJson(tenantName, jsonMaterialData),
                     _ => await CreateBasicMaterialFromJson(tenantName, jsonMaterialData)
                 };
             }
@@ -635,10 +683,10 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         }
 
         // NEW: Create material with associated asset (file upload or reference)
-        private async Task<ActionResult<Material>> CreateMaterialWithAsset(
-            string tenantName, 
-            JsonElement materialData, 
-            string materialType, 
+        private async Task<ActionResult<CreateMaterialResponse>> CreateMaterialWithAsset(
+            string tenantName,
+            JsonElement materialData,
+            string materialType,
             IFormFile? assetFile,
             JsonElement? assetData)
         {
@@ -696,13 +744,26 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 {
                     material = CreateMaterialWithAssetId(materialData, materialType, createdAsset.Id);
                     var createdMaterial = await _materialService.CreateMaterialAsyncComplete(material);
-                    
+
                     _logger.LogInformation("Created material {MaterialId} ({Name}) with asset {AssetId}",
                         createdMaterial.material_id, createdMaterial.Name, createdAsset.Id);
 
+                    var response = new CreateMaterialResponse
+                    {
+                        Status = "success",
+                        Message = "Material with asset created successfully",
+                        material_id = createdMaterial.material_id,
+                        Name = createdMaterial.Name,
+                        Description = createdMaterial.Description,
+                        Type = createdMaterial.Type.ToString(),
+                        UniqueId = createdMaterial.UniqueId,
+                        AssetId = createdAsset.Id,
+                        Created_at = createdMaterial.Created_at
+                    };
+
                     return CreatedAtAction(nameof(GetMaterial),
                         new { tenantName, id = createdMaterial.material_id },
-                        createdMaterial);
+                        response);
                 }
                 catch (Exception ex)
                 {
@@ -905,9 +966,9 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             var extension = Path.GetExtension(filename)?.ToLowerInvariant();
             return extension?.TrimStart('.') ?? "unknown";
         }
-        [HttpPost("detail")]
+        [HttpPost]
         // NEW: Data class for asset reference creation
-        public async Task<ActionResult<Material>> PostMaterialDetailed(string tenantName, [FromBody] JsonElement materialData)
+        public async Task<ActionResult<CreateMaterialResponse>> PostMaterialDetailed(string tenantName, [FromBody] JsonElement materialData)
         {
             try
             {
@@ -924,6 +985,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     "video" => await CreateVideoFromJson(tenantName, materialData),
                     "checklist" => await CreateChecklistFromJson(tenantName, materialData),
                     "questionnaire" => await CreateQuestionnaireFromJson(tenantName, materialData),
+                    "quiz" => await CreateQuizFromJson(tenantName, materialData),
                     _ => await CreateBasicMaterialFromJson(tenantName, materialData)
                 };
             }
@@ -951,51 +1013,63 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             return "default";
         }
 
-        private async Task<ActionResult<Material>> CreateWorkflowFromJson(string tenantName, JsonElement jsonElement)
+        private async Task<ActionResult<CreateMaterialResponse>> CreateWorkflowFromJson(string tenantName, JsonElement jsonElement)
         {
             try
             {
                 _logger.LogInformation(" Creating workflow material from JSON");
-                
+
                 // Parse the workflow material properties
                 var workflow = new WorkflowMaterial();
-                
+
                 if (TryGetPropertyCaseInsensitive(jsonElement, "name", out var nameProp))
                     workflow.Name = nameProp.GetString();
-                
+
                 if (TryGetPropertyCaseInsensitive(jsonElement, "description", out var descProp))
                     workflow.Description = descProp.GetString();
-                
+
                 // Parse the steps
                 var steps = new List<WorkflowStep>();
-                if (TryGetPropertyCaseInsensitive(jsonElement, "steps", out var stepsElement) && 
+                if (TryGetPropertyCaseInsensitive(jsonElement, "steps", out var stepsElement) &&
                     stepsElement.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var stepElement in stepsElement.EnumerateArray())
                     {
                         var step = new WorkflowStep();
-                        
+
                         if (TryGetPropertyCaseInsensitive(stepElement, "title", out var titleProp))
                             step.Title = titleProp.GetString() ?? "";
-                        
+
                         if (TryGetPropertyCaseInsensitive(stepElement, "content", out var contentProp))
                             step.Content = contentProp.GetString();
-                        
+
                         steps.Add(step);
                     }
                 }
-                
+
                 _logger.LogInformation("Parsed workflow: {Name} with {StepCount} steps", workflow.Name, steps.Count);
-                
+
                 // Use the service method directly instead of the controller method
                 var createdMaterial = await _materialService.CreateWorkflowWithStepsAsync(workflow, steps);
-                
+
                 _logger.LogInformation("Created workflow material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.material_id);
 
+                var response = new CreateMaterialResponse
+                {
+                    Status = "success",
+                    Message = "Workflow material created successfully",
+                    material_id = createdMaterial.material_id,
+                    Name = createdMaterial.Name,
+                    Description = createdMaterial.Description,
+                    Type = createdMaterial.Type.ToString(),
+                    UniqueId = createdMaterial.UniqueId,
+                    Created_at = createdMaterial.Created_at
+                };
+
                 return CreatedAtAction(nameof(GetMaterial),
                     new { tenantName, id = createdMaterial.material_id },
-                    createdMaterial);
+                    response);
             }
             catch (Exception ex)
             {
@@ -1004,7 +1078,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
         }
 
-        private async Task<ActionResult<Material>> CreateVideoFromJson(string tenantName, JsonElement jsonElement)
+        private async Task<ActionResult<CreateMaterialResponse>> CreateVideoFromJson(string tenantName, JsonElement jsonElement)
         {
             try
             {
@@ -1061,9 +1135,22 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 _logger.LogInformation("Created video material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.material_id);
 
+                var response = new CreateMaterialResponse
+                {
+                    Status = "success",
+                    Message = "Video material created successfully",
+                    material_id = createdMaterial.material_id,
+                    Name = createdMaterial.Name,
+                    Description = createdMaterial.Description,
+                    Type = createdMaterial.Type.ToString(),
+                    UniqueId = createdMaterial.UniqueId,
+                    AssetId = video.AssetId,
+                    Created_at = createdMaterial.Created_at
+                };
+
                 return CreatedAtAction(nameof(GetMaterial),
                     new { tenantName, id = createdMaterial.material_id },
-                    createdMaterial);
+                    response);
             }
             catch (Exception ex)
             {
@@ -1072,7 +1159,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
         }
 
-        private async Task<ActionResult<Material>> CreateChecklistFromJson(string tenantName, JsonElement jsonElement)
+        private async Task<ActionResult<CreateMaterialResponse>> CreateChecklistFromJson(string tenantName, JsonElement jsonElement)
         {
             try
             {
@@ -1114,9 +1201,21 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 _logger.LogInformation("Created checklist material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.material_id);
 
+                var response = new CreateMaterialResponse
+                {
+                    Status = "success",
+                    Message = "Checklist material created successfully",
+                    material_id = createdMaterial.material_id,
+                    Name = createdMaterial.Name,
+                    Description = createdMaterial.Description,
+                    Type = createdMaterial.Type.ToString(),
+                    UniqueId = createdMaterial.UniqueId,
+                    Created_at = createdMaterial.Created_at
+                };
+
                 return CreatedAtAction(nameof(GetMaterial),
                     new { tenantName, id = createdMaterial.material_id },
-                    createdMaterial);
+                    response);
             }
             catch (Exception ex)
             {
@@ -1125,7 +1224,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
         }
 
-        private async Task<ActionResult<Material>> CreateQuestionnaireFromJson(string tenantName, JsonElement jsonElement)
+        private async Task<ActionResult<CreateMaterialResponse>> CreateQuestionnaireFromJson(string tenantName, JsonElement jsonElement)
         {
             try
             {
@@ -1176,9 +1275,21 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 _logger.LogInformation("Created questionnaire material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.material_id);
 
+                var response = new CreateMaterialResponse
+                {
+                    Status = "success",
+                    Message = "Questionnaire material created successfully",
+                    material_id = createdMaterial.material_id,
+                    Name = createdMaterial.Name,
+                    Description = createdMaterial.Description,
+                    Type = createdMaterial.Type.ToString(),
+                    UniqueId = createdMaterial.UniqueId,
+                    Created_at = createdMaterial.Created_at
+                };
+
                 return CreatedAtAction(nameof(GetMaterial),
                     new { tenantName, id = createdMaterial.material_id },
-                    createdMaterial);
+                    response);
             }
             catch (Exception ex)
             {
@@ -1187,7 +1298,146 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
         }
 
-        private async Task<ActionResult<Material>> CreateBasicMaterialFromJson(string tenantName, JsonElement jsonElement)
+        private async Task<ActionResult<CreateMaterialResponse>> CreateQuizFromJson(string tenantName, JsonElement jsonElement)
+        {
+            try
+            {
+                _logger.LogInformation("📝 Creating quiz material from JSON");
+
+                // Parse the quiz material properties
+                var quiz = new QuizMaterial();
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "name", out var nameProp))
+                    quiz.Name = nameProp.GetString();
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "description", out var descProp))
+                    quiz.Description = descProp.GetString();
+
+                // Parse the questions - try to get from "config" object first, then direct "questions" array
+                var questions = new List<QuizQuestion>();
+                JsonElement questionsElement;
+                bool hasQuestions = false;
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var configElement))
+                {
+                    if (TryGetPropertyCaseInsensitive(configElement, "questions", out questionsElement))
+                    {
+                        hasQuestions = true;
+                        _logger.LogInformation("Found questions in config object");
+                    }
+                }
+
+                if (!hasQuestions && TryGetPropertyCaseInsensitive(jsonElement, "questions", out questionsElement))
+                {
+                    hasQuestions = true;
+                    _logger.LogInformation("Found questions directly");
+                }
+
+                if (hasQuestions && questionsElement.ValueKind == JsonValueKind.Array)
+                {
+                    _logger.LogInformation("Questions array has {Count} elements", questionsElement.GetArrayLength());
+
+                    foreach (var questionElement in questionsElement.EnumerateArray())
+                    {
+                        var question = new QuizQuestion();
+
+                        if (TryGetPropertyCaseInsensitive(questionElement, "id", out var idProp))
+                            question.QuestionNumber = idProp.GetInt32();
+
+                        if (TryGetPropertyCaseInsensitive(questionElement, "type", out var typeProp))
+                            question.QuestionType = typeProp.GetString() ?? "text";
+
+                        if (TryGetPropertyCaseInsensitive(questionElement, "text", out var textProp))
+                            question.Text = textProp.GetString() ?? "";
+
+                        if (TryGetPropertyCaseInsensitive(questionElement, "description", out var descriptionProp))
+                            question.Description = descriptionProp.GetString();
+
+                        if (TryGetPropertyCaseInsensitive(questionElement, "score", out var scoreProp))
+                        {
+                            if (scoreProp.ValueKind == JsonValueKind.String)
+                            {
+                                if (decimal.TryParse(scoreProp.GetString(), out var scoreValue))
+                                    question.Score = scoreValue;
+                            }
+                            else if (scoreProp.ValueKind == JsonValueKind.Number)
+                            {
+                                question.Score = scoreProp.GetDecimal();
+                            }
+                        }
+
+                        if (TryGetPropertyCaseInsensitive(questionElement, "helpText", out var helpProp))
+                            question.HelpText = helpProp.GetString();
+
+                        if (TryGetPropertyCaseInsensitive(questionElement, "allowMultiple", out var multiProp))
+                            question.AllowMultiple = multiProp.GetBoolean();
+
+                        if (TryGetPropertyCaseInsensitive(questionElement, "scaleConfig", out var scaleProp))
+                            question.ScaleConfig = scaleProp.GetString();
+
+                        // Handle answers (checking for both "answers" and "anwsers" typo)
+                        if (TryGetPropertyCaseInsensitive(questionElement, "answers", out var answersElement) ||
+                            TryGetPropertyCaseInsensitive(questionElement, "anwsers", out answersElement))
+                        {
+                            if (answersElement.ValueKind == JsonValueKind.Array)
+                            {
+                                var answers = new List<QuizAnswer>();
+                                foreach (var answerElement in answersElement.EnumerateArray())
+                                {
+                                    var answer = new QuizAnswer();
+
+                                    if (TryGetPropertyCaseInsensitive(answerElement, "text", out var ansTextProp))
+                                        answer.Text = ansTextProp.GetString() ?? "";
+
+                                    if (TryGetPropertyCaseInsensitive(answerElement, "isCorrect", out var correctProp))
+                                        answer.IsCorrect = correctProp.GetBoolean();
+
+                                    if (TryGetPropertyCaseInsensitive(answerElement, "displayOrder", out var orderProp))
+                                        answer.DisplayOrder = orderProp.GetInt32();
+
+                                    answers.Add(answer);
+                                }
+                                question.Answers = answers;
+                                _logger.LogInformation("Added {Count} answers to question", answers.Count);
+                            }
+                        }
+
+                        questions.Add(question);
+                    }
+                }
+
+                _logger.LogInformation("Parsed quiz: {Name} with {QuestionCount} questions", quiz.Name, questions.Count);
+
+                // Use the service method to create quiz with questions
+                var createdMaterial = await _materialService.CreateQuizWithQuestionsAsync(quiz, questions);
+
+                _logger.LogInformation("Created quiz material {Name} with ID {Id}",
+                    createdMaterial.Name, createdMaterial.material_id);
+
+                var response = new CreateMaterialResponse
+                {
+                    Status = "success",
+                    Message = "Quiz material created successfully",
+                    material_id = createdMaterial.material_id,
+                    Name = createdMaterial.Name,
+                    Description = createdMaterial.Description,
+                    Type = createdMaterial.Type.ToString(),
+                    UniqueId = createdMaterial.UniqueId,
+                    Created_at = createdMaterial.Created_at
+                };
+
+                return CreatedAtAction(nameof(GetMaterial),
+                    new { tenantName, id = createdMaterial.material_id },
+                    response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "📝 Error creating quiz from JSON");
+                throw;
+            }
+        }
+
+        private async Task<ActionResult<CreateMaterialResponse>> CreateBasicMaterialFromJson(string tenantName, JsonElement jsonElement)
         {
             try
             {
@@ -1203,13 +1453,30 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 
                 // Use the basic creation method (not the complete one)
                 var createdMaterial = await _materialService.CreateMaterialAsync(material);
-                
+
                 _logger.LogInformation("Created basic material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.material_id);
 
+                var response = new CreateMaterialResponse
+                {
+                    Status = "success",
+                    Message = "Material created successfully",
+                    material_id = createdMaterial.material_id,
+                    Name = createdMaterial.Name,
+                    Description = createdMaterial.Description,
+                    Type = createdMaterial.Type.ToString(),
+                    UniqueId = createdMaterial.UniqueId,
+                    AssetId = (createdMaterial as DefaultMaterial)?.AssetId ??
+                              (createdMaterial as VideoMaterial)?.AssetId ??
+                              (createdMaterial as ImageMaterial)?.AssetId ??
+                              (createdMaterial as PDFMaterial)?.AssetId ??
+                              (createdMaterial as UnityMaterial)?.AssetId,
+                    Created_at = createdMaterial.Created_at
+                };
+
                 return CreatedAtAction(nameof(GetMaterial),
                     new { tenantName, id = createdMaterial.material_id },
-                    createdMaterial);
+                    response);
             }
             catch (Exception ex)
             {
