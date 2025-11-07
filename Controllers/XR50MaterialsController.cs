@@ -96,6 +96,7 @@ public async Task<ActionResult<object>> GetCompleteMaterialDetails(string tenant
             MaterialType.Video => await GetVideoDetails(id),
             MaterialType.Checklist => await GetChecklistDetails(id),
             MaterialType.Questionnaire => await GetQuestionnaireDetails(id),
+            MaterialType.Quiz => await GetQuizDetails(id),
             MaterialType.Image => await GetImageDetails(id),
             MaterialType.PDF => await GetPDFDetails(id),
             MaterialType.Unity => await GetUnityDetails(id),
@@ -213,6 +214,41 @@ private async Task<object?> GetQuestionnaireDetails(int materialId)
             Id = qe.QuestionnaireEntryId,
             Text = qe.Text,
             Description = qe.Description
+        }) ?? Enumerable.Empty<object>()
+    };
+}
+
+private async Task<object?> GetQuizDetails(int materialId)
+{
+    var quiz = await _materialService.GetQuizMaterialWithQuestionsAsync(materialId);
+    if (quiz == null) return null;
+
+    return new
+    {
+        id = quiz.id,
+        Name = quiz.Name,
+        Description = quiz.Description,
+        Type = quiz.Type.ToString(),
+        Created_at = quiz.Created_at,
+        Updated_at = quiz.Updated_at,
+        Questions = quiz.Questions?.Select(q => new
+        {
+            Id = q.QuizQuestionId,
+            QuestionNumber = q.QuestionNumber,
+            QuestionType = q.QuestionType,
+            Text = q.Text,
+            Description = q.Description,
+            Score = q.Score,
+            HelpText = q.HelpText,
+            AllowMultiple = q.AllowMultiple,
+            ScaleConfig = q.ScaleConfig,
+            Answers = q.Answers?.Select(a => new
+            {
+                Id = a.QuizAnswerId,
+                Text = a.Text,
+                IsCorrect = a.IsCorrect,
+                DisplayOrder = a.DisplayOrder
+            }) ?? Enumerable.Empty<object>()
         }) ?? Enumerable.Empty<object>()
     };
 }
@@ -924,6 +960,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         [HttpPost]
         // POST: api/{tenantName}/materials - Unified material creation endpoint
         // Accepts both JSON (application/json) for material-only and multipart/form-data for material with optional file uploads
+        // Form-data parameters: material (JSON string, required), file (binary, optional), assetData (JSON string, optional)
         public async Task<ActionResult<CreateMaterialResponse>> PostMaterialDetailed(string tenantName)
         {
             try
@@ -942,20 +979,20 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     // Form data request with optional file upload
                     var form = await Request.ReadFormAsync();
 
-                    if (!form.ContainsKey("materialData"))
+                    if (!form.ContainsKey("material"))
                     {
-                        return BadRequest("materialData is required in form-data requests");
+                        return BadRequest("material is required in form-data requests");
                     }
 
-                    var materialDataString = form["materialData"].ToString();
+                    var materialDataString = form["material"].ToString();
                     try
                     {
                         materialData = JsonSerializer.Deserialize<JsonElement>(materialDataString);
                     }
                     catch (JsonException ex)
                     {
-                        _logger.LogError(ex, "Invalid JSON in materialData parameter");
-                        return BadRequest("Invalid JSON format in materialData");
+                        _logger.LogError(ex, "Invalid JSON in material parameter");
+                        return BadRequest("Invalid JSON format in material");
                     }
 
                     // Extract optional file
@@ -1057,10 +1094,30 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 if (TryGetPropertyCaseInsensitive(jsonElement, "description", out var descProp))
                     workflow.Description = descProp.GetString();
 
-                // Parse the steps
+                // Parse the steps - try to get from "config" object first, then direct "steps" array
                 var steps = new List<WorkflowStep>();
-                if (TryGetPropertyCaseInsensitive(jsonElement, "steps", out var stepsElement) &&
-                    stepsElement.ValueKind == JsonValueKind.Array)
+
+                JsonElement stepsElement = default;
+                bool hasSteps = false;
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var configElement))
+                {
+                    if (TryGetPropertyCaseInsensitive(configElement, "steps", out var configStepsElement))
+                    {
+                        stepsElement = configStepsElement;
+                        hasSteps = true;
+                        _logger.LogInformation("Found steps in config object");
+                    }
+                }
+
+                if (!hasSteps && TryGetPropertyCaseInsensitive(jsonElement, "steps", out var directStepsElement))
+                {
+                    stepsElement = directStepsElement;
+                    hasSteps = true;
+                    _logger.LogInformation("Found steps directly");
+                }
+
+                if (hasSteps && stepsElement.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var stepElement in stepsElement.EnumerateArray())
                     {
@@ -1202,22 +1259,42 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 
                 if (TryGetPropertyCaseInsensitive(jsonElement, "description", out var descProp))
                     checklist.Description = descProp.GetString();
-                
-                // Parse the entries
+
+                // Parse the entries - try to get from "config" object first, then direct "entries" array
                 var entries = new List<ChecklistEntry>();
-                if (TryGetPropertyCaseInsensitive(jsonElement, "entries", out var entriesElement) && 
-                    entriesElement.ValueKind == JsonValueKind.Array)
+
+                JsonElement entriesElement = default;
+                bool hasEntries = false;
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var configElement))
+                {
+                    if (TryGetPropertyCaseInsensitive(configElement, "entries", out var configEntriesElement))
+                    {
+                        entriesElement = configEntriesElement;
+                        hasEntries = true;
+                        _logger.LogInformation("Found entries in config object");
+                    }
+                }
+
+                if (!hasEntries && TryGetPropertyCaseInsensitive(jsonElement, "entries", out var directEntriesElement))
+                {
+                    entriesElement = directEntriesElement;
+                    hasEntries = true;
+                    _logger.LogInformation("Found entries directly");
+                }
+
+                if (hasEntries && entriesElement.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var entryElement in entriesElement.EnumerateArray())
                     {
                         var entry = new ChecklistEntry();
-                        
+
                         if (TryGetPropertyCaseInsensitive(entryElement, "text", out var textProp))
                             entry.Text = textProp.GetString() ?? "";
-                        
+
                         if (TryGetPropertyCaseInsensitive(entryElement, "description", out var descriptionProp))
                             entry.Description = descriptionProp.GetString();
-                        
+
                         entries.Add(entry);
                     }
                 }
@@ -1276,22 +1353,42 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 
                 if (TryGetPropertyCaseInsensitive(jsonElement, "questionnaireConfig", out var configProp))
                     questionnaire.QuestionnaireConfig = configProp.GetString();
-                
-                // Parse the entries
+
+                // Parse the entries - try to get from "config" object first, then direct "entries" array
                 var entries = new List<QuestionnaireEntry>();
-                if (TryGetPropertyCaseInsensitive(jsonElement, "entries", out var entriesElement) && 
-                    entriesElement.ValueKind == JsonValueKind.Array)
+
+                JsonElement entriesElement = default;
+                bool hasEntries = false;
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var configElement))
+                {
+                    if (TryGetPropertyCaseInsensitive(configElement, "entries", out var configEntriesElement))
+                    {
+                        entriesElement = configEntriesElement;
+                        hasEntries = true;
+                        _logger.LogInformation("Found entries in config object");
+                    }
+                }
+
+                if (!hasEntries && TryGetPropertyCaseInsensitive(jsonElement, "entries", out var directEntriesElement))
+                {
+                    entriesElement = directEntriesElement;
+                    hasEntries = true;
+                    _logger.LogInformation("Found entries directly");
+                }
+
+                if (hasEntries && entriesElement.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var entryElement in entriesElement.EnumerateArray())
                     {
                         var entry = new QuestionnaireEntry();
-                        
+
                         if (TryGetPropertyCaseInsensitive(entryElement, "text", out var textProp))
                             entry.Text = textProp.GetString() ?? "";
-                        
+
                         if (TryGetPropertyCaseInsensitive(entryElement, "description", out var descriptionProp))
                             entry.Description = descriptionProp.GetString();
-                        
+
                         entries.Add(entry);
                     }
                 }

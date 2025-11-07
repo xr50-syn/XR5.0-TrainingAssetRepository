@@ -287,8 +287,8 @@ For S3 (ensure bucket is pre-created in AWS):
 ```json
 {
   "tenantName": "test-company",
-  "tenantGroup": "pilot-1",
-  "description": "Test tenant for Pilot 1",
+  "tenantGroup": "pilot-5",
+  "description": "Test tenant for Pilot 5",
   "storageType": "S3",
   "s3Config": {
     "bucketName": "xr50-sandbox-tenant-pilot5",
