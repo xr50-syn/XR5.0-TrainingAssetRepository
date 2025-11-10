@@ -132,15 +132,18 @@ private async Task<object?> GetWorkflowDetails(int materialId)
         id = workflow.id,
         Name = workflow.Name,
         Description = workflow.Description,
-        Type = workflow.Type.ToString(),
+        Type = GetLowercaseType(workflow.Type),
         Created_at = workflow.Created_at,
         Updated_at = workflow.Updated_at,
-        WorkflowSteps = workflow.WorkflowSteps?.Select(ws => new
+        Config = new
         {
-            Id = ws.Id,
-            Title = ws.Title,
-            Content = ws.Content
-        }) ?? Enumerable.Empty<object>()
+            Steps = workflow.WorkflowSteps?.Select(ws => new
+            {
+                Id = ws.Id,
+                Title = ws.Title,
+                Content = ws.Content
+            }) ?? Enumerable.Empty<object>()
+        }
     };
 }
 
@@ -149,15 +152,34 @@ private async Task<object?> GetVideoDetails(int materialId)
     var video = await _materialService.GetVideoMaterialWithTimestampsAsync(materialId);
     if (video == null) return null;
 
+    // Fetch full asset if AssetId exists
+    object? asset = null;
+    if (video.AssetId.HasValue)
+    {
+        var assetEntity = await _assetService.GetAssetAsync(video.AssetId.Value);
+        if (assetEntity != null)
+        {
+            asset = new
+            {
+                Id = assetEntity.Id,
+                Filename = assetEntity.Filename,
+                Description = assetEntity.Description,
+                Filetype = assetEntity.Filetype,
+                Src = assetEntity.Src,
+                URL = assetEntity.URL
+            };
+        }
+    }
+
     return new
     {
         id = video.id,
         Name = video.Name,
         Description = video.Description,
-        Type = video.Type.ToString(),
+        Type = GetLowercaseType(video.Type),
         Created_at = video.Created_at,
         Updated_at = video.Updated_at,
-        AssetId = video.AssetId,
+        Asset = asset,
         VideoPath = video.VideoPath,
         VideoDuration = video.VideoDuration,
         VideoResolution = video.VideoResolution,
@@ -181,15 +203,18 @@ private async Task<object?> GetChecklistDetails(int materialId)
         id = checklist.id,
         Name = checklist.Name,
         Description = checklist.Description,
-        Type = checklist.Type.ToString(),
+        Type = GetLowercaseType(checklist.Type),
         Created_at = checklist.Created_at,
         Updated_at = checklist.Updated_at,
-        Entries = checklist.Entries?.Select(ce => new
+        Config = new
         {
-            Id = ce.ChecklistEntryId,
-            Text = ce.Text,
-            Description = ce.Description
-        }) ?? Enumerable.Empty<object>()
+            Entries = checklist.Entries?.Select(ce => new
+            {
+                Id = ce.ChecklistEntryId,
+                Text = ce.Text,
+                Description = ce.Description
+            }) ?? Enumerable.Empty<object>()
+        }
     };
 }
 
@@ -203,18 +228,21 @@ private async Task<object?> GetQuestionnaireDetails(int materialId)
         id = questionnaire.id,
         Name = questionnaire.Name,
         Description = questionnaire.Description,
-        Type = questionnaire.Type.ToString(),
+        Type = GetLowercaseType(questionnaire.Type),
         Created_at = questionnaire.Created_at,
         Updated_at = questionnaire.Updated_at,
         QuestionnaireType = questionnaire.QuestionnaireType,
         PassingScore = questionnaire.PassingScore,
         QuestionnaireConfig = questionnaire.QuestionnaireConfig,
-        QuestionnaireEntries = questionnaire.QuestionnaireEntries?.Select(qe => new
+        Config = new
         {
-            Id = qe.QuestionnaireEntryId,
-            Text = qe.Text,
-            Description = qe.Description
-        }) ?? Enumerable.Empty<object>()
+            Entries = questionnaire.QuestionnaireEntries?.Select(qe => new
+            {
+                Id = qe.QuestionnaireEntryId,
+                Text = qe.Text,
+                Description = qe.Description
+            }) ?? Enumerable.Empty<object>()
+        }
     };
 }
 
@@ -228,28 +256,31 @@ private async Task<object?> GetQuizDetails(int materialId)
         id = quiz.id,
         Name = quiz.Name,
         Description = quiz.Description,
-        Type = quiz.Type.ToString(),
+        Type = GetLowercaseType(quiz.Type),
         Created_at = quiz.Created_at,
         Updated_at = quiz.Updated_at,
-        Questions = quiz.Questions?.Select(q => new
+        Config = new
         {
-            Id = q.QuizQuestionId,
-            QuestionNumber = q.QuestionNumber,
-            QuestionType = q.QuestionType,
-            Text = q.Text,
-            Description = q.Description,
-            Score = q.Score,
-            HelpText = q.HelpText,
-            AllowMultiple = q.AllowMultiple,
-            ScaleConfig = q.ScaleConfig,
-            Answers = q.Answers?.Select(a => new
+            Questions = quiz.Questions?.Select(q => new
             {
-                Id = a.QuizAnswerId,
-                Text = a.Text,
-                IsCorrect = a.IsCorrect,
-                DisplayOrder = a.DisplayOrder
+                Id = q.QuizQuestionId,
+                QuestionNumber = q.QuestionNumber,
+                QuestionType = q.QuestionType,
+                Text = q.Text,
+                Description = q.Description,
+                Score = q.Score,
+                HelpText = q.HelpText,
+                AllowMultiple = q.AllowMultiple,
+                ScaleConfig = q.ScaleConfig,
+                Answers = q.Answers?.Select(a => new
+                {
+                    Id = a.QuizAnswerId,
+                    Text = a.Text,
+                    IsCorrect = a.IsCorrect,
+                    DisplayOrder = a.DisplayOrder
+                }) ?? Enumerable.Empty<object>()
             }) ?? Enumerable.Empty<object>()
-        }) ?? Enumerable.Empty<object>()
+        }
     };
 }
 
@@ -258,15 +289,34 @@ private async Task<object?> GetImageDetails(int materialId)
     var image = await _materialService.GetImageMaterialAsync(materialId);
     if (image == null) return null;
 
+    // Fetch full asset if AssetId exists
+    object? asset = null;
+    if (image.AssetId.HasValue)
+    {
+        var assetEntity = await _assetService.GetAssetAsync(image.AssetId.Value);
+        if (assetEntity != null)
+        {
+            asset = new
+            {
+                Id = assetEntity.Id,
+                Filename = assetEntity.Filename,
+                Description = assetEntity.Description,
+                Filetype = assetEntity.Filetype,
+                Src = assetEntity.Src,
+                URL = assetEntity.URL
+            };
+        }
+    }
+
     return new
     {
         id = image.id,
         Name = image.Name,
         Description = image.Description,
-        Type = image.Type.ToString(),
+        Type = GetLowercaseType(image.Type),
         Created_at = image.Created_at,
         Updated_at = image.Updated_at,
-        AssetId = image.AssetId,
+        Asset = asset,
         ImagePath = image.ImagePath,
         ImageWidth = image.ImageWidth,
         ImageHeight = image.ImageHeight,
@@ -279,15 +329,34 @@ private async Task<object?> GetPDFDetails(int materialId)
     var pdf = await _materialService.GetPDFMaterialAsync(materialId);
     if (pdf == null) return null;
 
+    // Fetch full asset if AssetId exists
+    object? asset = null;
+    if (pdf.AssetId.HasValue)
+    {
+        var assetEntity = await _assetService.GetAssetAsync(pdf.AssetId.Value);
+        if (assetEntity != null)
+        {
+            asset = new
+            {
+                Id = assetEntity.Id,
+                Filename = assetEntity.Filename,
+                Description = assetEntity.Description,
+                Filetype = assetEntity.Filetype,
+                Src = assetEntity.Src,
+                URL = assetEntity.URL
+            };
+        }
+    }
+
     return new
     {
         id = pdf.id,
         Name = pdf.Name,
         Description = pdf.Description,
-        Type = pdf.Type.ToString(),
+        Type = GetLowercaseType(pdf.Type),
         Created_at = pdf.Created_at,
         Updated_at = pdf.Updated_at,
-        AssetId = pdf.AssetId,
+        Asset = asset,
         PdfPath = pdf.PdfPath,
         PdfPageCount = pdf.PdfPageCount,
         PdfFileSize = pdf.PdfFileSize
@@ -299,15 +368,34 @@ private async Task<object?> GetUnityDetails(int materialId)
     var unity = await _materialService.GetUnityMaterialAsync(materialId);
     if (unity == null) return null;
 
+    // Fetch full asset if AssetId exists
+    object? asset = null;
+    if (unity.AssetId.HasValue)
+    {
+        var assetEntity = await _assetService.GetAssetAsync(unity.AssetId.Value);
+        if (assetEntity != null)
+        {
+            asset = new
+            {
+                Id = assetEntity.Id,
+                Filename = assetEntity.Filename,
+                Description = assetEntity.Description,
+                Filetype = assetEntity.Filetype,
+                Src = assetEntity.Src,
+                URL = assetEntity.URL
+            };
+        }
+    }
+
     return new
     {
         id = unity.id,
         Name = unity.Name,
         Description = unity.Description,
-        Type = unity.Type.ToString(),
+        Type = GetLowercaseType(unity.Type),
         Created_at = unity.Created_at,
         Updated_at = unity.Updated_at,
-        AssetId = unity.AssetId,
+        Asset = asset,
         UnityVersion = unity.UnityVersion,
         UnityBuildTarget = unity.UnityBuildTarget,
         UnitySceneName = unity.UnitySceneName
@@ -324,7 +412,7 @@ private async Task<object?> GetChatbotDetails(int materialId)
         id = chatbot.id,
         Name = chatbot.Name,
         Description = chatbot.Description,
-        Type = chatbot.Type.ToString(),
+        Type = GetLowercaseType(chatbot.Type),
         Created_at = chatbot.Created_at,
         Updated_at = chatbot.Updated_at,
         ChatbotConfig = chatbot.ChatbotConfig,
@@ -343,7 +431,7 @@ private async Task<object?> GetMQTTTemplateDetails(int materialId)
         id = mqtt.id,
         Name = mqtt.Name,
         Description = mqtt.Description,
-        Type = mqtt.Type.ToString(),
+        Type = GetLowercaseType(mqtt.Type),
         Created_at = mqtt.Created_at,
         Updated_at = mqtt.Updated_at,
         MessageType = mqtt.message_type,
@@ -356,14 +444,34 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
     var material = await _materialService.GetMaterialAsync(materialId);
     if (material == null) return null;
 
+    // Check if it's a DefaultMaterial with an asset
+    object? asset = null;
+    if (material is DefaultMaterial defaultMaterial && defaultMaterial.AssetId.HasValue)
+    {
+        var assetEntity = await _assetService.GetAssetAsync(defaultMaterial.AssetId.Value);
+        if (assetEntity != null)
+        {
+            asset = new
+            {
+                Id = assetEntity.Id,
+                Filename = assetEntity.Filename,
+                Description = assetEntity.Description,
+                Filetype = assetEntity.Filetype,
+                Src = assetEntity.Src,
+                URL = assetEntity.URL
+            };
+        }
+    }
+
     return new
     {
         id = material.id,
         Name = material.Name,
         Description = material.Description,
-        Type = material.Type.ToString(),
+        Type = GetLowercaseType(material.Type),
         Created_at = material.Created_at,
-        Updated_at = material.Updated_at
+        Updated_at = material.Updated_at,
+        Asset = asset
     };
 }
         [HttpGet("{id}/typed")]
@@ -453,7 +561,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     id = material.id,
                     Name = material.Name,
                     Description = material.Description,
-                    Type = material.Type.ToString(),
+                    Type = GetLowercaseType(material.Type),
                     Created_at = material.Created_at,
                     Updated_at = material.Updated_at,
                     // Note: Child entity counts would need separate service calls
@@ -549,7 +657,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     id = createdMaterial.id,
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
-                    Type = createdMaterial.Type.ToString(),
+                    Type = GetLowercaseType(createdMaterial.Type),
                     UniqueId = createdMaterial.UniqueId,
                     AssetId = createdMaterial switch
                     {
@@ -746,7 +854,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         id = createdMaterial.id,
                         Name = createdMaterial.Name,
                         Description = createdMaterial.Description,
-                        Type = createdMaterial.Type.ToString(),
+                        Type = GetLowercaseType(createdMaterial.Type),
                         UniqueId = createdMaterial.UniqueId,
                         AssetId = createdAsset.Id,
                         Created_at = createdMaterial.Created_at
@@ -1070,13 +1178,34 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var discriminator = discProp.GetString();
                 return discriminator?.Replace("Material", "").ToLower() ?? "default";
             }
-            
+
             if (TryGetPropertyCaseInsensitive(jsonElement, "type", out var typeProp))
             {
                 return typeProp.GetString()?.ToLower() ?? "default";
             }
-            
+
             return "default";
+        }
+
+        // Helper method to convert Type enum to lowercase string (matching EnumMember values)
+        private string GetLowercaseType(XR50TrainingAssetRepo.Models.Type type)
+        {
+            return type switch
+            {
+                XR50TrainingAssetRepo.Models.Type.Image => "image",
+                XR50TrainingAssetRepo.Models.Type.Video => "video",
+                XR50TrainingAssetRepo.Models.Type.PDF => "pdf",
+                XR50TrainingAssetRepo.Models.Type.Unity => "unity",
+                XR50TrainingAssetRepo.Models.Type.Chatbot => "chatbot",
+                XR50TrainingAssetRepo.Models.Type.Questionnaire => "questionnaire",
+                XR50TrainingAssetRepo.Models.Type.Checklist => "checklist",
+                XR50TrainingAssetRepo.Models.Type.Workflow => "workflow",
+                XR50TrainingAssetRepo.Models.Type.MQTT_Template => "mqtt_template",
+                XR50TrainingAssetRepo.Models.Type.Answers => "answers",
+                XR50TrainingAssetRepo.Models.Type.Quiz => "quiz",
+                XR50TrainingAssetRepo.Models.Type.Default => "default",
+                _ => "default"
+            };
         }
 
         private async Task<ActionResult<CreateMaterialResponse>> CreateWorkflowFromJson(string tenantName, JsonElement jsonElement)
@@ -1148,7 +1277,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     id = createdMaterial.id,
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
-                    Type = createdMaterial.Type.ToString(),
+                    Type = GetLowercaseType(createdMaterial.Type),
                     UniqueId = createdMaterial.UniqueId,
                     Created_at = createdMaterial.Created_at
                 };
@@ -1228,7 +1357,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     id = createdMaterial.id,
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
-                    Type = createdMaterial.Type.ToString(),
+                    Type = GetLowercaseType(createdMaterial.Type),
                     UniqueId = createdMaterial.UniqueId,
                     AssetId = video.AssetId,
                     Created_at = createdMaterial.Created_at
@@ -1314,7 +1443,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     id = createdMaterial.id,
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
-                    Type = createdMaterial.Type.ToString(),
+                    Type = GetLowercaseType(createdMaterial.Type),
                     UniqueId = createdMaterial.UniqueId,
                     Created_at = createdMaterial.Created_at
                 };
@@ -1408,7 +1537,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     id = createdMaterial.id,
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
-                    Type = createdMaterial.Type.ToString(),
+                    Type = GetLowercaseType(createdMaterial.Type),
                     UniqueId = createdMaterial.UniqueId,
                     Created_at = createdMaterial.Created_at
                 };
@@ -1550,7 +1679,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     id = createdMaterial.id,
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
-                    Type = createdMaterial.Type.ToString(),
+                    Type = GetLowercaseType(createdMaterial.Type),
                     UniqueId = createdMaterial.UniqueId,
                     Created_at = createdMaterial.Created_at
                 };
@@ -1593,7 +1722,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     id = createdMaterial.id,
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
-                    Type = createdMaterial.Type.ToString(),
+                    Type = GetLowercaseType(createdMaterial.Type),
                     UniqueId = createdMaterial.UniqueId,
                     AssetId = (createdMaterial as DefaultMaterial)?.AssetId ??
                               (createdMaterial as VideoMaterial)?.AssetId ??
@@ -2088,12 +2217,12 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             if (!deleted)
             {
-                return NotFound();
+                return NotFound(new { Status = "error", Message = $"Material with ID {id} not found" });
             }
 
             _logger.LogInformation("Deleted material {Id} for tenant: {TenantName}", id, tenantName);
 
-            return NoContent();
+            return Ok(new { Status = "success", Message = $"Material with ID {id} deleted successfully" });
         }
 
         // GET: api/{tenantName}/materials/videos

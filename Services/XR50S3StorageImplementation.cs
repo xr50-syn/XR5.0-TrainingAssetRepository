@@ -14,6 +14,8 @@ namespace XR50TrainingAssetRepo.Services
         private readonly IXR50TenantManagementService _tenantManagementService;
         private readonly string _baseBucketPrefix;
 
+        private readonly string _publicEndpoint;
+
         public S3StorageServiceImplementation(
             IAmazonS3 s3Client,
             IConfiguration configuration,
@@ -25,6 +27,9 @@ namespace XR50TrainingAssetRepo.Services
             _logger = logger;
             _tenantManagementService = tenantManagementService;
             _baseBucketPrefix = _configuration.GetValue<string>("S3Settings:BaseBucketPrefix") ?? "xr50";
+            _publicEndpoint = _configuration.GetValue<string>("S3Settings:PublicEndpoint")
+                ?? _configuration.GetValue<string>("S3Settings:ServiceUrl")
+                ?? "";
         }
 
         public string GetStorageType() => "S3";
@@ -179,8 +184,11 @@ namespace XR50TrainingAssetRepo.Services
                 };
                   
                 var response = await _s3Client.PutObjectAsync(request);
-                
-                var url = $"s3://{bucketName}/{key}";
+
+                // Return public HTTP URL if PublicEndpoint is configured, otherwise S3 protocol URL
+                var url = !string.IsNullOrEmpty(_publicEndpoint)
+                    ? $"{_publicEndpoint}/{bucketName}/{key}"
+                    : $"s3://{bucketName}/{key}";
                 _logger.LogInformation("Successfully uploaded file to S3: {Url}", url);
                 return url;  
             }

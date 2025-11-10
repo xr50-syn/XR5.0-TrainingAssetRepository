@@ -28,6 +28,8 @@ builder.Services.AddControllers()
     {
         options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(System.Text.Json.JsonNamingPolicy.CamelCase));
+        options.JsonSerializerOptions.Converters.Add(new NullableIntToStringConverter());
+        options.JsonSerializerOptions.Converters.Add(new IntToStringConverter());
     });
 
 builder.Services.AddHttpContextAccessor();
@@ -325,6 +327,7 @@ public static class ServiceCollectionExtensions
 public class S3Settings
 {
     public string ServiceUrl { get; set; } = "";
+    public string PublicEndpoint { get; set; } = "";
     public string AccessKey { get; set; } = "";
     public string SecretKey { get; set; } = "";
     public string Region { get; set; } = "us-east-1";
@@ -363,5 +366,51 @@ public static class TenantDebuggingExtensions
         logger.LogInformation("=== END TENANT DEBUG INFO ===");
 
         return app;
+    }
+}
+
+// JSON Converters for ID serialization
+public class IntToStringConverter : System.Text.Json.Serialization.JsonConverter<int>
+{
+    public override int Read(ref System.Text.Json.Utf8JsonReader reader, System.Type typeToConvert, System.Text.Json.JsonSerializerOptions options)
+    {
+        if (reader.TokenType == System.Text.Json.JsonTokenType.String)
+        {
+            if (int.TryParse(reader.GetString(), out var value))
+                return value;
+        }
+        return reader.GetInt32();
+    }
+
+    public override void Write(System.Text.Json.Utf8JsonWriter writer, int value, System.Text.Json.JsonSerializerOptions options)
+    {
+        writer.WriteStringValue(value.ToString());
+    }
+}
+
+public class NullableIntToStringConverter : System.Text.Json.Serialization.JsonConverter<int?>
+{
+    public override int? Read(ref System.Text.Json.Utf8JsonReader reader, System.Type typeToConvert, System.Text.Json.JsonSerializerOptions options)
+    {
+        if (reader.TokenType == System.Text.Json.JsonTokenType.Null)
+            return null;
+
+        if (reader.TokenType == System.Text.Json.JsonTokenType.String)
+        {
+            var stringValue = reader.GetString();
+            if (string.IsNullOrEmpty(stringValue))
+                return null;
+            if (int.TryParse(stringValue, out var value))
+                return value;
+        }
+        return reader.GetInt32();
+    }
+
+    public override void Write(System.Text.Json.Utf8JsonWriter writer, int? value, System.Text.Json.JsonSerializerOptions options)
+    {
+        if (value.HasValue)
+            writer.WriteStringValue(value.Value.ToString());
+        else
+            writer.WriteNullValue();
     }
 }

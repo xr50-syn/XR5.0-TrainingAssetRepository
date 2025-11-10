@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics.Internal;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
 using XR50TrainingAssetRepo.Controllers;
 using XR50TrainingAssetRepo.Models;
@@ -35,17 +36,29 @@ namespace XR50TrainingAssetRepo.Models
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum Type
     {
+        [EnumMember(Value = "image")]
         Image,
+        [EnumMember(Value = "video")]
         Video,
+        [EnumMember(Value = "pdf")]
         PDF,
+        [EnumMember(Value = "unity")]
         Unity,
+        [EnumMember(Value = "chatbot")]
         Chatbot,
+        [EnumMember(Value = "questionnaire")]
         Questionnaire,
+        [EnumMember(Value = "checklist")]
         Checklist,
+        [EnumMember(Value = "workflow")]
         Workflow,
+        [EnumMember(Value = "mqtt_template")]
         MQTT_Template,
+        [EnumMember(Value = "answers")]
         Answers,
+        [EnumMember(Value = "quiz")]
         Quiz,
+        [EnumMember(Value = "default")]
         Default
     }
 

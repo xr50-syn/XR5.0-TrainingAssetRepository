@@ -68,6 +68,7 @@ services:
       
       # S3 Configuration (used when STORAGE_TYPE=S3)
       S3Settings__ServiceUrl: ${AWS_HOST:-}
+      S3Settings__PublicEndpoint: ${S3_PUBLIC_ENDPOINT:-}
       S3Settings__AccessKey: ${AWS_ACCESS_KEY_ID:-}
       S3Settings__SecretKey: ${AWS_SECRET_ACCESS_KEY:-}
       S3Settings__Region: ${AWS_REGION:-eu-west-1}
