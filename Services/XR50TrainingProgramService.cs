@@ -377,13 +377,41 @@ namespace XR50TrainingAssetRepo.Services
         public async Task<TrainingProgram> UpdateTrainingProgramAsync(TrainingProgram program)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            context.Entry(program).State = EntityState.Modified;
-            await context.SaveChangesAsync();
+            try
+            {
+                // Find existing program
+                var existing = await context.TrainingPrograms.FindAsync(program.id);
+                if (existing == null)
+                {
+                    throw new KeyNotFoundException($"Training program {program.id} not found");
+                }
 
-            _logger.LogInformation("Updated training program: {Id}", program.id);
+                // Preserve creation timestamp
+                var createdAt = existing.Created_at;
 
-            return program;
+                // Delete old program (cascades to junction tables)
+                context.TrainingPrograms.Remove(existing);
+                await context.SaveChangesAsync();
+
+                // Add new program with same ID (full replacement including Materials and LearningPaths collections)
+                program.Created_at = createdAt;
+                context.TrainingPrograms.Add(program);
+                await context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                _logger.LogInformation("Updated training program {Id} via delete-recreate with {MaterialCount} materials, {PathCount} learning paths",
+                    program.id, program.Materials?.Count ?? 0, program.LearningPaths?.Count ?? 0);
+
+                return program;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
 
         public async Task<bool> DeleteTrainingProgramAsync(int id)

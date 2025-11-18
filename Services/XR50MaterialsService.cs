@@ -371,15 +371,62 @@ namespace XR50TrainingAssetRepo.Services
         public async Task<Material> UpdateMaterialAsync(Material material)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            material.Updated_at = DateTime.UtcNow;
-            context.Entry(material).State = EntityState.Modified;
-            await context.SaveChangesAsync();
+            try
+            {
+                // Find existing material
+                var existing = await context.Materials.FindAsync(material.id);
+                if (existing == null)
+                {
+                    throw new KeyNotFoundException($"Material {material.id} not found");
+                }
 
-            _logger.LogInformation("Updated material: {Id} (Type: {Type})",
-                material.id, material.GetType().Name);
+                // Validate type hasn't changed (cannot change material type)
+                if (existing.GetType() != material.GetType())
+                {
+                    throw new InvalidOperationException(
+                        $"Cannot change material type from {existing.GetType().Name} to {material.GetType().Name}");
+                }
 
-            return material;
+                // Preserve creation timestamp
+                var createdAt = existing.Created_at;
+
+                // Delete old material (cascades to child collections automatically)
+                context.Materials.Remove(existing);
+                await context.SaveChangesAsync();
+
+                // Add new material with same ID (full replacement including all child collections)
+                material.Created_at = createdAt;
+                material.Updated_at = DateTime.UtcNow;
+                context.Materials.Add(material);
+                await context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                _logger.LogInformation("Updated material {Id} ({Type}) via delete-recreate with {ChildCount} child items",
+                    material.id, material.GetType().Name, GetChildCollectionCount(material));
+
+                return material;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
+        private int GetChildCollectionCount(Material material)
+        {
+            return material switch
+            {
+                QuestionnaireMaterial q => q.QuestionnaireEntries?.Count ?? 0,
+                VideoMaterial v => v.VideoTimestamps?.Count ?? 0,
+                ChecklistMaterial c => c.Entries?.Count ?? 0,
+                WorkflowMaterial w => w.WorkflowSteps?.Count ?? 0,
+                QuizMaterial qz => qz.Questions?.Count ?? 0,
+                _ => 0
+            };
         }
 
         public async Task<bool> DeleteMaterialAsync(int id)

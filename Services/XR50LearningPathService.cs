@@ -232,13 +232,37 @@ namespace XR50TrainingAssetRepo.Services
         public async Task<LearningPath> UpdateLearningPathAsync(LearningPath learningPath)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            context.Entry(learningPath).State = EntityState.Modified;
-            await context.SaveChangesAsync();
+            try
+            {
+                // Find existing learning path
+                var existing = await context.LearningPaths.FindAsync(learningPath.learningPath_id);
+                if (existing == null)
+                {
+                    throw new KeyNotFoundException($"Learning path {learningPath.learningPath_id} not found");
+                }
 
-            _logger.LogInformation("Updated learning path: {Id}", learningPath.learningPath_id);
+                // Delete old learning path
+                context.LearningPaths.Remove(existing);
+                await context.SaveChangesAsync();
 
-            return learningPath;
+                // Add new learning path with same ID (full replacement)
+                context.LearningPaths.Add(learningPath);
+                await context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                _logger.LogInformation("Updated learning path {Id} via delete-recreate",
+                    learningPath.learningPath_id);
+
+                return learningPath;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
 
         public async Task<bool> DeleteLearningPathAsync(int id)

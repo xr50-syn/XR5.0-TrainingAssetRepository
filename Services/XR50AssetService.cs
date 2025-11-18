@@ -172,13 +172,37 @@ namespace XR50TrainingAssetRepo.Services
         public async Task<Asset> UpdateAssetAsync(Asset asset)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            context.Assets.Update(asset);
-            await context.SaveChangesAsync();
+            try
+            {
+                // Find existing asset
+                var existing = await context.Assets.FindAsync(asset.Id);
+                if (existing == null)
+                {
+                    throw new KeyNotFoundException($"Asset {asset.Id} not found");
+                }
 
-            _logger.LogInformation("Updated asset {AssetId} ({Filename})", asset.Id, asset.Filename);
+                // Delete old asset
+                context.Assets.Remove(existing);
+                await context.SaveChangesAsync();
 
-            return asset;
+                // Add new asset with same ID (full replacement)
+                context.Assets.Add(asset);
+                await context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                _logger.LogInformation("Updated asset {AssetId} ({Filename}) via delete-recreate",
+                    asset.Id, asset.Filename);
+
+                return asset;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
 
         public async Task<bool> DeleteAssetAsync(string tenantName, int id)
