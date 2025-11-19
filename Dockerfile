@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build-env
+FROM mcr.microsoft.com/dotnet/sdk:8.0.404 AS build-env
 WORKDIR /App
 
 # Copy everything
@@ -27,7 +27,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get update \
     && apt-get install -y dotnet-sdk-8.0
 
-RUN dotnet tool install --global dotnet-ef
+RUN dotnet tool install --global dotnet-ef --version 8.0.8
 
 # Ensure the PATH includes .NET global tools
 ENV PATH="$PATH:/root/.dotnet/tools"
