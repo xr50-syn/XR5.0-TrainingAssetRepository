@@ -2,7 +2,15 @@ using System.ComponentModel.DataAnnotations;
 
 namespace XR50TrainingAssetRepo.Models.DTOs
 {
-     public class CreateTrainingProgramWithMaterialsRequest
+     public class LearningPathCreationRequest
+    {
+        public int? id { get; set; }
+        public string name { get; set; } = "";
+        public string? description { get; set; }
+        public bool? inherit_from_program { get; set; }
+    }
+
+    public class CreateTrainingProgramWithMaterialsRequest
     {
         [Required]
         [StringLength(255)]
@@ -20,6 +28,9 @@ namespace XR50TrainingAssetRepo.Models.DTOs
 
         // Optional: Learning path IDs to assign as well
         public List<int>? LearningPaths { get; set; }
+
+        // Optional: Learning path objects to create/assign (using snake_case to match your JSON)
+        public List<LearningPathCreationRequest>? learning_path { get; set; }
     }
     
     public class CreateTrainingProgramWithMaterialsResponse
@@ -197,5 +208,29 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public int TotalLearningPaths { get; set; }
         public Dictionary<string, int> MaterialsByType { get; set; } = new();
         public DateTime? LastUpdated { get; set; }
+    }
+
+    public class UpdateTrainingProgramRequest
+    {
+        [Required]
+        [StringLength(255)]
+        public string Name { get; set; } = "";
+
+        [StringLength(1000)]
+        public string? Description { get; set; }
+        public string? Objectives { get; set; }
+        public string? Requirements { get; set; }
+        public int? min_level_rank { get; set; }
+        public int? max_level_rank { get; set; }
+        public int? required_upto_level_rank { get; set; }
+
+        // Material IDs to assign to this program
+        public List<int> Materials { get; set; } = new();
+
+        // Learning path IDs to assign to this program
+        public List<int> LearningPaths { get; set; } = new();
+
+        // Optional: Learning path objects to create/assign (using snake_case to match your JSON)
+        public List<LearningPathCreationRequest>? learning_path { get; set; }
     }
 }

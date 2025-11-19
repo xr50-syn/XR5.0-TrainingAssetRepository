@@ -68,35 +68,37 @@ namespace XR50TrainingAssetRepo.Controllers
             }
         }
 
-        // PUT: api/{tenantName}/trainingprograms/5
+        // PUT: api/{tenantName}/programs/5
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutTrainingProgram(string tenantName, int id, TrainingProgram program)
+        public async Task<ActionResult<CompleteTrainingProgramResponse>> PutTrainingProgram(
+            string tenantName,
+            int id,
+            [FromBody] UpdateTrainingProgramRequest request)
         {
-            if (id != program.id)
-            {
-                return BadRequest("ID mismatch");
-            }
-
             _logger.LogInformation("Updating training program {Id} for tenant: {TenantName}", id, tenantName);
-            
+
             try
             {
-                await _trainingProgramService.UpdateTrainingProgramAsync(program);
-                _logger.LogInformation("Updated training program {Id} for tenant: {TenantName}", id, tenantName);
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!await _trainingProgramService.TrainingProgramExistsAsync(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
+                var result = await _trainingProgramService.UpdateCompleteTrainingProgramAsync(id, request);
+                _logger.LogInformation("Updated training program {Id} for tenant: {TenantName} with {MaterialCount} materials and {LearningPathCount} learning paths",
+                    id, tenantName, result.Materials.Count, result.LearningPaths.Count);
 
-            return NoContent();
+                return Ok(result);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound($"Training program {id} not found");
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogWarning("Invalid request for updating training program {Id}: {Message}", id, ex.Message);
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating training program {Id} for tenant: {TenantName}", id, tenantName);
+                return StatusCode(500, "An error occurred while updating the training program");
+            }
         }
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteTrainingProgram(string tenantName, int id)

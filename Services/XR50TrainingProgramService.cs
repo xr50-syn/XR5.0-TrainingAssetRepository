@@ -13,6 +13,7 @@ namespace XR50TrainingAssetRepo.Services
         Task<CompleteTrainingProgramResponse> CreateTrainingProgramAsync(CreateTrainingProgramWithMaterialsRequest request);
         Task<CreateTrainingProgramWithMaterialsResponse> CreateTrainingProgramWithMaterialsAsync(CreateTrainingProgramWithMaterialsRequest request);
         Task<TrainingProgram> UpdateTrainingProgramAsync(TrainingProgram program);
+        Task<CompleteTrainingProgramResponse> UpdateCompleteTrainingProgramAsync(int id, UpdateTrainingProgramRequest request);
         Task<bool> DeleteTrainingProgramAsync(int id);
         Task<bool> TrainingProgramExistsAsync(int id);
         Task<bool> AssignMaterialToTrainingProgramAsync(int trainingProgramId, int materialId);
@@ -83,7 +84,64 @@ namespace XR50TrainingAssetRepo.Services
                     }
                 }
 
-                // 2. Validate learning paths ONLY if any are provided
+                // 2. Handle learning_path objects (create or validate existing)
+                var learningPathIds = new List<int>();
+
+                if (request.learning_path?.Any() == true)
+                {
+                    foreach (var lpRequest in request.learning_path)
+                    {
+                        if (lpRequest.id.HasValue && lpRequest.id.Value > 0)
+                        {
+                            // ID provided - check if it exists
+                            var exists = await context.LearningPaths
+                                .AnyAsync(lp => lp.learningPath_id == lpRequest.id.Value);
+
+                            if (exists)
+                            {
+                                // Learning path exists, use it
+                                learningPathIds.Add(lpRequest.id.Value);
+                                _logger.LogInformation("Using existing learning path with ID: {Id}", lpRequest.id.Value);
+                            }
+                            else
+                            {
+                                // Learning path doesn't exist, create it with the provided name/description
+                                var newLearningPath = new LearningPath
+                                {
+                                    LearningPathName = lpRequest.name,
+                                    Description = lpRequest.description ?? ""
+                                };
+
+                                context.LearningPaths.Add(newLearningPath);
+                                await context.SaveChangesAsync(); // Save to get the ID
+
+                                learningPathIds.Add(newLearningPath.learningPath_id);
+
+                                _logger.LogInformation("Created new learning path: {Name} with ID: {Id} (requested ID {RequestedId} was not found)",
+                                    newLearningPath.LearningPathName, newLearningPath.learningPath_id, lpRequest.id.Value);
+                            }
+                        }
+                        else
+                        {
+                            // No ID - create new learning path
+                            var newLearningPath = new LearningPath
+                            {
+                                LearningPathName = lpRequest.name,
+                                Description = lpRequest.description ?? ""
+                            };
+
+                            context.LearningPaths.Add(newLearningPath);
+                            await context.SaveChangesAsync(); // Save to get the ID
+
+                            learningPathIds.Add(newLearningPath.learningPath_id);
+
+                            _logger.LogInformation("Created new learning path: {Name} with ID: {Id}",
+                                newLearningPath.LearningPathName, newLearningPath.learningPath_id);
+                        }
+                    }
+                }
+
+                // 3. Also validate any learning path IDs provided in the LearningPaths array
                 if (request.LearningPaths?.Any() == true)
                 {
                     var existingLearningPaths = await context.LearningPaths
@@ -99,7 +157,12 @@ namespace XR50TrainingAssetRepo.Services
                     {
                         throw new ArgumentException($"Learning paths not found: {string.Join(", ", missingLearningPaths)}");
                     }
+
+                    learningPathIds.AddRange(request.LearningPaths);
                 }
+
+                // Remove duplicates
+                learningPathIds = learningPathIds.Distinct().ToList();
 
                 // 3. Create the training program
                 var trainingProgram = new TrainingProgram
@@ -133,9 +196,9 @@ namespace XR50TrainingAssetRepo.Services
                 }
 
                 // 5. Create learning path assignments ONLY if learning paths are provided
-                if (request.LearningPaths?.Any() == true)
+                if (learningPathIds.Any())
                 {
-                    var programLearningPaths = request.LearningPaths.Select(learningPathId => new ProgramLearningPath
+                    var programLearningPaths = learningPathIds.Select(learningPathId => new ProgramLearningPath
                     {
                         TrainingProgramId = trainingProgram.id,
                         LearningPathId = learningPathId
@@ -149,7 +212,7 @@ namespace XR50TrainingAssetRepo.Services
                 await transaction.CommitAsync();
 
                 _logger.LogInformation("Successfully created training program {Id} with {MaterialCount} materials and {LearningPathCount} learning paths",
-                    trainingProgram.id, request.Materials.Count, request.LearningPaths?.Count ?? 0);
+                    trainingProgram.id, request.Materials.Count, learningPathIds.Count);
 
                 // 7. Return the complete training program response
                 return await GetCompleteTrainingProgramAsync(trainingProgram.id)
@@ -374,6 +437,179 @@ namespace XR50TrainingAssetRepo.Services
                 _ => "Unknown"
             };
         }
+        public async Task<CompleteTrainingProgramResponse> UpdateCompleteTrainingProgramAsync(int id, UpdateTrainingProgramRequest request)
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
+
+            try
+            {
+                // 1. Find existing program
+                var existing = await context.TrainingPrograms.FindAsync(id);
+                if (existing == null)
+                {
+                    throw new KeyNotFoundException($"Training program {id} not found");
+                }
+
+                // 2. Update basic properties
+                existing.Name = request.Name;
+                existing.Description = request.Description;
+                existing.Objectives = request.Objectives;
+                existing.Requirements = request.Requirements;
+                existing.min_level_rank = request.min_level_rank;
+                existing.max_level_rank = request.max_level_rank;
+                existing.required_upto_level_rank = request.required_upto_level_rank;
+
+                // 3. Update materials - remove existing and add new ones
+                var existingMaterials = await context.ProgramMaterials
+                    .Where(pm => pm.TrainingProgramId == id)
+                    .ToListAsync();
+
+                context.ProgramMaterials.RemoveRange(existingMaterials);
+
+                if (request.Materials.Any())
+                {
+                    // Validate materials exist
+                    var validMaterials = await context.Materials
+                        .Where(m => request.Materials.Contains(m.id))
+                        .Select(m => m.id)
+                        .ToListAsync();
+
+                    var missingMaterials = request.Materials.Except(validMaterials).ToList();
+                    if (missingMaterials.Any())
+                    {
+                        throw new ArgumentException($"Materials not found: {string.Join(", ", missingMaterials)}");
+                    }
+
+                    var newMaterials = request.Materials.Select(materialId => new ProgramMaterial
+                    {
+                        TrainingProgramId = id,
+                        MaterialId = materialId
+                    }).ToList();
+
+                    context.ProgramMaterials.AddRange(newMaterials);
+                }
+
+                // 4. Update learning paths - remove existing and add new ones
+                var existingLearningPaths = await context.ProgramLearningPaths
+                    .Where(plp => plp.TrainingProgramId == id)
+                    .ToListAsync();
+
+                context.ProgramLearningPaths.RemoveRange(existingLearningPaths);
+
+                // Handle learning_path objects (create or validate existing)
+                var learningPathIds = new List<int>();
+
+                if (request.learning_path?.Any() == true)
+                {
+                    foreach (var lpRequest in request.learning_path)
+                    {
+                        if (lpRequest.id.HasValue && lpRequest.id.Value > 0)
+                        {
+                            // ID provided - check if it exists
+                            var exists = await context.LearningPaths
+                                .AnyAsync(lp => lp.learningPath_id == lpRequest.id.Value);
+
+                            if (exists)
+                            {
+                                // Learning path exists, use it
+                                learningPathIds.Add(lpRequest.id.Value);
+                                _logger.LogInformation("Using existing learning path with ID: {Id}", lpRequest.id.Value);
+                            }
+                            else
+                            {
+                                // Learning path doesn't exist, create it with the provided name/description
+                                var newLearningPath = new LearningPath
+                                {
+                                    LearningPathName = lpRequest.name,
+                                    Description = lpRequest.description ?? ""
+                                };
+
+                                context.LearningPaths.Add(newLearningPath);
+                                await context.SaveChangesAsync(); // Save to get the ID
+
+                                learningPathIds.Add(newLearningPath.learningPath_id);
+
+                                _logger.LogInformation("Created new learning path: {Name} with ID: {Id} (requested ID {RequestedId} was not found)",
+                                    newLearningPath.LearningPathName, newLearningPath.learningPath_id, lpRequest.id.Value);
+                            }
+                        }
+                        else
+                        {
+                            // No ID - create new learning path
+                            var newLearningPath = new LearningPath
+                            {
+                                LearningPathName = lpRequest.name,
+                                Description = lpRequest.description ?? ""
+                            };
+
+                            context.LearningPaths.Add(newLearningPath);
+                            await context.SaveChangesAsync(); // Save to get the ID
+
+                            learningPathIds.Add(newLearningPath.learningPath_id);
+
+                            _logger.LogInformation("Created new learning path: {Name} with ID: {Id}",
+                                newLearningPath.LearningPathName, newLearningPath.learningPath_id);
+                        }
+                    }
+                }
+
+                // Also validate any learning path IDs provided in the LearningPaths array
+                if (request.LearningPaths.Any())
+                {
+                    // Validate learning paths exist
+                    var validLearningPaths = await context.LearningPaths
+                        .Where(lp => request.LearningPaths.Contains(lp.learningPath_id))
+                        .Select(lp => lp.learningPath_id)
+                        .ToListAsync();
+
+                    var missingLearningPaths = request.LearningPaths.Except(validLearningPaths).ToList();
+                    if (missingLearningPaths.Any())
+                    {
+                        throw new ArgumentException($"Learning paths not found: {string.Join(", ", missingLearningPaths)}");
+                    }
+
+                    learningPathIds.AddRange(request.LearningPaths);
+                }
+
+                // Remove duplicates
+                learningPathIds = learningPathIds.Distinct().ToList();
+
+                if (learningPathIds.Any())
+                {
+                    var newLearningPaths = learningPathIds.Select(learningPathId => new ProgramLearningPath
+                    {
+                        TrainingProgramId = id,
+                        LearningPathId = learningPathId
+                    }).ToList();
+
+                    context.ProgramLearningPaths.AddRange(newLearningPaths);
+                }
+
+                // 5. Save all changes
+                await context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                _logger.LogInformation("Updated training program {Id} with {MaterialCount} materials and {LearningPathCount} learning paths",
+                    id, request.Materials.Count, learningPathIds.Count);
+
+                // 6. Return the updated complete training program with appropriate message
+                var result = await GetCompleteTrainingProgramAsync(id)
+                    ?? throw new Exception("Failed to retrieve updated training program");
+
+                // Update the message to reflect this was an update operation
+                result.Status = "success";
+                result.Message = $"Training program '{result.Name}' updated successfully";
+
+                return result;
+            }
+            catch (Exception)
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
         public async Task<TrainingProgram> UpdateTrainingProgramAsync(TrainingProgram program)
         {
             using var context = _dbContextFactory.CreateDbContext();
