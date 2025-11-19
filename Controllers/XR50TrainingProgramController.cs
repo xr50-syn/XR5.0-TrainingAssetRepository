@@ -270,10 +270,16 @@ namespace XR50TrainingAssetRepo.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<CompleteTrainingProgramResponse>>> GetTrainingPrograms(string tenantName)
+        public async Task<ActionResult<IEnumerable<TrainingProgram>>> GetTrainingPrograms(string tenantName)
         {
-            
-            return await GetAllCompleteTrainingPrograms(tenantName);
+            _logger.LogInformation("Getting all training programs (summary) for tenant: {TenantName}", tenantName);
+
+            var results = await _trainingProgramService.GetAllTrainingProgramsAsync();
+
+            _logger.LogInformation("Retrieved {Count} training programs for tenant: {TenantName}",
+                results.Count(), tenantName);
+
+            return Ok(results);
         }
 
         /*[HttpPost("{trainingProgramId}/bulk-assign-materials")]
