@@ -2,14 +2,6 @@ using System.ComponentModel.DataAnnotations;
 
 namespace XR50TrainingAssetRepo.Models.DTOs
 {
-     public class LearningPathCreationRequest
-    {
-        public int? id { get; set; }
-        public string name { get; set; } = "";
-        public string? description { get; set; }
-        public bool? inherit_from_program { get; set; }
-    }
-
     public class CreateTrainingProgramWithMaterialsRequest
     {
         [Required]
@@ -29,8 +21,8 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         // Optional: Learning path IDs to assign as well
         public List<int>? LearningPaths { get; set; }
 
-        // Optional: Learning path objects to create/assign (using snake_case to match your JSON)
-        public List<LearningPathCreationRequest>? learning_path { get; set; }
+        // Optional: Learning path as ordered array of material IDs (using snake_case to match your JSON)
+        public List<int>? learning_path { get; set; }
     }
     
     public class CreateTrainingProgramWithMaterialsResponse
@@ -164,7 +156,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public List<MaterialResponse> Materials { get; set; } = new();
 
         // Complete learning path information
-        public List<LearningPathResponse> LearningPaths { get; set; } = new();
+        public List<LearningPathResponse> learning_path { get; set; } = new();
     }
 
     public class MaterialResponse
@@ -189,7 +181,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
 
     public class LearningPathResponse
     {
-        public int learningPath_id { get; set; }
+        public int id { get; set; }
         public string LearningPathName { get; set; } = "";
         public string Description { get; set; } = "";
     }
@@ -230,7 +222,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         // Learning path IDs to assign to this program
         public List<int> LearningPaths { get; set; } = new();
 
-        // Optional: Learning path objects to create/assign (using snake_case to match your JSON)
-        public List<LearningPathCreationRequest>? learning_path { get; set; }
+        // Optional: Learning path as ordered array of material IDs (using snake_case to match your JSON)
+        public List<int>? learning_path { get; set; }
     }
 }

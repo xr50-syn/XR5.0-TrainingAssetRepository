@@ -15,6 +15,7 @@ namespace XR50TrainingAssetRepo.Services
         Task<bool> CreateTablesInDatabaseAsync(string databaseName);
         Task<List<string>> GetExistingTablesAsync(string tenantName);
         Task<bool> DropAllTablesAsync(string tenantName);
+        Task<bool> MigrateAssetTypeColumnAsync(string tenantName);
     }
 
     public class XR50ManualTableCreator : IXR50ManualTableCreator
@@ -250,6 +251,7 @@ namespace XR50TrainingAssetRepo.Services
                     `Url` varchar(2000) DEFAULT NULL,
                     `Src` varchar(500) DEFAULT NULL,
                     `Filetype` varchar(100) DEFAULT NULL,
+                    `Type` int NOT NULL DEFAULT 0 COMMENT 'AssetType enum: 0=Image, 1=PDF, 2=Video, 3=Unity',
                     `Filename` varchar(255) NOT NULL,
                     PRIMARY KEY (`Id`)
                 )",
@@ -268,10 +270,10 @@ namespace XR50TrainingAssetRepo.Services
                 )",
 
                 @"CREATE TABLE IF NOT EXISTS `LearningPaths` (
-                    `learningPath_id` int NOT NULL AUTO_INCREMENT,
+                    `id` int NOT NULL AUTO_INCREMENT,
                     `Description` varchar(1000) NOT NULL,
                     `LearningPathName` varchar(255) NOT NULL,
-                    PRIMARY KEY (`learningPath_id`)
+                    PRIMARY KEY (`id`)
                 )",
 
         // Replace the Materials table creation in GetCreateTableStatements() method
@@ -476,6 +478,82 @@ namespace XR50TrainingAssetRepo.Services
             };
         }
 
+        public async Task<bool> MigrateAssetTypeColumnAsync(string tenantName)
+        {
+            try
+            {
+                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
+                var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
+
+                var connectionString = baseConnectionString.Replace($"Database={baseDatabaseName}", $"Database={tenantDbName}");
+
+                _logger.LogInformation("=== Migrating Asset.Type column for tenant: {TenantName} ===", tenantName);
+
+                using var connection = new MySqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                // Check if Type column already exists
+                var checkColumnQuery = @"
+                    SELECT COUNT(*)
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = @dbName
+                    AND TABLE_NAME = 'Assets'
+                    AND COLUMN_NAME = 'Type'";
+
+                using (var checkCmd = new MySqlCommand(checkColumnQuery, connection))
+                {
+                    checkCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                    var columnExists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+
+                    if (columnExists)
+                    {
+                        _logger.LogInformation("Type column already exists in Assets table for tenant: {TenantName}", tenantName);
+                        return true;
+                    }
+                }
+
+                // Add the Type column with a default value
+                var alterTableQuery = @"
+                    ALTER TABLE `Assets`
+                    ADD COLUMN `Type` int NOT NULL DEFAULT 0
+                    COMMENT 'AssetType enum: 0=Image, 1=PDF, 2=Video, 3=Unity'
+                    AFTER `Filetype`";
+
+                using (var alterCmd = new MySqlCommand(alterTableQuery, connection))
+                {
+                    await alterCmd.ExecuteNonQueryAsync();
+                    _logger.LogInformation("Successfully added Type column to Assets table for tenant: {TenantName}", tenantName);
+                }
+
+                // Infer Type from Filetype for existing records
+                var updateQuery = @"
+                    UPDATE `Assets`
+                    SET `Type` = CASE
+                        WHEN LOWER(`Filetype`) IN ('mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv') THEN 2
+                        WHEN LOWER(`Filetype`) IN ('pdf') THEN 1
+                        WHEN LOWER(`Filetype`) IN ('png', 'jpg', 'jpeg', 'gif', 'bmp', 'svg', 'webp') THEN 0
+                        WHEN LOWER(`Filetype`) IN ('unity', 'unitypackage', 'bundle') THEN 3
+                        ELSE 0
+                    END
+                    WHERE `Type` = 0";
+
+                using (var updateCmd = new MySqlCommand(updateQuery, connection))
+                {
+                    var rowsAffected = await updateCmd.ExecuteNonQueryAsync();
+                    _logger.LogInformation("Updated {RowCount} existing asset records with inferred Type values for tenant: {TenantName}",
+                        rowsAffected, tenantName);
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating Asset.Type column for tenant: {TenantName}", tenantName);
+                return false;
+            }
+        }
+
         private string GetCreateTablesScript()
         {
             return @"
@@ -521,8 +599,9 @@ CREATE TABLE IF NOT EXISTS `Assets` (
     `Url` varchar(2000) DEFAULT NULL,
     `Src` varchar(500) DEFAULT NULL,
     `Filetype` varchar(100) DEFAULT NULL,
+    `Type` int NOT NULL DEFAULT 0 COMMENT 'AssetType enum: 0=Image, 1=PDF, 2=Video, 3=Unity',
     `Filename` varchar(255) NOT NULL,
-    PRIMARY KEY (`AssetId`)
+    PRIMARY KEY (`Id`)
 )
 
 CREATE TABLE IF NOT EXISTS `Shares` (

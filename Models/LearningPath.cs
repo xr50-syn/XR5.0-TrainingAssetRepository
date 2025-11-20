@@ -10,7 +10,7 @@ namespace XR50TrainingAssetRepo.Models
     public class LearningPath
     {
         [Key]
-        public int learningPath_id { get; set; }
+        public int id { get; set; }
         public string Description { get; set; }
         public string LearningPathName { get; set; }
         [JsonIgnore]

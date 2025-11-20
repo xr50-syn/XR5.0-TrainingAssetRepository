@@ -124,13 +124,13 @@ namespace XR50TrainingAssetRepo.Tests
             var material = new VideoMaterial { Name = "Test Video" };
             await _materialService.CreateMaterialAsync(material);
             
-            var learningPath = new LearningPath { learningPath_id = 1, LearningPathName = "Test Path", Description = "Test" };
+            var learningPath = new LearningPath { id = 1, LearningPathName = "Test Path", Description = "Test" };
             _context.LearningPaths.Add(learningPath);
             await _context.SaveChangesAsync();
 
             // Act
             var relationshipId = await _materialService.AssignMaterialToLearningPathAsync(
-                material.id, learningPath.learningPath_id, "contains", 1);
+                material.id, learningPath.id, "contains", 1);
 
             // Assert
             Assert.NotNull(relationshipId);
@@ -138,7 +138,7 @@ namespace XR50TrainingAssetRepo.Tests
             var relationships = await _materialService.GetMaterialRelationshipsAsync(material.id);
             var lpRelationship = relationships.FirstOrDefault(r => r.RelatedEntityType == "LearningPath");
             Assert.NotNull(lpRelationship);
-            Assert.Equal(learningPath.learningPath_id.ToString(), lpRelationship.RelatedEntityId);
+            Assert.Equal(learningPath.id.ToString(), lpRelationship.RelatedEntityId);
         }
 
         [Fact]
@@ -150,16 +150,16 @@ namespace XR50TrainingAssetRepo.Tests
             await _materialService.CreateMaterialAsync(material1);
             await _materialService.CreateMaterialAsync(material2);
             
-            var learningPath = new LearningPath { learningPath_id = 1, LearningPathName = "Test Path", Description = "Test" };
+            var learningPath = new LearningPath { id = 1, LearningPathName = "Test Path", Description = "Test" };
             _context.LearningPaths.Add(learningPath);
             await _context.SaveChangesAsync();
 
             // Assign materials to learning path
-            await _materialService.AssignMaterialToLearningPathAsync(material1.id, learningPath.learningPath_id, "contains", 1);
-            await _materialService.AssignMaterialToLearningPathAsync(material2.id, learningPath.learningPath_id, "contains", 2);
+            await _materialService.AssignMaterialToLearningPathAsync(material1.id, learningPath.id, "contains", 1);
+            await _materialService.AssignMaterialToLearningPathAsync(material2.id, learningPath.id, "contains", 2);
 
             // Act
-            var materials = await _materialService.GetMaterialsByLearningPathAsync(learningPath.learningPath_id);
+            var materials = await _materialService.GetMaterialsByLearningPathAsync(learningPath.id);
 
             // Assert
             Assert.Equal(2, materials.Count());
@@ -313,7 +313,7 @@ namespace XR50TrainingAssetRepo.Tests
             var programLearningPath = new ProgramLearningPath
             {
                 TrainingProgramId = program.id,
-                LearningPathId = learningPath.learningPath_id
+                LearningPathId = learningPath.id
             };
             _context.ProgramLearningPaths.Add(programLearningPath);
             await _context.SaveChangesAsync();
@@ -386,12 +386,12 @@ namespace XR50TrainingAssetRepo.Tests
             
             // 3. Assign materials to learning path
             await _materialService.AssignMaterialToLearningPathAsync(
-                videoMaterial.id, learningPath.learningPath_id, "contains", 1);
+                videoMaterial.id, learningPath.id, "contains", 1);
             await _materialService.AssignMaterialToLearningPathAsync(
-                checklistMaterial.id, learningPath.learningPath_id, "contains", 2);
+                checklistMaterial.id, learningPath.id, "contains", 2);
 
             // 4. Verify the assignments work
-            var pathMaterials = await _materialService.GetMaterialsByLearningPathAsync(learningPath.learningPath_id);
+            var pathMaterials = await _materialService.GetMaterialsByLearningPathAsync(learningPath.id);
             Assert.Equal(2, pathMaterials.Count());
             
             var materialIds = pathMaterials.Select(m => m.id).ToList();
@@ -415,7 +415,7 @@ namespace XR50TrainingAssetRepo.Tests
             await _context.SaveChangesAsync();
             
             // Assign material to both learning path and training program
-            await _materialService.AssignMaterialToLearningPathAsync(material.id, learningPath.learningPath_id);
+            await _materialService.AssignMaterialToLearningPathAsync(material.id, learningPath.id);
             await _materialService.AssignMaterialToTrainingProgramAsync(material.id, trainingProgram.id);
             
             // Verify relationships exist

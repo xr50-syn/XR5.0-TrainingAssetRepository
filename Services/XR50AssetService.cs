@@ -80,20 +80,24 @@ namespace XR50TrainingAssetRepo.Services
         public async Task<Asset> CreateAssetReference(string tenantName, AssetReferenceData assetRefData)
         {
             using var context = _dbContextFactory.CreateDbContext();
-            
+
+            var filetype = assetRefData.Filetype ?? GetFiletypeFromFilename(assetRefData.Filename ?? assetRefData.Src ?? assetRefData.URL);
+
             var asset = new Asset
             {
                 Filename = assetRefData.Filename ?? GenerateFilenameFromUrl(assetRefData.Src ?? assetRefData.URL),
                 Description = assetRefData.Description,
-                Filetype = assetRefData.Filetype ?? GetFiletypeFromFilename(assetRefData.Filename ?? assetRefData.Src ?? assetRefData.URL),
+                Filetype = filetype,
+                Type = InferAssetTypeFromFiletype(filetype),
                 Src = assetRefData.Src ?? assetRefData.URL,
                 URL = assetRefData.URL ?? assetRefData.Src
             };
 
             context.Assets.Add(asset);
             await context.SaveChangesAsync();
-            
-            _logger.LogInformation("Created asset reference {AssetId} pointing to {Src}", asset.Id, asset.Src);
+
+            _logger.LogInformation("Created asset reference {AssetId} (Type: {AssetType}) pointing to {Src}",
+                asset.Id, asset.Type, asset.Src);
             return asset;
         }
         // NEW: Helper to generate filename from URL
@@ -101,15 +105,40 @@ namespace XR50TrainingAssetRepo.Services
         {
             if (string.IsNullOrEmpty(url))
                 return Guid.NewGuid().ToString();
-            
+
             if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
             {
                 var filename = Path.GetFileName(uri.LocalPath);
                 if (!string.IsNullOrEmpty(filename))
                     return filename;
             }
-            
+
             return Guid.NewGuid().ToString();
+        }
+
+        // Helper to infer AssetType from Filetype
+        private AssetType InferAssetTypeFromFiletype(string? filetype)
+        {
+            if (string.IsNullOrEmpty(filetype))
+                return AssetType.Image; // Default to Image
+
+            var lower = filetype.ToLower();
+
+            // Video types
+            if (lower == "mp4" || lower == "avi" || lower == "mov" || lower == "wmv" ||
+                lower == "flv" || lower == "webm" || lower == "mkv")
+                return AssetType.Video;
+
+            // PDF
+            if (lower == "pdf")
+                return AssetType.PDF;
+
+            // Unity
+            if (lower == "unity" || lower == "unitypackage" || lower == "bundle")
+                return AssetType.Unity;
+
+            // Image (default) - png, jpg, jpeg, gif, bmp, svg, webp
+            return AssetType.Image;
         }
 
         public async Task<Asset> CreateAssetAsync(Asset asset, string tenantName, IFormFile file)
@@ -329,11 +358,13 @@ namespace XR50TrainingAssetRepo.Services
                 var uploadResult = await _storageService.UploadFileAsync(tenantName, filename, file);
 
                 // Create asset record
+                var filetype = GetFiletypeFromFilename(filename);
                 var asset = new Asset
                 {
                     Filename = filename,
                     Description = description,
-                    Filetype = GetFiletypeFromFilename(filename),
+                    Filetype = filetype,
+                    Type = InferAssetTypeFromFiletype(filetype),
                     Src = uploadResult
                 };
 

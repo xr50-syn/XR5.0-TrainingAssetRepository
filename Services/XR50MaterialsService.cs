@@ -109,6 +109,15 @@ namespace XR50TrainingAssetRepo.Services
         Task<bool> RemoveMaterialDependencyAsync(int materialId, int prerequisiteMaterialId);
         Task<IEnumerable<Material>> GetMaterialPrerequisitesAsync(int materialId);
         Task<IEnumerable<Material>> GetMaterialDependentsAsync(int materialId);
+
+        // Material-to-Material Relationships (Hierarchical)
+        Task<int> AssignMaterialToMaterialAsync(int parentMaterialId, int childMaterialId, string relationshipType = "contains", int? displayOrder = null);
+        Task<bool> RemoveMaterialFromMaterialAsync(int parentMaterialId, int childMaterialId);
+        Task<IEnumerable<Material>> GetChildMaterialsAsync(int parentMaterialId, bool includeOrder = true, string? relationshipType = null);
+        Task<IEnumerable<Material>> GetParentMaterialsAsync(int childMaterialId, string? relationshipType = null);
+        Task<bool> ReorderChildMaterialsAsync(int parentMaterialId, Dictionary<int, int> materialOrderMap);
+        Task<bool> WouldCreateCircularReferenceAsync(int parentMaterialId, int childMaterialId);
+        Task<MaterialHierarchy> GetMaterialHierarchyAsync(int rootMaterialId, int maxDepth = 5);
     }
     public class MaterialService : IMaterialService
     {
@@ -321,10 +330,11 @@ namespace XR50TrainingAssetRepo.Services
                                         context.Entry(newAnswer).Property("QuizQuestionId").CurrentValue = newQuestion.QuizQuestionId;
                                         context.QuizAnswers.Add(newAnswer);
                                     }
+
+                                    // Save answers immediately after adding them for this question
+                                    await context.SaveChangesAsync();
                                 }
                             }
-
-                            await context.SaveChangesAsync();
                             _logger.LogInformation("Successfully added {Count} quiz questions to material {Id}",
                                 quiz.Questions.Count, material.id);
                         }
@@ -1439,10 +1449,11 @@ namespace XR50TrainingAssetRepo.Services
                             context.Entry(answer).Property("QuizQuestionId").CurrentValue = question.QuizQuestionId;
                             context.QuizAnswers.Add(answer);
                         }
+
+                        // Save answers immediately after adding them for this question
+                        await context.SaveChangesAsync();
                     }
                 }
-
-                await context.SaveChangesAsync();
 
                 _logger.LogInformation("Added {QuestionCount} initial questions to quiz {QuizId}",
                     initialQuestions.Count(), quiz.id);
@@ -1934,12 +1945,25 @@ namespace XR50TrainingAssetRepo.Services
         {
             using var context = _dbContextFactory.CreateDbContext();
 
-            return await (from mr in context.MaterialRelationships
-                          join m in context.Materials on int.Parse(mr.RelatedEntityId) equals m.id
-                          where mr.MaterialId == materialId &&
-                                mr.RelatedEntityType == "Material" &&
-                                mr.RelationshipType == "prerequisite"
-                          select m).ToListAsync();
+            // Get relationships first
+            var relationships = await context.MaterialRelationships
+                .Where(mr => mr.MaterialId == materialId &&
+                             mr.RelatedEntityType == "Material" &&
+                             mr.RelationshipType == "prerequisite")
+                .ToListAsync();
+
+            // Parse IDs and get materials
+            var prerequisiteIds = relationships
+                .Select(mr => int.TryParse(mr.RelatedEntityId, out int id) ? id : 0)
+                .Where(id => id > 0)
+                .ToList();
+
+            if (!prerequisiteIds.Any())
+                return Enumerable.Empty<Material>();
+
+            return await context.Materials
+                .Where(m => prerequisiteIds.Contains(m.id))
+                .ToListAsync();
         }
 
         public async Task<IEnumerable<Material>> GetMaterialDependentsAsync(int materialId)
@@ -2031,25 +2055,48 @@ namespace XR50TrainingAssetRepo.Services
             return true;
         }
 
-        public async Task<IEnumerable<Material>> GetChildMaterialsAsync(int parentMaterialId, 
+        public async Task<IEnumerable<Material>> GetChildMaterialsAsync(int parentMaterialId,
             bool includeOrder = true, string? relationshipType = null)
         {
             using var context = _dbContextFactory.CreateDbContext();
-            
-            var query = from mr in context.MaterialRelationships
-                        join m in context.Materials on int.Parse(mr.RelatedEntityId) equals m.id
-                        where mr.MaterialId == parentMaterialId &&
-                              mr.RelatedEntityType == "Material" &&
-                              (relationshipType == null || mr.RelationshipType == relationshipType)
-                        select new { Material = m, Relationship = mr };
-            
+
+            // Get relationships first
+            var relationshipsQuery = context.MaterialRelationships
+                .Where(mr => mr.MaterialId == parentMaterialId &&
+                             mr.RelatedEntityType == "Material" &&
+                             (relationshipType == null || mr.RelationshipType == relationshipType));
+
             if (includeOrder)
             {
-                query = query.OrderBy(x => x.Relationship.DisplayOrder ?? int.MaxValue);
+                relationshipsQuery = relationshipsQuery.OrderBy(mr => mr.DisplayOrder ?? int.MaxValue);
             }
-            
-            var results = await query.ToListAsync();
-            return results.Select(r => r.Material);
+
+            var relationships = await relationshipsQuery.ToListAsync();
+
+            // Parse IDs and get materials
+            var childIds = relationships
+                .Select(mr => int.TryParse(mr.RelatedEntityId, out int id) ? id : 0)
+                .Where(id => id > 0)
+                .ToList();
+
+            if (!childIds.Any())
+                return Enumerable.Empty<Material>();
+
+            // Get materials in the order specified by relationships
+            var materials = await context.Materials
+                .Where(m => childIds.Contains(m.id))
+                .ToListAsync();
+
+            // Return materials in the correct order
+            if (includeOrder)
+            {
+                var materialDict = materials.ToDictionary(m => m.id);
+                return childIds
+                    .Where(id => materialDict.ContainsKey(id))
+                    .Select(id => materialDict[id]);
+            }
+
+            return materials;
         }
 
         public async Task<IEnumerable<Material>> GetParentMaterialsAsync(int childMaterialId, 
@@ -2107,11 +2154,15 @@ namespace XR50TrainingAssetRepo.Services
             
             visited.Add(currentParentId);
             
-            var children = await context.MaterialRelationships
+            var relationships = await context.MaterialRelationships
                 .Where(mr => mr.MaterialId == currentParentId &&
                            mr.RelatedEntityType == "Material")
-                .Select(mr => int.Parse(mr.RelatedEntityId))
                 .ToListAsync();
+
+            var children = relationships
+                .Select(mr => int.TryParse(mr.RelatedEntityId, out int id) ? id : 0)
+                .Where(id => id > 0)
+                .ToList();
             
             foreach (var childId in children)
             {
@@ -2143,18 +2194,42 @@ namespace XR50TrainingAssetRepo.Services
             return hierarchy;
         }
 
-        private async Task BuildHierarchyRecursive(XR50TrainingContext context, List<MaterialHierarchyNode> nodes, 
+        private async Task BuildHierarchyRecursive(XR50TrainingContext context, List<MaterialHierarchyNode> nodes,
             int parentId, int currentDepth, int maxDepth)
         {
             if (currentDepth >= maxDepth) return;
-            
-            var childRelationships = await (from mr in context.MaterialRelationships
-                                           join m in context.Materials on int.Parse(mr.RelatedEntityId) equals m.id
-                                           where mr.MaterialId == parentId &&
-                                                 mr.RelatedEntityType == "Material"
-                                           orderby mr.DisplayOrder ?? int.MaxValue
-                                           select new { Material = m, Relationship = mr }).ToListAsync();
-            
+
+            // Get relationships first
+            var relationships = await context.MaterialRelationships
+                .Where(mr => mr.MaterialId == parentId &&
+                             mr.RelatedEntityType == "Material")
+                .OrderBy(mr => mr.DisplayOrder ?? int.MaxValue)
+                .ToListAsync();
+
+            // Parse IDs and get materials
+            var childIds = relationships
+                .Select(mr => int.TryParse(mr.RelatedEntityId, out int id) ? id : 0)
+                .Where(id => id > 0)
+                .ToList();
+
+            if (!childIds.Any()) return;
+
+            var materials = await context.Materials
+                .Where(m => childIds.Contains(m.id))
+                .ToListAsync();
+
+            var materialDict = materials.ToDictionary(m => m.id);
+
+            // Build items in the correct order
+            var childRelationships = new List<(Material Material, MaterialRelationship Relationship)>();
+            foreach (var rel in relationships)
+            {
+                if (int.TryParse(rel.RelatedEntityId, out int id) && materialDict.ContainsKey(id))
+                {
+                    childRelationships.Add((materialDict[id], rel));
+                }
+            }
+
             foreach (var item in childRelationships)
             {
                 var node = new MaterialHierarchyNode

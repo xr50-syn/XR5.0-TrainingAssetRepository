@@ -127,9 +127,11 @@ private async Task<object?> GetWorkflowDetails(int materialId)
     var workflow = await _materialService.GetWorkflowMaterialWithStepsAsync(materialId);
     if (workflow == null) return null;
 
+    var related = await GetRelatedMaterialsAsync(materialId);
+
     return new
     {
-        id = workflow.id,
+        id = workflow.id.ToString(),
         Name = workflow.Name,
         Description = workflow.Description,
         Type = GetLowercaseType(workflow.Type),
@@ -143,7 +145,8 @@ private async Task<object?> GetWorkflowDetails(int materialId)
                 Title = ws.Title,
                 Content = ws.Content
             }) ?? Enumerable.Empty<object>()
-        }
+        },
+        Related = related
     };
 }
 
@@ -171,9 +174,11 @@ private async Task<object?> GetVideoDetails(int materialId)
         }
     }
 
+    var related = await GetRelatedMaterialsAsync(materialId);
+
     return new
     {
-        id = video.id,
+        id = video.id.ToString(),
         Name = video.Name,
         Description = video.Description,
         Type = GetLowercaseType(video.Type),
@@ -189,7 +194,8 @@ private async Task<object?> GetVideoDetails(int materialId)
             Title = vt.Title,
             Time = vt.Time,
             Description = vt.Description
-        }) ?? Enumerable.Empty<object>()
+        }) ?? Enumerable.Empty<object>(),
+        Related = related
     };
 }
 
@@ -198,9 +204,11 @@ private async Task<object?> GetChecklistDetails(int materialId)
     var checklist = await _materialService.GetChecklistMaterialWithEntriesAsync(materialId);
     if (checklist == null) return null;
 
+    var related = await GetRelatedMaterialsAsync(materialId);
+
     return new
     {
-        id = checklist.id,
+        id = checklist.id.ToString(),
         Name = checklist.Name,
         Description = checklist.Description,
         Type = GetLowercaseType(checklist.Type),
@@ -214,7 +222,8 @@ private async Task<object?> GetChecklistDetails(int materialId)
                 Text = ce.Text,
                 Description = ce.Description
             }) ?? Enumerable.Empty<object>()
-        }
+        },
+        Related = related
     };
 }
 
@@ -223,9 +232,11 @@ private async Task<object?> GetQuestionnaireDetails(int materialId)
     var questionnaire = await _materialService.GetQuestionnaireMaterialWithEntriesAsync(materialId);
     if (questionnaire == null) return null;
 
+    var related = await GetRelatedMaterialsAsync(materialId);
+
     return new
     {
-        id = questionnaire.id,
+        id = questionnaire.id.ToString(),
         Name = questionnaire.Name,
         Description = questionnaire.Description,
         Type = GetLowercaseType(questionnaire.Type),
@@ -242,7 +253,8 @@ private async Task<object?> GetQuestionnaireDetails(int materialId)
                 Text = qe.Text,
                 Description = qe.Description
             }) ?? Enumerable.Empty<object>()
-        }
+        },
+        Related = related
     };
 }
 
@@ -251,9 +263,11 @@ private async Task<object?> GetQuizDetails(int materialId)
     var quiz = await _materialService.GetQuizMaterialWithQuestionsAsync(materialId);
     if (quiz == null) return null;
 
+    var related = await GetRelatedMaterialsAsync(materialId);
+
     return new
     {
-        id = quiz.id,
+        id = quiz.id.ToString(),
         Name = quiz.Name,
         Description = quiz.Description,
         Type = GetLowercaseType(quiz.Type),
@@ -280,7 +294,8 @@ private async Task<object?> GetQuizDetails(int materialId)
                     DisplayOrder = a.DisplayOrder
                 }) ?? Enumerable.Empty<object>()
             }) ?? Enumerable.Empty<object>()
-        }
+        },
+        Related = related
     };
 }
 
@@ -308,9 +323,12 @@ private async Task<object?> GetImageDetails(int materialId)
         }
     }
 
+    // Get related materials
+    var related = await GetRelatedMaterialsAsync(materialId);
+
     return new
     {
-        id = image.id,
+        id = image.id.ToString(),
         Name = image.Name,
         Description = image.Description,
         Type = GetLowercaseType(image.Type),
@@ -320,7 +338,8 @@ private async Task<object?> GetImageDetails(int materialId)
         ImagePath = image.ImagePath,
         ImageWidth = image.ImageWidth,
         ImageHeight = image.ImageHeight,
-        ImageFormat = image.ImageFormat
+        ImageFormat = image.ImageFormat,
+        Related = related
     };
 }
 
@@ -348,9 +367,11 @@ private async Task<object?> GetPDFDetails(int materialId)
         }
     }
 
+    var related = await GetRelatedMaterialsAsync(materialId);
+
     return new
     {
-        id = pdf.id,
+        id = pdf.id.ToString(),
         Name = pdf.Name,
         Description = pdf.Description,
         Type = GetLowercaseType(pdf.Type),
@@ -359,7 +380,8 @@ private async Task<object?> GetPDFDetails(int materialId)
         Asset = asset,
         PdfPath = pdf.PdfPath,
         PdfPageCount = pdf.PdfPageCount,
-        PdfFileSize = pdf.PdfFileSize
+        PdfFileSize = pdf.PdfFileSize,
+        Related = related
     };
 }
 
@@ -387,9 +409,11 @@ private async Task<object?> GetUnityDetails(int materialId)
         }
     }
 
+    var related = await GetRelatedMaterialsAsync(materialId);
+
     return new
     {
-        id = unity.id,
+        id = unity.id.ToString(),
         Name = unity.Name,
         Description = unity.Description,
         Type = GetLowercaseType(unity.Type),
@@ -398,7 +422,8 @@ private async Task<object?> GetUnityDetails(int materialId)
         Asset = asset,
         UnityVersion = unity.UnityVersion,
         UnityBuildTarget = unity.UnityBuildTarget,
-        UnitySceneName = unity.UnitySceneName
+        UnitySceneName = unity.UnitySceneName,
+        Related = related
     };
 }
 
@@ -407,9 +432,11 @@ private async Task<object?> GetChatbotDetails(int materialId)
     var chatbot = await _materialService.GetChatbotMaterialAsync(materialId);
     if (chatbot == null) return null;
 
+    var related = await GetRelatedMaterialsAsync(materialId);
+
     return new
     {
-        id = chatbot.id,
+        id = chatbot.id.ToString(),
         Name = chatbot.Name,
         Description = chatbot.Description,
         Type = GetLowercaseType(chatbot.Type),
@@ -417,7 +444,8 @@ private async Task<object?> GetChatbotDetails(int materialId)
         Updated_at = chatbot.Updated_at,
         ChatbotConfig = chatbot.ChatbotConfig,
         ChatbotModel = chatbot.ChatbotModel,
-        ChatbotPrompt = chatbot.ChatbotPrompt
+        ChatbotPrompt = chatbot.ChatbotPrompt,
+        Related = related
     };
 }
 
@@ -426,16 +454,19 @@ private async Task<object?> GetMQTTTemplateDetails(int materialId)
     var mqtt = await _materialService.GetMQTTTemplateMaterialAsync(materialId);
     if (mqtt == null) return null;
 
+    var related = await GetRelatedMaterialsAsync(materialId);
+
     return new
     {
-        id = mqtt.id,
+        id = mqtt.id.ToString(),
         Name = mqtt.Name,
         Description = mqtt.Description,
         Type = GetLowercaseType(mqtt.Type),
         Created_at = mqtt.Created_at,
         Updated_at = mqtt.Updated_at,
         MessageType = mqtt.message_type,
-        MessageText = mqtt.message_text
+        MessageText = mqtt.message_text,
+        Related = related
     };
 }
 
@@ -463,15 +494,18 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         }
     }
 
+    var related = await GetRelatedMaterialsAsync(materialId);
+
     return new
     {
-        id = material.id,
+        id = material.id.ToString(),
         Name = material.Name,
         Description = material.Description,
         Type = GetLowercaseType(material.Type),
         Created_at = material.Created_at,
         Updated_at = material.Updated_at,
-        Asset = asset
+        Asset = asset,
+        Related = related
     };
 }
         [HttpGet("{id}/typed")]
@@ -846,6 +880,9 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                     _logger.LogInformation("Created material {MaterialId} ({Name}) with asset {AssetId}",
                         createdMaterial.id, createdMaterial.Name, createdAsset.Id);
+
+                    // Process related materials if provided
+                    await ProcessRelatedMaterialsAsync(createdMaterial.id, materialData);
 
                     var response = new CreateMaterialResponse
                     {
@@ -1270,6 +1307,9 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 _logger.LogInformation("Created workflow material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
 
+                // Process related materials if provided
+                await ProcessRelatedMaterialsAsync(createdMaterial.id, jsonElement);
+
                 var response = new CreateMaterialResponse
                 {
                     Status = "success",
@@ -1349,6 +1389,9 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 
                 _logger.LogInformation("Created video material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
+
+                // Process related materials if provided
+                await ProcessRelatedMaterialsAsync(createdMaterial.id, jsonElement);
 
                 var response = new CreateMaterialResponse
                 {
@@ -1435,6 +1478,9 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 
                 _logger.LogInformation("Created checklist material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
+
+                // Process related materials if provided
+                await ProcessRelatedMaterialsAsync(createdMaterial.id, jsonElement);
 
                 var response = new CreateMaterialResponse
                 {
@@ -1529,6 +1575,9 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 
                 _logger.LogInformation("Created questionnaire material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
+
+                // Process related materials if provided
+                await ProcessRelatedMaterialsAsync(createdMaterial.id, jsonElement);
 
                 var response = new CreateMaterialResponse
                 {
@@ -1672,6 +1721,9 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 _logger.LogInformation("Created quiz material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
 
+                // Process related materials if provided
+                await ProcessRelatedMaterialsAsync(createdMaterial.id, jsonElement);
+
                 var response = new CreateMaterialResponse
                 {
                     Status = "success",
@@ -1714,6 +1766,9 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 _logger.LogInformation("Created basic material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
+
+                // Process related materials if provided
+                await ProcessRelatedMaterialsAsync(createdMaterial.id, jsonElement);
 
                 var response = new CreateMaterialResponse
                 {
@@ -2177,34 +2232,149 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         }
         
         // PUT: api/{tenantName}/materials/5
+        // JSON-based PUT endpoint that accepts the same format as GET responses
+        // Supports updating material properties and managing relationships via 'related' array
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutMaterial(string tenantName, int id, Material material)
+        public async Task<IActionResult> PutMaterial(string tenantName, string id)
         {
-            if (id != material.id)
-            {
-                return BadRequest("ID mismatch");
-            }
-
-            _logger.LogInformation("Updating material {Id} for tenant: {TenantName}", id, tenantName);
-
             try
             {
-                await _materialService.UpdateMaterialAsync(material);
-                _logger.LogInformation("Updated material {Id} for tenant: {TenantName}", id, tenantName);
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!await _materialService.MaterialExistsAsync(id))
+                // Parse the ID from string (supports future UUID migration)
+                if (!int.TryParse(id, out int materialId))
                 {
-                    return NotFound();
+                    return BadRequest($"Invalid material ID format: {id}");
                 }
-                else
-                {
-                    throw;
-                }
-            }
 
-            return NoContent();
+                // Read the raw JSON body
+                using var reader = new StreamReader(Request.Body);
+                var body = await reader.ReadToEndAsync();
+                var jsonElement = JsonSerializer.Deserialize<JsonElement>(body);
+
+                // Verify ID in body matches route parameter
+                if (TryGetPropertyCaseInsensitive(jsonElement, "id", out var idProp))
+                {
+                    string bodyId = idProp.ValueKind == JsonValueKind.String
+                        ? idProp.GetString() ?? ""
+                        : idProp.GetInt32().ToString();
+
+                    if (bodyId != id)
+                    {
+                        return BadRequest($"ID mismatch: route={id}, body={bodyId}");
+                    }
+                }
+
+                _logger.LogInformation("Updating material {Id} for tenant: {TenantName}", materialId, tenantName);
+
+                // Check if material exists
+                var existingMaterial = await _materialService.GetMaterialAsync(materialId);
+                if (existingMaterial == null)
+                {
+                    return NotFound($"Material with ID {materialId} not found");
+                }
+
+                // Parse the material from JSON (excluding 'related' array)
+                var material = ParseMaterialFromJson(jsonElement);
+                if (material == null)
+                {
+                    return BadRequest("Invalid material data or unsupported material type");
+                }
+
+                // Ensure the ID is set correctly
+                material.id = materialId;
+
+                // Update the material
+                await _materialService.UpdateMaterialAsync(material);
+                _logger.LogInformation("Updated material {Id} for tenant: {TenantName}", materialId, tenantName);
+
+                // Handle 'related' array if provided
+                if (TryGetPropertyCaseInsensitive(jsonElement, "related", out var relatedElement) &&
+                    relatedElement.ValueKind == JsonValueKind.Array)
+                {
+                    _logger.LogInformation("Processing relationship updates for material {Id}", materialId);
+
+                    // Get current relationships
+                    var currentChildren = await _materialService.GetChildMaterialsAsync(materialId, includeOrder: true);
+                    var currentChildIds = currentChildren.Select(m => m.id).ToHashSet();
+
+                    // Parse desired relationships from JSON
+                    var desiredChildIds = new HashSet<int>();
+                    foreach (var relatedItem in relatedElement.EnumerateArray())
+                    {
+                        if (TryGetPropertyCaseInsensitive(relatedItem, "id", out var childIdProp))
+                        {
+                            int childId;
+                            if (childIdProp.ValueKind == JsonValueKind.String)
+                            {
+                                if (int.TryParse(childIdProp.GetString(), out childId))
+                                {
+                                    desiredChildIds.Add(childId);
+                                }
+                            }
+                            else if (childIdProp.ValueKind == JsonValueKind.Number)
+                            {
+                                desiredChildIds.Add(childIdProp.GetInt32());
+                            }
+                        }
+                    }
+
+                    // Remove relationships that are no longer present
+                    foreach (var childId in currentChildIds)
+                    {
+                        if (!desiredChildIds.Contains(childId))
+                        {
+                            try
+                            {
+                                await _materialService.RemoveMaterialFromMaterialAsync(materialId, childId);
+                                _logger.LogInformation("Removed relationship: material {ParentId} -> {ChildId}",
+                                    materialId, childId);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Failed to remove relationship: material {ParentId} -> {ChildId}",
+                                    materialId, childId);
+                            }
+                        }
+                    }
+
+                    // Add new relationships
+                    int displayOrder = 1;
+                    foreach (var childId in desiredChildIds)
+                    {
+                        if (!currentChildIds.Contains(childId))
+                        {
+                            try
+                            {
+                                await _materialService.AssignMaterialToMaterialAsync(
+                                    materialId, childId, "contains", displayOrder);
+                                _logger.LogInformation("Added relationship: material {ParentId} -> {ChildId}",
+                                    materialId, childId);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Failed to add relationship: material {ParentId} -> {ChildId}",
+                                    materialId, childId);
+                            }
+                        }
+                        displayOrder++;
+                    }
+                }
+
+                return NoContent();
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound($"Material with ID {id} not found");
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogWarning(ex, "Invalid material type for update");
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating material {Id} for tenant: {TenantName}", id, tenantName);
+                return StatusCode(500, $"Error updating material: {ex.Message}");
+            }
         }
 
         // DELETE: api/{tenantName}/materials/5
@@ -2754,6 +2924,251 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             return Ok(new { Message = "Material successfully removed from learning path" });
         }
 
+        // POST: api/{tenantName}/materials/5/assign-material/8
+        [HttpPost("{parentMaterialId}/assign-material/{childMaterialId}")]
+        public async Task<ActionResult<object>> AssignMaterialToMaterial(
+            string tenantName, int parentMaterialId, int childMaterialId,
+            [FromQuery] string relationshipType = "contains",
+            [FromQuery] int? displayOrder = null)
+        {
+            _logger.LogInformation("Assigning material {ChildId} to material {ParentId} for tenant: {TenantName}",
+                childMaterialId, parentMaterialId, tenantName);
+
+            try
+            {
+                var relationshipId = await _materialService.AssignMaterialToMaterialAsync(
+                    parentMaterialId, childMaterialId, relationshipType, displayOrder);
+
+                _logger.LogInformation("Assigned material {ChildId} to material {ParentId} (Relationship: {RelationshipId}) for tenant: {TenantName}",
+                    childMaterialId, parentMaterialId, relationshipId, tenantName);
+
+                return Ok(new
+                {
+                    Message = "Material successfully assigned to parent material",
+                    RelationshipId = relationshipId,
+                    RelationshipType = relationshipType,
+                    DisplayOrder = displayOrder
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogWarning(ex, "Failed to assign material {ChildId} to material {ParentId}",
+                    childMaterialId, parentMaterialId);
+                return NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Invalid operation assigning material {ChildId} to material {ParentId}",
+                    childMaterialId, parentMaterialId);
+                return BadRequest(ex.Message);
+            }
+        }
+
+        // DELETE: api/{tenantName}/materials/5/remove-material/8
+        [HttpDelete("{parentMaterialId}/remove-material/{childMaterialId}")]
+        public async Task<IActionResult> RemoveMaterialFromMaterial(
+            string tenantName, int parentMaterialId, int childMaterialId)
+        {
+            _logger.LogInformation("Removing material {ChildId} from material {ParentId} for tenant: {TenantName}",
+                childMaterialId, parentMaterialId, tenantName);
+
+            var success = await _materialService.RemoveMaterialFromMaterialAsync(parentMaterialId, childMaterialId);
+
+            if (!success)
+            {
+                return NotFound("Relationship not found");
+            }
+
+            _logger.LogInformation("Removed material {ChildId} from material {ParentId} for tenant: {TenantName}",
+                childMaterialId, parentMaterialId, tenantName);
+
+            return Ok(new { Message = "Material successfully removed from parent material" });
+        }
+
+        // GET: api/{tenantName}/materials/5/children
+        [HttpGet("{materialId}/children")]
+        public async Task<ActionResult<IEnumerable<object>>> GetChildMaterials(
+            string tenantName, int materialId,
+            [FromQuery] bool includeOrder = true,
+            [FromQuery] string? relationshipType = null)
+        {
+            _logger.LogInformation("Getting child materials for material {MaterialId} in tenant: {TenantName}",
+                materialId, tenantName);
+
+            var children = await _materialService.GetChildMaterialsAsync(materialId, includeOrder, relationshipType);
+
+            var result = children.Select(m => new
+            {
+                id = m.id,
+                Name = m.Name,
+                Description = m.Description,
+                Type = GetLowercaseType(m.Type)
+            });
+
+            _logger.LogInformation("Found {Count} child materials for material {MaterialId} in tenant: {TenantName}",
+                result.Count(), materialId, tenantName);
+
+            return Ok(result);
+        }
+
+        // GET: api/{tenantName}/materials/5/parents
+        [HttpGet("{materialId}/parents")]
+        public async Task<ActionResult<IEnumerable<object>>> GetParentMaterials(
+            string tenantName, int materialId,
+            [FromQuery] string? relationshipType = null)
+        {
+            _logger.LogInformation("Getting parent materials for material {MaterialId} in tenant: {TenantName}",
+                materialId, tenantName);
+
+            var parents = await _materialService.GetParentMaterialsAsync(materialId, relationshipType);
+
+            var result = parents.Select(m => new
+            {
+                id = m.id,
+                Name = m.Name,
+                Description = m.Description,
+                Type = GetLowercaseType(m.Type)
+            });
+
+            _logger.LogInformation("Found {Count} parent materials for material {MaterialId} in tenant: {TenantName}",
+                result.Count(), materialId, tenantName);
+
+            return Ok(result);
+        }
+
+        // GET: api/{tenantName}/materials/5/hierarchy
+        [HttpGet("{materialId}/hierarchy")]
+        public async Task<ActionResult<object>> GetMaterialHierarchy(
+            string tenantName, int materialId,
+            [FromQuery] int maxDepth = 5)
+        {
+            _logger.LogInformation("Getting hierarchy for material {MaterialId} in tenant: {TenantName}",
+                materialId, tenantName);
+
+            try
+            {
+                var hierarchy = await _materialService.GetMaterialHierarchyAsync(materialId, maxDepth);
+
+                var result = new
+                {
+                    RootMaterial = new
+                    {
+                        id = hierarchy.RootMaterial.id,
+                        Name = hierarchy.RootMaterial.Name,
+                        Description = hierarchy.RootMaterial.Description,
+                        Type = GetLowercaseType(hierarchy.RootMaterial.Type)
+                    },
+                    Children = MapHierarchyNodes(hierarchy.Children),
+                    TotalDepth = hierarchy.TotalDepth,
+                    TotalMaterials = hierarchy.TotalMaterials
+                };
+
+                _logger.LogInformation("Retrieved hierarchy for material {MaterialId} with {TotalMaterials} materials at {TotalDepth} depth levels",
+                    materialId, hierarchy.TotalMaterials, hierarchy.TotalDepth);
+
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogWarning(ex, "Material {MaterialId} not found", materialId);
+                return NotFound(ex.Message);
+            }
+        }
+
+        private List<object> MapHierarchyNodes(List<MaterialHierarchyNode> nodes)
+        {
+            return nodes.Select(node => (object)new
+            {
+                Material = new
+                {
+                    id = node.Material.id,
+                    Name = node.Material.Name,
+                    Description = node.Material.Description,
+                    Type = GetLowercaseType(node.Material.Type)
+                },
+                RelationshipType = node.RelationshipType,
+                DisplayOrder = node.DisplayOrder,
+                Depth = node.Depth,
+                Children = MapHierarchyNodes(node.Children)
+            }).ToList();
+        }
+
+        private async Task<List<object>> GetRelatedMaterialsAsync(int materialId)
+        {
+            var childMaterials = await _materialService.GetChildMaterialsAsync(materialId, includeOrder: true);
+
+            return childMaterials.Select(m => new
+            {
+                id = m.id.ToString(),
+                Name = m.Name,
+                Description = m.Description
+            }).ToList<object>();
+        }
+
+        private async Task ProcessRelatedMaterialsAsync(int parentMaterialId, JsonElement jsonElement)
+        {
+            // Check for 'related' array in the JSON
+            if (!TryGetPropertyCaseInsensitive(jsonElement, "related", out var relatedElement))
+                return;
+
+            if (relatedElement.ValueKind != JsonValueKind.Array)
+                return;
+
+            _logger.LogInformation("Processing {Count} related materials for parent material {ParentId}",
+                relatedElement.GetArrayLength(), parentMaterialId);
+
+            int displayOrder = 1;
+            foreach (var relatedItem in relatedElement.EnumerateArray())
+            {
+                // Get the child material ID
+                if (!TryGetPropertyCaseInsensitive(relatedItem, "id", out var idProp))
+                {
+                    _logger.LogWarning("Related material missing 'id' property, skipping");
+                    continue;
+                }
+
+                int childMaterialId;
+                if (idProp.ValueKind == JsonValueKind.String)
+                {
+                    if (!int.TryParse(idProp.GetString(), out childMaterialId))
+                    {
+                        _logger.LogWarning("Related material has invalid 'id' value: {Id}, skipping",
+                            idProp.GetString());
+                        continue;
+                    }
+                }
+                else if (idProp.ValueKind == JsonValueKind.Number)
+                {
+                    childMaterialId = idProp.GetInt32();
+                }
+                else
+                {
+                    _logger.LogWarning("Related material 'id' must be string or number, skipping");
+                    continue;
+                }
+
+                try
+                {
+                    // Assign the relationship
+                    await _materialService.AssignMaterialToMaterialAsync(
+                        parentMaterialId,
+                        childMaterialId,
+                        relationshipType: "contains",
+                        displayOrder: displayOrder);
+
+                    _logger.LogInformation("Assigned material {ChildId} to material {ParentId} with order {Order}",
+                        childMaterialId, parentMaterialId, displayOrder);
+
+                    displayOrder++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to assign material {ChildId} to material {ParentId}, continuing with others",
+                        childMaterialId, parentMaterialId);
+                    // Continue processing other relationships even if one fails
+                }
+            }
+        }
 
         // GET: api/{tenantName}/materials/summary
         [HttpGet("summary")]

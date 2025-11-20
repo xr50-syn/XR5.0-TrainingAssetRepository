@@ -117,8 +117,8 @@ namespace XR50TrainingAssetRepo.Data
                 .HasColumnName("id");
 
             modelBuilder.Entity<LearningPath>()
-                .Property(lp => lp.learningPath_id)
-                .HasColumnName("learningPath_id");
+                .Property(lp => lp.id)
+                .HasColumnName("id");
 
             modelBuilder.Entity<Material>()
                 .HasDiscriminator<string>("Discriminator")

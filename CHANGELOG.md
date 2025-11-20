@@ -2,6 +2,190 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2025-11-20
+
+### Added - Asset Type Classification ⚠️ BREAKING CHANGE
+
+#### Summary
+Added a `Type` field to the Asset model for high-level categorization (Image, PDF, Video, Unity) separate from the specific `Filetype` field (mp4, png, pdf, etc.).
+
+**This is a breaking change** - the database schema has been updated and requires migration for existing tenants.
+
+#### Schema Changes
+
+**New Column:**
+- `Assets.Type` (int, NOT NULL, DEFAULT 0)
+- Maps to `AssetType` enum: 0=Image, 1=PDF, 2=Video, 3=Unity
+
+**Migration Required:**
+Run the migration for each tenant:
+```csharp
+await _tableCreator.MigrateAssetTypeColumnAsync(tenantName);
+```
+
+The migration will:
+1. Add the `Type` column if it doesn't exist
+2. Automatically infer `Type` from existing `Filetype` values
+3. Set appropriate defaults for all existing assets
+
+#### API Changes
+
+Asset responses now include both `type` and `filetype`:
+```json
+{
+  "id": 3,
+  "filename": "video.mp4",
+  "filetype": "mp4",
+  "type": 2,  // NEW: 2 = Video (AssetType enum)
+  "src": "http://...",
+  "url": "http://..."
+}
+```
+
+**AssetType Enum Values:**
+- `0` - Image (png, jpg, jpeg, gif, bmp, svg, webp)
+- `1` - PDF (pdf)
+- `2` - Video (mp4, avi, mov, wmv, flv, webm, mkv)
+- `3` - Unity (unity, unitypackage, bundle)
+
+#### Affected Files
+- `Models/Asset.cs:29-35,50-51` - Added `AssetType` enum and `Type` property
+- `Services/XR50AssetService.cs:115-137` - Added `InferAssetTypeFromFiletype()` helper
+- `Services/XR50AssetService.cs:80-101,350-371` - Updated asset creation to set `Type`
+- `Services/XR50ManualTableCreator.cs:18,253,481-555` - Added migration method and updated table schema
+
+#### Migration Instructions
+
+**For New Tenants:**
+No action needed - the `Type` column is included in table creation.
+
+**For Existing Tenants:**
+Use the tenant admin interface or programmatically call:
+```csharp
+var migrated = await _tableCreator.MigrateAssetTypeColumnAsync("tenant-name");
+```
+
+### Added - Material-to-Material Relationships
+
+#### Summary
+Implemented full support for material-to-material relationships, allowing materials to be organized in hierarchical structures. Materials can now contain other materials (e.g., a module containing lessons, a lesson containing videos and quizzes).
+
+#### New Controller Endpoints (XR50MaterialsController.cs)
+
+**Material Relationship Management:**
+- `POST /api/{tenantName}/materials/{parentId}/assign-material/{childId}` - Assign a child material to a parent material
+- `DELETE /api/{tenantName}/materials/{parentId}/remove-material/{childId}` - Remove material relationship
+- `GET /api/{tenantName}/materials/{materialId}/children` - Get all child materials
+- `GET /api/{tenantName}/materials/{materialId}/parents` - Get all parent materials
+- `GET /api/{tenantName}/materials/{materialId}/hierarchy` - Get complete material hierarchy tree
+
+#### Response Format Changes
+
+All GET material detail endpoints now include a `related` array containing simplified child material references:
+
+```json
+{
+  "id": "5",
+  "name": "Parent Material",
+  "type": "image",
+  "related": [
+    {
+      "id": "2",
+      "name": "Child Material",
+      "description": "Description"
+    }
+  ]
+}
+```
+
+#### POST Material Creation with Relationships
+
+The comprehensive POST endpoint (`POST /api/{tenantName}/materials`) now supports creating materials with relationships in a single request. Include a `related` array in your JSON payload:
+
+```json
+{
+  "name": "Module 1",
+  "type": "workflow",
+  "description": "Complete training module",
+  "config": {
+    "steps": [...]
+  },
+  "related": [
+    {"id": "10"},
+    {"id": "15"},
+    {"id": "23"}
+  ]
+}
+```
+
+The system will:
+- Create the parent material first
+- Automatically assign child materials in the order specified
+- Set display order based on array position
+- Continue processing even if individual relationship assignments fail (with warnings logged)
+
+**Note**: The `related` array expects existing material IDs. Child materials must be created before the parent if using this approach, or use the dedicated relationship endpoints after creation.
+
+#### PUT Material Update with Relationships
+
+The PUT endpoint (`PUT /api/{tenantName}/materials/{id}`) has been redesigned to accept JSON in the same format as GET responses:
+
+**Key Features:**
+- **String ID Support**: Route parameter accepts string IDs (e.g., `/materials/5` or future `/materials/uuid-here`)
+- **Flexible ID Format**: JSON body can use string or integer IDs
+- **Relationship Management**: Include `related` array to update relationships
+- **Idempotent Behavior**: Replaces material properties and synchronizes relationships
+
+**Example PUT Request:**
+```json
+PUT /api/{tenantName}/materials/5
+{
+  "id": "5",
+  "name": "Updated Material",
+  "type": "image",
+  "related": [
+    {"id": "2"},
+    {"id": "10"}
+  ]
+}
+```
+
+**Relationship Synchronization:**
+- Removes relationships not in the `related` array
+- Adds new relationships from the `related` array
+- Preserves relationships already present
+- Updates display order based on array position
+
+**Future-Proof Design:**
+This implementation prepares for UUID migration by treating IDs as strings in the API layer while maintaining integer compatibility in the database layer.
+
+#### Features
+- **Circular Reference Prevention**: System prevents creating circular material dependencies
+- **Display Ordering**: Support for custom ordering of child materials via `displayOrder` parameter
+- **Relationship Types**: Flexible relationship types (e.g., "contains", "prerequisite")
+- **Hierarchy Queries**: Retrieve complete material trees with configurable depth limits
+
+#### Affected Files
+- `Controllers/XR50MaterialsController.cs:2757-2936` - New relationship endpoints and helper methods
+- `Controllers/XR50MaterialsController.cs:2972-3035` - `ProcessRelatedMaterialsAsync()` helper for POST
+- `Controllers/XR50MaterialsController.cs:125-509` - Updated all detail methods to include `related` array
+- `Controllers/XR50MaterialsController.cs:879,1302,1385,1474,1571,1716,1762` - Added relationship processing to all POST material creation methods
+- `Controllers/XR50MaterialsController.cs:2234-2378` - Redesigned PUT endpoint with JSON parsing and relationship management
+- `Services/XR50MaterialsService.cs:113-120` - Added interface methods to `IMaterialService`
+- `Services/XR50MaterialsService.cs:1959-2183` - Service layer methods (already existed, now exposed via controller)
+
+### Fixed - Quiz Question Creation Bug
+
+#### Summary
+Fixed exception when creating quizzes with multiple questions. The bug occurred when Entity Framework's change tracker tried to save answers from multiple questions in a single batch.
+
+#### Technical Fix
+Modified quiz creation logic to save answers immediately after adding them for each question, rather than batching all answers at the end.
+
+#### Affected Files
+- `Services/XR50MaterialsService.cs:307,325-326` - `CreateMaterialAsyncComplete()` for QuizMaterial case
+- `Services/XR50MaterialsService.cs:1433,1444-1445` - `CreateQuizWithQuestionsAsync()`
+
 ## [Unreleased] - 2025-11-18
 
 ### Changed - PUT Methods Redesign (Delete-and-Recreate Pattern)
@@ -90,7 +274,7 @@ public async Task<LearningPath> UpdateLearningPathAsync(LearningPath learningPat
 - Same delete-and-recreate pattern as Asset
 - Wrapped in transaction
 - Existence validation added
-- Preserves `learningPath_id`
+- Preserves `id`
 
 ##### 3. Material Service (`XR50MaterialsService.cs`)
 

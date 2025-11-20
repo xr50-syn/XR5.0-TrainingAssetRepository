@@ -30,7 +30,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
     {
         public string Status { get; set; } = "success";
         public string Message { get; set; } = "";
-        public int learningPath_id { get; set; }
+        public int id { get; set; }
         public string LearningPathName { get; set; } = "";
         public string? Description { get; set; }
         public string? CreatedAt { get; set; }
@@ -64,7 +64,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
     {
         public string Status { get; set; } = "success";
         public string Message { get; set; } = "";
-        public int learningPath_id { get; set; }
+        public int id { get; set; }
         public string LearningPathName { get; set; } = "";
         public string? Description { get; set; }
         public string? CreatedAt { get; set; }

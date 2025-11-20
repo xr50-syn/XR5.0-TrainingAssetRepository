@@ -81,7 +81,7 @@ namespace XR50TrainingAssetRepo.Controllers
             {
                 var result = await _trainingProgramService.UpdateCompleteTrainingProgramAsync(id, request);
                 _logger.LogInformation("Updated training program {Id} for tenant: {TenantName} with {MaterialCount} materials and {LearningPathCount} learning paths",
-                    id, tenantName, result.Materials.Count, result.LearningPaths.Count);
+                    id, tenantName, result.Materials.Count, result.learning_path.Count);
 
                 return Ok(result);
             }
@@ -245,7 +245,7 @@ namespace XR50TrainingAssetRepo.Controllers
             }
 
             _logger.LogInformation("Retrieved complete training program {Id}: {MaterialCount} materials, {PathCount} learning paths",
-                id, result.Materials.Count, result.LearningPaths.Count);
+                id, result.Materials.Count, result.learning_path.Count);
 
             return Ok(result);
         }

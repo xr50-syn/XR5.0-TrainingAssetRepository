@@ -70,10 +70,10 @@ namespace XR50TrainingAssetRepo.Controllers
             var createdLearningPath = await _learningPathService.CreateLearningPathAsync(learningPath);
 
             _logger.LogInformation("Created learning path {Name} with ID {Id} for tenant: {TenantName}",
-                createdLearningPath.LearningPathName, createdLearningPath.learningPath_id, tenantName);
+                createdLearningPath.LearningPathName, createdLearningPath.id, tenantName);
 
             return CreatedAtAction(nameof(GetLearningPath),
-                new { tenantName, id = createdLearningPath.learningPath_id },
+                new { tenantName, id = createdLearningPath.id },
                 createdLearningPath);
         }
 
@@ -81,7 +81,7 @@ namespace XR50TrainingAssetRepo.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> PutLearningPath(string tenantName, int id, LearningPath learningPath)
         {
-            if (id != learningPath.learningPath_id)
+            if (id != learningPath.id)
             {
                 return BadRequest("ID mismatch");
             }
@@ -343,11 +343,11 @@ namespace XR50TrainingAssetRepo.Controllers
                 var result = await _learningPathService.CreateLearningPathWithMaterialsAsync(request);
 
                 _logger.LogInformation("Successfully created complete learning path {Id} with {MaterialCount} materials",
-                    result.learningPath_id, result.MaterialCount);
+                    result.id, result.MaterialCount);
 
                 return CreatedAtAction(
                     nameof(GetCompleteLearningPath),
-                    new { tenantName, id = result.learningPath_id },
+                    new { tenantName, id = result.id },
                     result);
             }
             catch (ArgumentException ex)

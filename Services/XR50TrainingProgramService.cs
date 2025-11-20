@@ -84,69 +84,64 @@ namespace XR50TrainingAssetRepo.Services
                     }
                 }
 
-                // 2. Handle learning_path objects (create or validate existing)
+                // 2. Handle learning_path array (create learning path with ordered materials)
                 var learningPathIds = new List<int>();
 
                 if (request.learning_path?.Any() == true)
                 {
-                    foreach (var lpRequest in request.learning_path)
+                    // Validate all materials exist
+                    var validMaterials = await context.Materials
+                        .Where(m => request.learning_path.Contains(m.id))
+                        .Select(m => m.id)
+                        .ToListAsync();
+
+                    var missingMaterials = request.learning_path.Except(validMaterials).ToList();
+                    if (missingMaterials.Any())
                     {
-                        if (lpRequest.id.HasValue && lpRequest.id.Value > 0)
-                        {
-                            // ID provided - check if it exists
-                            var exists = await context.LearningPaths
-                                .AnyAsync(lp => lp.learningPath_id == lpRequest.id.Value);
-
-                            if (exists)
-                            {
-                                // Learning path exists, use it
-                                learningPathIds.Add(lpRequest.id.Value);
-                                _logger.LogInformation("Using existing learning path with ID: {Id}", lpRequest.id.Value);
-                            }
-                            else
-                            {
-                                // Learning path doesn't exist, create it with the provided name/description
-                                var newLearningPath = new LearningPath
-                                {
-                                    LearningPathName = lpRequest.name,
-                                    Description = lpRequest.description ?? ""
-                                };
-
-                                context.LearningPaths.Add(newLearningPath);
-                                await context.SaveChangesAsync(); // Save to get the ID
-
-                                learningPathIds.Add(newLearningPath.learningPath_id);
-
-                                _logger.LogInformation("Created new learning path: {Name} with ID: {Id} (requested ID {RequestedId} was not found)",
-                                    newLearningPath.LearningPathName, newLearningPath.learningPath_id, lpRequest.id.Value);
-                            }
-                        }
-                        else
-                        {
-                            // No ID - create new learning path
-                            var newLearningPath = new LearningPath
-                            {
-                                LearningPathName = lpRequest.name,
-                                Description = lpRequest.description ?? ""
-                            };
-
-                            context.LearningPaths.Add(newLearningPath);
-                            await context.SaveChangesAsync(); // Save to get the ID
-
-                            learningPathIds.Add(newLearningPath.learningPath_id);
-
-                            _logger.LogInformation("Created new learning path: {Name} with ID: {Id}",
-                                newLearningPath.LearningPathName, newLearningPath.learningPath_id);
-                        }
+                        throw new ArgumentException($"Materials not found for learning path: {string.Join(", ", missingMaterials)}");
                     }
+
+                    // Create new learning path (auto-generated name based on program)
+                    var newLearningPath = new LearningPath
+                    {
+                        LearningPathName = $"{request.Name} - Learning Path",
+                        Description = ""
+                    };
+
+                    context.LearningPaths.Add(newLearningPath);
+                    await context.SaveChangesAsync(); // Save to get the ID
+
+                    learningPathIds.Add(newLearningPath.id);
+
+                    _logger.LogInformation("Created new learning path for program '{ProgramName}' with ID: {Id}",
+                        request.Name, newLearningPath.id);
+
+                    // Create MaterialRelationship entries with display order
+                    int displayOrder = 1;
+                    foreach (var materialId in request.learning_path)
+                    {
+                        var relationship = new MaterialRelationship
+                        {
+                            MaterialId = materialId,
+                            RelatedEntityId = newLearningPath.id.ToString(),
+                            RelatedEntityType = "LearningPath",
+                            RelationshipType = "contains",
+                            DisplayOrder = displayOrder++
+                        };
+
+                        context.MaterialRelationships.Add(relationship);
+                    }
+
+                    _logger.LogInformation("Added {Count} materials to learning path {LearningPathId}",
+                        request.learning_path.Count, newLearningPath.id);
                 }
 
                 // 3. Also validate any learning path IDs provided in the LearningPaths array
                 if (request.LearningPaths?.Any() == true)
                 {
                     var existingLearningPaths = await context.LearningPaths
-                        .Where(lp => request.LearningPaths.Contains(lp.learningPath_id))
-                        .Select(lp => lp.learningPath_id)
+                        .Where(lp => request.LearningPaths.Contains(lp.id))
+                        .Select(lp => lp.id)
                         .ToListAsync();
 
                     var missingLearningPaths = request.LearningPaths
@@ -262,11 +257,11 @@ namespace XR50TrainingAssetRepo.Services
                 if (request.LearningPaths?.Any() == true)
                 {
                     existingLearningPaths = await context.LearningPaths
-                        .Where(lp => request.LearningPaths.Contains(lp.learningPath_id))
+                        .Where(lp => request.LearningPaths.Contains(lp.id))
                         .ToListAsync();
 
                     var missingLearningPaths = request.LearningPaths
-                        .Except(existingLearningPaths.Select(lp => lp.learningPath_id))
+                        .Except(existingLearningPaths.Select(lp => lp.id))
                         .ToList();
 
                     if (missingLearningPaths.Any())
@@ -344,7 +339,7 @@ namespace XR50TrainingAssetRepo.Services
                 {
                     foreach (var learningPathId in request.LearningPaths)
                     {
-                        var learningPath = existingLearningPaths.First(lp => lp.learningPath_id == learningPathId);
+                        var learningPath = existingLearningPaths.First(lp => lp.id == learningPathId);
                         
                         try
                         {
@@ -497,61 +492,56 @@ namespace XR50TrainingAssetRepo.Services
 
                 context.ProgramLearningPaths.RemoveRange(existingLearningPaths);
 
-                // Handle learning_path objects (create or validate existing)
+                // Handle learning_path array (create learning path with ordered materials)
                 var learningPathIds = new List<int>();
 
                 if (request.learning_path?.Any() == true)
                 {
-                    foreach (var lpRequest in request.learning_path)
+                    // Validate all materials exist
+                    var validMaterials = await context.Materials
+                        .Where(m => request.learning_path.Contains(m.id))
+                        .Select(m => m.id)
+                        .ToListAsync();
+
+                    var missingMaterials = request.learning_path.Except(validMaterials).ToList();
+                    if (missingMaterials.Any())
                     {
-                        if (lpRequest.id.HasValue && lpRequest.id.Value > 0)
-                        {
-                            // ID provided - check if it exists
-                            var exists = await context.LearningPaths
-                                .AnyAsync(lp => lp.learningPath_id == lpRequest.id.Value);
-
-                            if (exists)
-                            {
-                                // Learning path exists, use it
-                                learningPathIds.Add(lpRequest.id.Value);
-                                _logger.LogInformation("Using existing learning path with ID: {Id}", lpRequest.id.Value);
-                            }
-                            else
-                            {
-                                // Learning path doesn't exist, create it with the provided name/description
-                                var newLearningPath = new LearningPath
-                                {
-                                    LearningPathName = lpRequest.name,
-                                    Description = lpRequest.description ?? ""
-                                };
-
-                                context.LearningPaths.Add(newLearningPath);
-                                await context.SaveChangesAsync(); // Save to get the ID
-
-                                learningPathIds.Add(newLearningPath.learningPath_id);
-
-                                _logger.LogInformation("Created new learning path: {Name} with ID: {Id} (requested ID {RequestedId} was not found)",
-                                    newLearningPath.LearningPathName, newLearningPath.learningPath_id, lpRequest.id.Value);
-                            }
-                        }
-                        else
-                        {
-                            // No ID - create new learning path
-                            var newLearningPath = new LearningPath
-                            {
-                                LearningPathName = lpRequest.name,
-                                Description = lpRequest.description ?? ""
-                            };
-
-                            context.LearningPaths.Add(newLearningPath);
-                            await context.SaveChangesAsync(); // Save to get the ID
-
-                            learningPathIds.Add(newLearningPath.learningPath_id);
-
-                            _logger.LogInformation("Created new learning path: {Name} with ID: {Id}",
-                                newLearningPath.LearningPathName, newLearningPath.learningPath_id);
-                        }
+                        throw new ArgumentException($"Materials not found for learning path: {string.Join(", ", missingMaterials)}");
                     }
+
+                    // Create new learning path (auto-generated name based on program)
+                    var newLearningPath = new LearningPath
+                    {
+                        LearningPathName = $"{request.Name} - Learning Path",
+                        Description = ""
+                    };
+
+                    context.LearningPaths.Add(newLearningPath);
+                    await context.SaveChangesAsync(); // Save to get the ID
+
+                    learningPathIds.Add(newLearningPath.id);
+
+                    _logger.LogInformation("Created new learning path for program '{ProgramName}' with ID: {Id}",
+                        request.Name, newLearningPath.id);
+
+                    // Create MaterialRelationship entries with display order
+                    int displayOrder = 1;
+                    foreach (var materialId in request.learning_path)
+                    {
+                        var relationship = new MaterialRelationship
+                        {
+                            MaterialId = materialId,
+                            RelatedEntityId = newLearningPath.id.ToString(),
+                            RelatedEntityType = "LearningPath",
+                            RelationshipType = "contains",
+                            DisplayOrder = displayOrder++
+                        };
+
+                        context.MaterialRelationships.Add(relationship);
+                    }
+
+                    _logger.LogInformation("Added {Count} materials to learning path {LearningPathId}",
+                        request.learning_path.Count, newLearningPath.id);
                 }
 
                 // Also validate any learning path IDs provided in the LearningPaths array
@@ -559,8 +549,8 @@ namespace XR50TrainingAssetRepo.Services
                 {
                     // Validate learning paths exist
                     var validLearningPaths = await context.LearningPaths
-                        .Where(lp => request.LearningPaths.Contains(lp.learningPath_id))
-                        .Select(lp => lp.learningPath_id)
+                        .Where(lp => request.LearningPaths.Contains(lp.id))
+                        .Select(lp => lp.id)
                         .ToListAsync();
 
                     var missingLearningPaths = request.LearningPaths.Except(validLearningPaths).ToList();
@@ -978,7 +968,7 @@ namespace XR50TrainingAssetRepo.Services
             // Get learning paths
             var learningPaths = program.LearningPaths.Select(plp => new LearningPathResponse
             {
-                learningPath_id = plp.LearningPath.learningPath_id,
+                id = plp.LearningPath.id,
                 LearningPathName = plp.LearningPath.LearningPathName,
                 Description = plp.LearningPath.Description
             }).ToList();
@@ -1000,7 +990,7 @@ namespace XR50TrainingAssetRepo.Services
                 required_upto_level_rank = program.required_upto_level_rank,
                 Created_at = program.Created_at,
                 Materials = materials,
-                LearningPaths = learningPaths
+                learning_path = learningPaths
             };
         }
 
