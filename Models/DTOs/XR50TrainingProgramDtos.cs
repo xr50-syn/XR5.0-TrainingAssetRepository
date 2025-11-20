@@ -184,6 +184,10 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public int id { get; set; }
         public string LearningPathName { get; set; } = "";
         public string Description { get; set; } = "";
+        public bool? inherit_from_program { get; set; }
+
+        // Materials in this learning path
+        public List<MaterialResponse> Materials { get; set; } = new();
     }
 
     public class AssignmentMetadata

@@ -4,6 +4,69 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2025-11-20
 
+### Added - Enhanced Training Program Responses
+
+#### Summary
+Training program GET responses now include complete learning path details with materials, making it easier for the GUI to display full program structure without additional API calls.
+
+#### Enhanced Response Format
+
+**Before:**
+```json
+{
+  "learning_path": [
+    {
+      "id": "1",
+      "learningPathName": "Path 1",
+      "description": "..."
+    }
+  ]
+}
+```
+
+**After:**
+```json
+{
+  "learning_path": [
+    {
+      "id": "1",
+      "learningPathName": "Path 1",
+      "description": "...",
+      "inherit_from_program": true,
+      "materials": [
+        {
+          "id": 10,
+          "name": "Video Lesson",
+          "type": "video",
+          "description": "..."
+        },
+        {
+          "id": 15,
+          "name": "Quiz",
+          "type": "quiz",
+          "description": "..."
+        }
+      ]
+    }
+  ]
+}
+```
+
+#### Improved PUT Endpoint
+
+The training program PUT endpoint now accepts the same format as GET responses:
+- ✅ Accepts learning paths as full objects (from GET) or simple IDs
+- ✅ Accepts materials as full objects or simple IDs
+- ✅ String ID support (UUID-ready)
+- ✅ Extracts IDs from objects automatically
+
+**You can now PUT exactly what you GET!**
+
+#### Affected Files
+- `Models/DTOs/XR50TrainingProgramDtos.cs:182-191` - Enhanced `LearningPathResponse` with materials
+- `Services/XR50TrainingProgramService.cs:968-990` - Populate materials in learning paths
+- `Controllers/XR50TrainingProgramController.cs:73-186` - Redesigned PUT with JSON parsing
+
 ### Added - Asset Type Classification ⚠️ BREAKING CHANGE
 
 #### Summary

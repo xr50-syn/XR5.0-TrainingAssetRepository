@@ -965,13 +965,54 @@ namespace XR50TrainingAssetRepo.Services
                 materials.Add(materialResponse);
             }
 
-            // Get learning paths
-            var learningPaths = program.LearningPaths.Select(plp => new LearningPathResponse
+            // Get learning paths with their materials
+            var learningPaths = new List<LearningPathResponse>();
+            foreach (var plp in program.LearningPaths)
             {
-                id = plp.LearningPath.id,
-                LearningPathName = plp.LearningPath.LearningPathName,
-                Description = plp.LearningPath.Description
-            }).ToList();
+                // Get materials for this learning path via MaterialRelationships
+                var pathMaterialRelationships = await context.MaterialRelationships
+                    .Where(mr => mr.RelatedEntityId == plp.LearningPath.id.ToString() &&
+                                 mr.RelatedEntityType == "LearningPath")
+                    .OrderBy(mr => mr.DisplayOrder ?? int.MaxValue)
+                    .ToListAsync();
+
+                // Parse material IDs and fetch materials
+                var materialIds = pathMaterialRelationships
+                    .Select(mr => int.TryParse(mr.MaterialId.ToString(), out int id) ? id : 0)
+                    .Where(id => id > 0)
+                    .ToList();
+
+                var pathMaterials = new List<Material>();
+                if (materialIds.Any())
+                {
+                    pathMaterials = await context.Materials
+                        .Where(m => materialIds.Contains(m.id))
+                        .ToListAsync();
+
+                    // Reorder materials according to relationship order
+                    var materialDict = pathMaterials.ToDictionary(m => m.id);
+                    pathMaterials = materialIds
+                        .Where(id => materialDict.ContainsKey(id))
+                        .Select(id => materialDict[id])
+                        .ToList();
+                }
+
+                var pathMaterialResponses = new List<MaterialResponse>();
+                foreach (var material in pathMaterials)
+                {
+                    var materialResponse = await BuildMaterialResponse(material);
+                    pathMaterialResponses.Add(materialResponse);
+                }
+
+                learningPaths.Add(new LearningPathResponse
+                {
+                    id = plp.LearningPath.id,
+                    LearningPathName = plp.LearningPath.LearningPathName,
+                    Description = plp.LearningPath.Description,
+                    inherit_from_program = true, // Default to true for now
+                    Materials = pathMaterialResponses
+                });
+            }
 
             _logger.LogInformation("Retrieved complete training program {Id}: {MaterialCount} materials, {PathCount} learning paths",
                 id, materials.Count, learningPaths.Count);

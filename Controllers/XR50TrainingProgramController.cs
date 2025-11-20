@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -72,16 +73,52 @@ namespace XR50TrainingAssetRepo.Controllers
         [HttpPut("{id}")]
         public async Task<ActionResult<CompleteTrainingProgramResponse>> PutTrainingProgram(
             string tenantName,
-            int id,
-            [FromBody] UpdateTrainingProgramRequest request)
+            string id)
         {
             _logger.LogInformation("Updating training program {Id} for tenant: {TenantName}", id, tenantName);
 
             try
             {
-                var result = await _trainingProgramService.UpdateCompleteTrainingProgramAsync(id, request);
+                // Parse ID from string (UUID-ready)
+                if (!int.TryParse(id, out int programId))
+                {
+                    return BadRequest($"Invalid training program ID format: {id}");
+                }
+
+                // Read raw JSON body
+                using var reader = new StreamReader(Request.Body);
+                var body = await reader.ReadToEndAsync();
+                var jsonElement = JsonSerializer.Deserialize<JsonElement>(body);
+
+                // Parse the request, handling both formats for learning_path and materials
+                var request = new UpdateTrainingProgramRequest
+                {
+                    Name = jsonElement.GetProperty("name").GetString() ?? "",
+                    Description = jsonElement.TryGetProperty("description", out var desc) ? desc.GetString() : null,
+                    Objectives = jsonElement.TryGetProperty("objectives", out var obj) ? obj.GetString() : null,
+                    Requirements = jsonElement.TryGetProperty("requirements", out var req) ? req.GetString() : null,
+                    min_level_rank = jsonElement.TryGetProperty("min_level_rank", out var minRank) && minRank.ValueKind == JsonValueKind.Number ? minRank.GetInt32() : null,
+                    max_level_rank = jsonElement.TryGetProperty("max_level_rank", out var maxRank) && maxRank.ValueKind == JsonValueKind.Number ? maxRank.GetInt32() : null,
+                    required_upto_level_rank = jsonElement.TryGetProperty("required_upto_level_rank", out var reqRank) ? ParseNullableInt(reqRank) : null
+                };
+
+                // Parse materials array - handle both int[] and object[] with id property
+                if (jsonElement.TryGetProperty("materials", out var materialsElement) &&
+                    materialsElement.ValueKind == JsonValueKind.Array)
+                {
+                    request.Materials = ParseIdArray(materialsElement);
+                }
+
+                // Parse learning_path array - handle both int[] and object[] with id property
+                if (jsonElement.TryGetProperty("learning_path", out var learningPathElement) &&
+                    learningPathElement.ValueKind == JsonValueKind.Array)
+                {
+                    request.learning_path = ParseIdArray(learningPathElement);
+                }
+
+                var result = await _trainingProgramService.UpdateCompleteTrainingProgramAsync(programId, request);
                 _logger.LogInformation("Updated training program {Id} for tenant: {TenantName} with {MaterialCount} materials and {LearningPathCount} learning paths",
-                    id, tenantName, result.Materials.Count, result.learning_path.Count);
+                    programId, tenantName, result.Materials.Count, result.learning_path.Count);
 
                 return Ok(result);
             }
@@ -99,6 +136,54 @@ namespace XR50TrainingAssetRepo.Controllers
                 _logger.LogError(ex, "Error updating training program {Id} for tenant: {TenantName}", id, tenantName);
                 return StatusCode(500, "An error occurred while updating the training program");
             }
+        }
+
+        private int? ParseNullableInt(JsonElement element)
+        {
+            if (element.ValueKind == JsonValueKind.Null)
+                return null;
+            if (element.ValueKind == JsonValueKind.String)
+            {
+                var str = element.GetString();
+                return int.TryParse(str, out int val) ? val : null;
+            }
+            if (element.ValueKind == JsonValueKind.Number)
+                return element.GetInt32();
+            return null;
+        }
+
+        private List<int> ParseIdArray(JsonElement arrayElement)
+        {
+            var ids = new List<int>();
+            foreach (var item in arrayElement.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.Number)
+                {
+                    ids.Add(item.GetInt32());
+                }
+                else if (item.ValueKind == JsonValueKind.Object)
+                {
+                    // Handle object with id property (from GET response format)
+                    if (item.TryGetProperty("id", out var idProp))
+                    {
+                        if (idProp.ValueKind == JsonValueKind.String)
+                        {
+                            if (int.TryParse(idProp.GetString(), out int id))
+                                ids.Add(id);
+                        }
+                        else if (idProp.ValueKind == JsonValueKind.Number)
+                        {
+                            ids.Add(idProp.GetInt32());
+                        }
+                    }
+                }
+                else if (item.ValueKind == JsonValueKind.String)
+                {
+                    if (int.TryParse(item.GetString(), out int id))
+                        ids.Add(id);
+                }
+            }
+            return ids;
         }
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteTrainingProgram(string tenantName, int id)

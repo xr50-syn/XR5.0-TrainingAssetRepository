@@ -106,7 +106,7 @@ namespace XR50TrainingAssetRepo.Services
                 if (!existingAssociation)
                 {
                     // Verify learning path exists
-                    var learningPathExists = await context.LearningPaths.AnyAsync(lp => lp.learningPath_id == learningPathId);
+                    var learningPathExists = await context.LearningPaths.AnyAsync(lp => lp.id == learningPathId);
                     if (learningPathExists)
                     {
                         associationsToAdd.Add(new ProgramLearningPath
@@ -167,7 +167,7 @@ namespace XR50TrainingAssetRepo.Services
             return await context.LearningPaths
                 .Include(lp => lp.ProgramLearningPaths)
                     .ThenInclude(plp => plp.TrainingProgram)
-                .FirstOrDefaultAsync(lp => lp.learningPath_id == id);
+                .FirstOrDefaultAsync(lp => lp.id == id);
         }
 
         public async Task<LearningPath> CreateLearningPathAsync(LearningPath learningPath)
@@ -178,7 +178,7 @@ namespace XR50TrainingAssetRepo.Services
             await context.SaveChangesAsync();
 
             _logger.LogInformation("Created learning path: {Name} with ID: {Id}",
-                learningPath.LearningPathName, learningPath.learningPath_id);
+                learningPath.LearningPathName, learningPath.id);
 
             return learningPath;
         }
@@ -192,7 +192,7 @@ namespace XR50TrainingAssetRepo.Services
             await context.SaveChangesAsync();
 
             _logger.LogInformation("Created learning path: {Name} with ID: {Id}",
-                learningPath.LearningPathName, learningPath.learningPath_id);
+                learningPath.LearningPathName, learningPath.id);
 
             // If training program IDs are provided, create associations
             if (trainingProgramIds != null && trainingProgramIds.Any())
@@ -207,7 +207,7 @@ namespace XR50TrainingAssetRepo.Services
                         associations.Add(new ProgramLearningPath
                         {
                             TrainingProgramId = trainingProgramId,
-                            LearningPathId = learningPath.learningPath_id
+                            LearningPathId = learningPath.id
                         });
                     }
                     else
@@ -222,7 +222,7 @@ namespace XR50TrainingAssetRepo.Services
                     await context.SaveChangesAsync();
 
                     _logger.LogInformation("Created {Count} associations for learning path {LearningPathId}",
-                        associations.Count, learningPath.learningPath_id);
+                        associations.Count, learningPath.id);
                 }
             }
 
@@ -237,10 +237,10 @@ namespace XR50TrainingAssetRepo.Services
             try
             {
                 // Find existing learning path
-                var existing = await context.LearningPaths.FindAsync(learningPath.learningPath_id);
+                var existing = await context.LearningPaths.FindAsync(learningPath.id);
                 if (existing == null)
                 {
-                    throw new KeyNotFoundException($"Learning path {learningPath.learningPath_id} not found");
+                    throw new KeyNotFoundException($"Learning path {learningPath.id} not found");
                 }
 
                 // Delete old learning path
@@ -254,7 +254,7 @@ namespace XR50TrainingAssetRepo.Services
                 await transaction.CommitAsync();
 
                 _logger.LogInformation("Updated learning path {Id} via delete-recreate",
-                    learningPath.learningPath_id);
+                    learningPath.id);
 
                 return learningPath;
             }
@@ -286,7 +286,7 @@ namespace XR50TrainingAssetRepo.Services
         public async Task<bool> LearningPathExistsAsync(int id)
         {
             using var context = _dbContextFactory.CreateDbContext();
-            return await context.LearningPaths.AnyAsync(e => e.learningPath_id == id);
+            return await context.LearningPaths.AnyAsync(e => e.id == id);
         }
         public async Task<CreateLearningPathWithMaterialsResponse> CreateLearningPathWithMaterialsAsync(CreateLearningPathWithMaterialsRequest request)
         {
@@ -305,7 +305,7 @@ namespace XR50TrainingAssetRepo.Services
                 context.LearningPaths.Add(learningPath);
                 await context.SaveChangesAsync(); // Save to get the ID
 
-                _logger.LogInformation("Created learning path: {Name} with ID: {Id}", learningPath.LearningPathName, learningPath.learningPath_id);
+                _logger.LogInformation("Created learning path: {Name} with ID: {Id}", learningPath.LearningPathName, learningPath.id);
 
                 // 2. Validate that all requested materials exist
                 var materialIds = request.Materials.Distinct().ToList();
@@ -334,7 +334,7 @@ namespace XR50TrainingAssetRepo.Services
                     if (request.MaterialAssignments?.Any(ma => ma.MaterialId == materialId) == true)
                         continue; // Skip if detailed assignment exists
 
-                    await AssignMaterialToLearningPath(context, learningPath.learningPath_id, materialId, "contains", null, materialAssignments, existingMaterials);
+                    await AssignMaterialToLearningPath(context, learningPath.id, materialId, "contains", null, materialAssignments, existingMaterials);
                 }
 
                 // Handle detailed material assignments
@@ -344,7 +344,7 @@ namespace XR50TrainingAssetRepo.Services
                     {
                         await AssignMaterialToLearningPath(
                             context, 
-                            learningPath.learningPath_id, 
+                            learningPath.id, 
                             assignment.MaterialId, 
                             assignment.RelationshipType, 
                             assignment.DisplayOrder, 
@@ -371,7 +371,7 @@ namespace XR50TrainingAssetRepo.Services
                                 var programLearningPath = new ProgramLearningPath
                                 {
                                     TrainingProgramId = programId,
-                                    LearningPathId = learningPath.learningPath_id
+                                    LearningPathId = learningPath.id
                                 };
 
                                 context.ProgramLearningPaths.Add(programLearningPath);
@@ -387,7 +387,7 @@ namespace XR50TrainingAssetRepo.Services
                             catch (Exception ex)
                             {
                                 _logger.LogWarning(ex, "Failed to assign learning path {LearningPathId} to training program {ProgramId}", 
-                                    learningPath.learningPath_id, programId);
+                                    learningPath.id, programId);
                                 
                                 trainingProgramAssignments.Add(new AssignedTrainingProgram
                                 {
@@ -415,14 +415,14 @@ namespace XR50TrainingAssetRepo.Services
                 await transaction.CommitAsync();
 
                 _logger.LogInformation("Successfully created complete learning path {LearningPathId} with {MaterialCount} materials and {ProgramCount} training programs",
-                    learningPath.learningPath_id, materialAssignments.Count, trainingProgramAssignments.Count);
+                    learningPath.id, materialAssignments.Count, trainingProgramAssignments.Count);
 
                 // 5. Return complete response
                 return new CreateLearningPathWithMaterialsResponse
                 {
                     Status = "success",
                     Message = $"Learning path '{learningPath.LearningPathName}' created successfully with {materialAssignments.Count} materials and {trainingProgramAssignments.Count} training programs",
-                    learningPath_id = learningPath.learningPath_id,
+                    id = learningPath.id,
                     LearningPathName = learningPath.LearningPathName,
                     Description = learningPath.Description,
                     CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"),
@@ -508,7 +508,7 @@ namespace XR50TrainingAssetRepo.Services
             var learningPath = await context.LearningPaths
                 .Include(lp => lp.ProgramLearningPaths)
                     .ThenInclude(plp => plp.TrainingProgram)
-                .FirstOrDefaultAsync(lp => lp.learningPath_id == id);
+                .FirstOrDefaultAsync(lp => lp.id == id);
 
             if (learningPath == null)
                 return null;
@@ -531,7 +531,7 @@ namespace XR50TrainingAssetRepo.Services
 
             return new CompleteLearningPathResponse
             {
-                learningPath_id = learningPath.learningPath_id,
+                id = learningPath.id,
                 LearningPathName = learningPath.LearningPathName,
                 Description = learningPath.Description,
                 Materials = materials,
@@ -563,7 +563,7 @@ namespace XR50TrainingAssetRepo.Services
 
             foreach (var learningPath in learningPaths)
             {
-                var completeLearningPath = await GetCompleteLearningPathAsync(learningPath.learningPath_id);
+                var completeLearningPath = await GetCompleteLearningPathAsync(learningPath.id);
                 if (completeLearningPath != null)
                 {
                     results.Add(completeLearningPath);
