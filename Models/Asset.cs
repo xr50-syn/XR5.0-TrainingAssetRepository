@@ -41,11 +41,13 @@ namespace XR50TrainingAssetRepo.Models
 
         /// <summary>
         /// Specific file format (e.g., "mp4", "png", "pdf", "jpeg")
+        /// Detected from MIME type or filename if not explicitly provided
         /// </summary>
         public string? Filetype { get; set; }
 
         /// <summary>
         /// High-level asset category matching material types
+        /// Inferred from MIME type or file extension
         /// </summary>
         [Required]
         public AssetType Type { get; set; }
@@ -54,9 +56,5 @@ namespace XR50TrainingAssetRepo.Models
         public string? URL { get; set; }
 	    [Key]
         public int Id { get; set; }
-        public Asset ()
-        {
-
-        }
     }
 }

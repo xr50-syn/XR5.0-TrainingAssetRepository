@@ -96,8 +96,8 @@ namespace XR50TrainingAssetRepo.Services
             context.Assets.Add(asset);
             await context.SaveChangesAsync();
 
-            _logger.LogInformation("Created asset reference {AssetId} (Type: {AssetType}) pointing to {Src}",
-                asset.Id, asset.Type, asset.Src);
+            _logger.LogInformation("Created asset reference {AssetId} (Type: {AssetType}, Filetype: {Filetype}) pointing to {Src}",
+                asset.Id, asset.Type, asset.Filetype, asset.Src);
             return asset;
         }
         // NEW: Helper to generate filename from URL
@@ -116,11 +116,132 @@ namespace XR50TrainingAssetRepo.Services
             return Guid.NewGuid().ToString();
         }
 
-        // Helper to infer AssetType from Filetype
+        // Helper to detect file type from binary stream using magic bytes
+        private async Task<(string filetype, AssetType assetType)> DetectFileTypeFromStream(Stream stream)
+        {
+            _logger.LogDebug("=== DetectFileTypeFromStream: Starting binary file detection ===");
+            _logger.LogDebug("Stream position before detection: {Position}, Stream length: {Length}",
+                stream.Position, stream.CanSeek ? stream.Length : -1);
+
+            // Read first 12 bytes to check file signature (magic bytes)
+            var buffer = new byte[12];
+            var originalPosition = stream.Position;
+
+            try
+            {
+                stream.Seek(0, SeekOrigin.Begin);
+                var bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
+
+                _logger.LogDebug("Read {BytesRead} bytes from stream. Magic bytes: {MagicBytes}",
+                    bytesRead,
+                    string.Join(" ", buffer.Take(Math.Min(12, bytesRead)).Select(b => $"0x{b:X2}")));
+
+                if (bytesRead < 4)
+                {
+                    // Not enough data to detect, fallback to unknown
+                    _logger.LogDebug("Insufficient bytes read ({BytesRead}), returning unknown type", bytesRead);
+                    return ("unknown", AssetType.PDF);
+                }
+
+                // Check for common file signatures (magic bytes)
+
+                // PDF: %PDF (0x25 0x50 0x44 0x46)
+                if (buffer[0] == 0x25 && buffer[1] == 0x50 && buffer[2] == 0x44 && buffer[3] == 0x46)
+                {
+                    _logger.LogDebug("Detected PDF file by magic bytes");
+                    return ("pdf", AssetType.PDF);
+                }
+
+                // PNG: 0x89 0x50 0x4E 0x47 0x0D 0x0A 0x1A 0x0A
+                if (buffer[0] == 0x89 && buffer[1] == 0x50 && buffer[2] == 0x4E && buffer[3] == 0x47)
+                {
+                    _logger.LogDebug("Detected PNG file by magic bytes");
+                    return ("png", AssetType.Image);
+                }
+
+                // JPEG: 0xFF 0xD8 0xFF
+                if (buffer[0] == 0xFF && buffer[1] == 0xD8 && buffer[2] == 0xFF)
+                {
+                    _logger.LogDebug("Detected JPEG file by magic bytes");
+                    return ("jpg", AssetType.Image);
+                }
+
+                // GIF: GIF87a or GIF89a
+                if (buffer[0] == 0x47 && buffer[1] == 0x49 && buffer[2] == 0x46)
+                {
+                    _logger.LogDebug("Detected GIF file by magic bytes");
+                    return ("gif", AssetType.Image);
+                }
+
+                // BMP: BM (0x42 0x4D)
+                if (buffer[0] == 0x42 && buffer[1] == 0x4D)
+                {
+                    _logger.LogDebug("Detected BMP file by magic bytes");
+                    return ("bmp", AssetType.Image);
+                }
+
+                // WebP: RIFF....WEBP
+                if (buffer[0] == 0x52 && buffer[1] == 0x49 && buffer[2] == 0x46 && buffer[3] == 0x46 &&
+                    bytesRead >= 12 && buffer[8] == 0x57 && buffer[9] == 0x45 && buffer[10] == 0x42 && buffer[11] == 0x50)
+                    return ("webp", AssetType.Image);
+
+                // MP4/MOV: Check for ftyp box signature
+                if (bytesRead >= 8 && buffer[4] == 0x66 && buffer[5] == 0x74 && buffer[6] == 0x79 && buffer[7] == 0x70)
+                {
+                    // Check specific brand codes
+                    if (bytesRead >= 12)
+                    {
+                        // mp4 brands: isom, mp41, mp42
+                        if ((buffer[8] == 0x69 && buffer[9] == 0x73 && buffer[10] == 0x6F && buffer[11] == 0x6D) || // isom
+                            (buffer[8] == 0x6D && buffer[9] == 0x70 && buffer[10] == 0x34))  // mp4*
+                            return ("mp4", AssetType.Video);
+
+                        // QuickTime: qt
+                        if (buffer[8] == 0x71 && buffer[9] == 0x74)
+                            return ("mov", AssetType.Video);
+                    }
+                    // Default to mp4 for ftyp
+                    return ("mp4", AssetType.Video);
+                }
+
+                // AVI: RIFF....AVI
+                if (buffer[0] == 0x52 && buffer[1] == 0x49 && buffer[2] == 0x46 && buffer[3] == 0x46 &&
+                    bytesRead >= 12 && buffer[8] == 0x41 && buffer[9] == 0x56 && buffer[10] == 0x49)
+                    return ("avi", AssetType.Video);
+
+                // WebM/MKV: 0x1A 0x45 0xDF 0xA3 (EBML signature)
+                if (buffer[0] == 0x1A && buffer[1] == 0x45 && buffer[2] == 0xDF && buffer[3] == 0xA3)
+                    return ("webm", AssetType.Video);
+
+                // Unity bundle files typically have "UnityFS" header
+                if (bytesRead >= 7 &&
+                    buffer[0] == 0x55 && buffer[1] == 0x6E && buffer[2] == 0x69 && buffer[3] == 0x74 &&
+                    buffer[4] == 0x79 && buffer[5] == 0x46 && buffer[6] == 0x53)
+                    return ("unity", AssetType.Unity);
+
+                // Unity asset bundle (older format)
+                if (bytesRead >= 11 &&
+                    buffer[0] == 0x55 && buffer[1] == 0x6E && buffer[2] == 0x69 && buffer[3] == 0x74 &&
+                    buffer[4] == 0x79 && buffer[5] == 0x57 && buffer[6] == 0x65 && buffer[7] == 0x62)
+                    return ("unity", AssetType.Unity);
+
+                // Unknown file type - fallback to PDF as default
+                _logger.LogWarning("Unknown file signature: {Signature}",
+                    string.Join(" ", buffer.Take(Math.Min(8, bytesRead)).Select(b => $"0x{b:X2}")));
+                return ("unknown", AssetType.PDF);
+            }
+            finally
+            {
+                // Restore original stream position
+                stream.Seek(originalPosition, SeekOrigin.Begin);
+            }
+        }
+
+        // Helper to infer AssetType from Filetype (for reference assets without MIME)
         private AssetType InferAssetTypeFromFiletype(string? filetype)
         {
             if (string.IsNullOrEmpty(filetype))
-                return AssetType.Image; // Default to Image
+                return AssetType.PDF; // Default when not specified
 
             var lower = filetype.ToLower();
 
@@ -137,28 +258,47 @@ namespace XR50TrainingAssetRepo.Services
             if (lower == "unity" || lower == "unitypackage" || lower == "bundle")
                 return AssetType.Unity;
 
-            // Image (default) - png, jpg, jpeg, gif, bmp, svg, webp
-            return AssetType.Image;
+            // Image - png, jpg, jpeg, gif, bmp, svg, webp
+            if (lower == "png" || lower == "jpg" || lower == "jpeg" || lower == "gif" ||
+                lower == "bmp" || lower == "svg" || lower == "webp")
+                return AssetType.Image;
+
+            // Default to PDF for unknown types
+            return AssetType.PDF;
         }
 
         public async Task<Asset> CreateAssetAsync(Asset asset, string tenantName, IFormFile file)
         {
             using var context = _dbContextFactory.CreateDbContext();
-            
+
             try
             {
-                // Upload file to storage first
+                // Detect file type from binary stream (magic bytes)
                 using var stream = file.OpenReadStream();
+                var (detectedFiletype, detectedType) = await DetectFileTypeFromStream(stream);
+
+                // Use detected values if asset properties not explicitly set
+                if (string.IsNullOrEmpty(asset.Filetype))
+                {
+                    asset.Filetype = detectedFiletype;
+                }
+                asset.Type = detectedType;
+
+                _logger.LogInformation("Detected file type from binary stream for asset {Filename}: Type={Type}, Filetype={Filetype}",
+                    asset.Filename, asset.Type, asset.Filetype);
+
+                // Upload file to storage
+                stream.Seek(0, SeekOrigin.Begin); // Reset stream position after detection
                 var uploadUrl = await _storageService.UploadFileAsync(tenantName, asset.Filename, file);
-                
+
                 // Update asset with storage URL
                 asset.URL = uploadUrl;
-                
+
                 // Save to database
                 context.Assets.Add(asset);
                 await context.SaveChangesAsync();
-                
-                _logger.LogInformation("Created asset {AssetId} ({Filename}) in {StorageType} storage", 
+
+                _logger.LogInformation("Created asset {AssetId} ({Filename}) in {StorageType} storage",
                     asset.Id, asset.Filename, _storageService.GetStorageType());
 
                 // Auto-share if storage supports it
@@ -353,18 +493,24 @@ namespace XR50TrainingAssetRepo.Services
             {
                 _logger.LogInformation("Uploading asset {Filename} to {StorageType} storage", filename, _storageService.GetStorageType());
 
-                // Upload file to storage
+                // Detect file type from binary stream
                 using var stream = file.OpenReadStream();
+                var (filetype, assetType) = await DetectFileTypeFromStream(stream);
+
+                _logger.LogInformation("Detected file type from binary stream for {Filename}: Type={Type}, Filetype={Filetype}",
+                    filename, assetType, filetype);
+
+                // Upload file to storage
+                stream.Seek(0, SeekOrigin.Begin);
                 var uploadResult = await _storageService.UploadFileAsync(tenantName, filename, file);
 
                 // Create asset record
-                var filetype = GetFiletypeFromFilename(filename);
                 var asset = new Asset
                 {
                     Filename = filename,
                     Description = description,
                     Filetype = filetype,
-                    Type = InferAssetTypeFromFiletype(filetype),
+                    Type = assetType,
                     Src = uploadResult
                 };
 

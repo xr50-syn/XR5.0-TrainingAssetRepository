@@ -4,6 +4,73 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2025-11-20
 
+### Changed - Binary Stream File Type Detection for Assets
+
+#### Summary
+Asset creation now uses **magic bytes detection** by reading the actual binary file content instead of relying on file extensions or MIME type headers. This provides secure, accurate asset type classification that cannot be spoofed by renaming files or manipulating headers.
+
+#### How It Works
+
+When a file is uploaded via `IFormFile`, the system:
+1. **Reads the first 12 bytes** of the file stream
+2. **Checks file signatures (magic bytes)** against known patterns
+3. **Determines both filetype and AssetType** from the binary signature
+4. **Resets stream position** to allow normal file processing
+5. **Cannot be spoofed** - detection is based on actual file content, not headers or extensions
+
+#### Supported File Signatures
+
+**Images:**
+- PNG: `0x89 0x50 0x4E 0x47` → png
+- JPEG: `0xFF 0xD8 0xFF` → jpg
+- GIF: `0x47 0x49 0x46` (GIF87a/GIF89a) → gif
+- BMP: `0x42 0x4D` (BM header) → bmp
+- WebP: `RIFF....WEBP` → webp
+
+**Videos:**
+- MP4/MOV: `ftyp` box with brand codes (isom, mp41, qt) → mp4 or mov
+- AVI: `RIFF....AVI` → avi
+- WebM/MKV: `0x1A 0x45 0xDF 0xA3` (EBML) → webm
+
+**Documents:**
+- PDF: `0x25 0x50 0x44 0x46` (%PDF) → pdf
+
+**Unity:**
+- Unity Bundle: `UnityFS` header → unity
+- Unity Asset: `UnityWeb` header → unity
+
+#### Security Benefits
+
+- **Cannot rename malicious files** to bypass detection (e.g., rename virus.exe to image.png)
+- **Cannot manipulate MIME type headers** to trick the system
+- **Verifies actual file content** before storage and processing
+- **Logs unknown signatures** for security monitoring
+
+#### API Impact
+
+**No breaking changes** - the API contract remains the same, but:
+- **More secure** - file type verified from binary content
+- **More accurate** - works even with wrong extensions or missing MIME types
+- **Better logging** - unknown file signatures are logged for investigation
+
+#### Example Logs
+
+```
+Detected file type from binary stream for asset screenshot.png: Type=Image, Filetype=png
+Detected file type from binary stream for training-video.mp4: Type=Video, Filetype=mp4
+Unknown file signature: 0x4D 0x5A 0x90 0x00 0x03 0x00 0x00 0x00
+```
+
+#### Affected Files
+- `Services/XR50AssetService.cs:119-214` - Added `DetectFileTypeFromStream()` method with magic bytes detection
+- `Services/XR50AssetService.cs:246-278` - Updated `CreateAssetAsync()` to use binary stream detection
+- `Services/XR50AssetService.cs:466-500` - Updated `UploadAssetAsync()` to use binary stream detection
+- `Models/Asset.cs:42-58` - Removed hardcoded defaults (detection is always performed)
+
+#### Migration Notes
+
+Existing assets are not affected - their type assignments remain valid. New uploads will use binary stream detection to accurately determine file types based on content, not metadata.
+
 ### Added - Enhanced Training Program Responses
 
 #### Summary
@@ -116,6 +183,14 @@ Asset responses now include both `type` and `filetype`:
 - `Services/XR50AssetService.cs:115-137` - Added `InferAssetTypeFromFiletype()` helper
 - `Services/XR50AssetService.cs:80-101,350-371` - Updated asset creation to set `Type`
 - `Services/XR50ManualTableCreator.cs:18,253,481-555` - Added migration method and updated table schema
+
+#### Default Values
+
+When asset type or filetype are not provided, both default to PDF:
+- `Type` → `AssetType.PDF` (1)
+- `Filetype` → `"pdf"`
+
+This ensures compatibility with GUI requests that may not specify these fields.
 
 #### Migration Instructions
 
