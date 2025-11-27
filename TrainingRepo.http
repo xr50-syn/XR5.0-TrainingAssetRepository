@@ -1,6 +1,0 @@
-@XR50TrainingAssetRepo_HostAddress = http://localhost:5286
-
-GET {{XR50TrainingAssetRepo_HostAddress}}/TEST/
-Accept: application/json
-
-###
