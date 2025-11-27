@@ -32,18 +32,78 @@ namespace XR50TrainingAssetRepo.Controllers
 
         [HttpPost]
         public async Task<ActionResult<CompleteTrainingProgramResponse>> PostTrainingProgram(
-            string tenantName,
-            [FromBody] CreateTrainingProgramWithMaterialsRequest request)
+            string tenantName)
         {
-            _logger.LogInformation("Creating training program '{Name}' with {MaterialCount} materials for tenant: {TenantName}",
-                request.Name, request.Materials.Count, tenantName);
-
             try
             {
+                // Read raw JSON body
+                using var reader = new StreamReader(Request.Body);
+                var body = await reader.ReadToEndAsync();
+
+                _logger.LogInformation("Received training program creation request body: {Body}", body);
+
+                var jsonElement = JsonSerializer.Deserialize<JsonElement>(body);
+
+                // Parse the request
+                var request = new CreateTrainingProgramWithMaterialsRequest
+                {
+                    Name = jsonElement.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? "" : "",
+                    Description = jsonElement.TryGetProperty("description", out var desc) ? desc.GetString() : null,
+                    Objectives = jsonElement.TryGetProperty("objectives", out var obj) ? obj.GetString() : null,
+                    Requirements = jsonElement.TryGetProperty("requirements", out var req) ? req.GetString() : null,
+                    min_level_rank = jsonElement.TryGetProperty("min_level_rank", out var minRank) && minRank.ValueKind == JsonValueKind.Number ? minRank.GetInt32() : null,
+                    max_level_rank = jsonElement.TryGetProperty("max_level_rank", out var maxRank) && maxRank.ValueKind == JsonValueKind.Number ? maxRank.GetInt32() : null,
+                    required_upto_level_rank = jsonElement.TryGetProperty("required_upto_level_rank", out var reqRank) ? ParseNullableInt(reqRank) : null
+                };
+
+                _logger.LogInformation("Creating training program '{Name}' for tenant: {TenantName}",
+                    request.Name, tenantName);
+
                 // Validate request
                 if (string.IsNullOrWhiteSpace(request.Name))
                 {
                     return BadRequest("Training program name is required");
+                }
+
+                // Parse materials array - handle both int[] and object[] with material creation data
+                var createdMaterialIds = new List<int>();
+                if (jsonElement.TryGetProperty("materials", out var materialsElement) &&
+                    materialsElement.ValueKind == JsonValueKind.Array)
+                {
+                    var (existingIds, materialCreationRequests) = ParseMaterialsArray(materialsElement);
+
+                    // Create inline materials
+                    if (materialCreationRequests.Any())
+                    {
+                        foreach (var materialData in materialCreationRequests)
+                        {
+                            // Forward to the material creation logic
+                            var materialResult = await CreateMaterialFromJson(tenantName, materialData);
+                            if (materialResult != null)
+                            {
+                                createdMaterialIds.Add(materialResult.id);
+                                _logger.LogInformation("Created inline material {Id} for program '{Name}'",
+                                    materialResult.id, request.Name);
+                            }
+                        }
+                    }
+
+                    // Combine existing IDs with newly created IDs
+                    request.Materials = existingIds.Concat(createdMaterialIds).ToList();
+                }
+
+                // Parse learning_path array - handle object[] with learning path creation details
+                if (jsonElement.TryGetProperty("learning_path", out var learningPathElement) &&
+                    learningPathElement.ValueKind == JsonValueKind.Array)
+                {
+                    request.learning_path = ParseLearningPathArray(learningPathElement);
+                }
+
+                // Parse LearningPaths (existing IDs)
+                if (jsonElement.TryGetProperty("LearningPaths", out var learningPathsElement) &&
+                    learningPathsElement.ValueKind == JsonValueKind.Array)
+                {
+                    request.LearningPaths = ParseIdArray(learningPathsElement);
                 }
 
                 // Create the training program with materials (empty list is fine)
@@ -109,11 +169,11 @@ namespace XR50TrainingAssetRepo.Controllers
                     request.Materials = ParseIdArray(materialsElement);
                 }
 
-                // Parse learning_path array - handle both int[] and object[] with id property
+                // Parse learning_path array - handle object[] with learning path creation details
                 if (jsonElement.TryGetProperty("learning_path", out var learningPathElement) &&
                     learningPathElement.ValueKind == JsonValueKind.Array)
                 {
-                    request.learning_path = ParseIdArray(learningPathElement);
+                    request.learning_path = ParseLearningPathArray(learningPathElement);
                 }
 
                 var result = await _trainingProgramService.UpdateCompleteTrainingProgramAsync(programId, request);
@@ -184,6 +244,103 @@ namespace XR50TrainingAssetRepo.Controllers
                 }
             }
             return ids;
+        }
+
+        private List<LearningPathCreationRequest> ParseLearningPathArray(JsonElement arrayElement)
+        {
+            var learningPaths = new List<LearningPathCreationRequest>();
+            foreach (var item in arrayElement.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.Object)
+                {
+                    var learningPath = new LearningPathCreationRequest
+                    {
+                        id = item.TryGetProperty("id", out var idProp) ? idProp.GetString() : null,
+                        Name = item.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? "" : "",
+                        Description = item.TryGetProperty("description", out var descProp) && descProp.ValueKind != JsonValueKind.Null ? descProp.GetString() : null,
+                        inherit_from_program = item.TryGetProperty("inherit_from_program", out var inheritProp) && inheritProp.ValueKind == JsonValueKind.True ? true : (inheritProp.ValueKind == JsonValueKind.False ? false : null)
+                    };
+                    learningPaths.Add(learningPath);
+                }
+            }
+            return learningPaths;
+        }
+
+        private (List<int> existingIds, List<JsonElement> materialCreationRequests) ParseMaterialsArray(JsonElement arrayElement)
+        {
+            var existingIds = new List<int>();
+            var materialCreationRequests = new List<JsonElement>();
+
+            foreach (var item in arrayElement.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.Number)
+                {
+                    // It's an existing material ID
+                    existingIds.Add(item.GetInt32());
+                }
+                else if (item.ValueKind == JsonValueKind.Object)
+                {
+                    // Check if it's a reference to existing material (has numeric id) or a new material to create
+                    if (item.TryGetProperty("id", out var idProp))
+                    {
+                        if (idProp.ValueKind == JsonValueKind.Number)
+                        {
+                            existingIds.Add(idProp.GetInt32());
+                        }
+                        else if (idProp.ValueKind == JsonValueKind.String && int.TryParse(idProp.GetString(), out int id))
+                        {
+                            existingIds.Add(id);
+                        }
+                        else
+                        {
+                            // Object without numeric id - treat as new material to create
+                            materialCreationRequests.Add(item);
+                        }
+                    }
+                    else
+                    {
+                        // Object without id property - treat as new material to create
+                        materialCreationRequests.Add(item);
+                    }
+                }
+                else if (item.ValueKind == JsonValueKind.String)
+                {
+                    if (int.TryParse(item.GetString(), out int id))
+                    {
+                        existingIds.Add(id);
+                    }
+                }
+            }
+
+            return (existingIds, materialCreationRequests);
+        }
+
+        private async Task<CreateMaterialResponse?> CreateMaterialFromJson(string tenantName, JsonElement materialData)
+        {
+            try
+            {
+                // Delegate to material service for creation
+                var material = await _materialService.CreateMaterialFromJsonAsync(materialData);
+
+                if (material != null)
+                {
+                    return new CreateMaterialResponse
+                    {
+                        id = material.id,
+                        Name = material.Name,
+                        Type = material.Type.ToString(),
+                        Status = "success",
+                        Message = "Material created successfully"
+                    };
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create inline material for tenant: {TenantName}", tenantName);
+                throw new ArgumentException($"Failed to create inline material: {ex.Message}", ex);
+            }
         }
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteTrainingProgram(string tenantName, int id)

@@ -22,7 +22,11 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public List<int>? LearningPaths { get; set; }
 
         // Optional: Learning path as ordered array of material IDs (using snake_case to match your JSON)
-        public List<int>? learning_path { get; set; }
+        // DEPRECATED: Use learning_path array of objects instead for inline creation
+        //public List<int>? learning_path { get; set; }
+
+        // Optional: Learning paths to create inline with custom names and properties
+        public List<LearningPathCreationRequest>? learning_path { get; set; }
     }
     
     public class CreateTrainingProgramWithMaterialsResponse
@@ -138,6 +142,15 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string? Description { get; set; }
         public string? AnnotationType { get; set; }
     }
+
+    public class LearningPathCreationRequest
+    {
+        public string? id { get; set; }  // Material IDs (comma-separated or single) to add to this learning path
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public bool? inherit_from_program { get; set; }
+    }
+
     public class CompleteTrainingProgramResponse
     {
         public string Status { get; set; } = "success";
@@ -226,7 +239,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         // Learning path IDs to assign to this program
         public List<int> LearningPaths { get; set; } = new();
 
-        // Optional: Learning path as ordered array of material IDs (using snake_case to match your JSON)
-        public List<int>? learning_path { get; set; }
+        // Optional: Learning paths to create inline with custom names and properties
+        public List<LearningPathCreationRequest>? learning_path { get; set; }
     }
 }
