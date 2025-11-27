@@ -372,3 +372,4 @@ app/
 .localstack/
 .env
 .codegpt
+.claude/

@@ -1,5 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.Certificate;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 using Microsoft.OpenApi.Models;
 using XR50TrainingAssetRepo.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
@@ -9,7 +12,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Specialized;
-using System.Linq; 
+using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
 using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Services;
@@ -33,6 +36,73 @@ builder.Services.AddControllers()
     });
 
 builder.Services.AddHttpContextAccessor();
+
+// Configure JWT Authentication
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        var configuration = builder.Configuration;
+
+        // Token validation parameters
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = configuration["IAM:Issuer"],
+            ValidAudience = configuration["IAM:Audience"],
+            ClockSkew = TimeSpan.FromMinutes(5)
+        };
+
+        // For IAM token integration with external identity provider
+        var authority = configuration["IAM:Authority"];
+        if (!string.IsNullOrEmpty(authority))
+        {
+            options.Authority = authority;
+            options.RequireHttpsMetadata = configuration.GetValue<bool>("IAM:RequireHttpsMetadata", true);
+
+            var metadataAddress = configuration["IAM:MetadataEndpoint"];
+            if (!string.IsNullOrEmpty(metadataAddress))
+            {
+                options.MetadataAddress = metadataAddress;
+            }
+        }
+
+        // Optional: Configure events for logging
+        options.Events = new JwtBearerEvents
+        {
+            OnAuthenticationFailed = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogWarning("JWT Authentication failed: {Exception}", context.Exception.Message);
+                return Task.CompletedTask;
+            },
+            OnTokenValidated = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogInformation("JWT token validated for user: {User}", context.Principal?.Identity?.Name ?? "Unknown");
+                return Task.CompletedTask;
+            }
+        };
+    });
+
+// Configure Authorization Policies
+builder.Services.AddAuthorization(options =>
+{
+    // Policy for regular tenant users - requires tenantName claim
+    options.AddPolicy("TenantUser", policy =>
+        policy.RequireClaim("tenantName"));
+
+    // Policy for tenant administrators
+    options.AddPolicy("TenantAdmin", policy =>
+        policy.RequireClaim("role", "admin", "tenantadmin"));
+
+    // Policy for system administrators (can manage all tenants)
+    options.AddPolicy("SystemAdmin", policy =>
+        policy.RequireClaim("role", "systemadmin", "superadmin"));
+});
+
 builder.Services.AddXR50MultitenancyWithDynamicDb(builder.Configuration);
 /*builder.Services.AddScoped<IXR50TenantService, XR50TenantService>();
 builder.Services.AddScoped<IXR50TenantManagementService, XR50TenantManagementService>();
