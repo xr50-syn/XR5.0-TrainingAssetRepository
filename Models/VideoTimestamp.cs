@@ -10,9 +10,10 @@ namespace XR50TrainingAssetRepo.Models
         [Key]
         public int id { get; set; }
         public string Title { get; set; } = null!;
-        public string Time { get; set; } = null!;
-        public string? Description { get; set; }
-
+        public string startTime { get; set; } = null!;
+        public string endTime {get;set;} = null!;
+        public string? Description { get; set; } = null!;
+        public string? Type {get;set;} = null!;
         // Foreign key property (shadow property alternative)
         public int? VideoMaterialId { get; set; }
 

@@ -247,15 +247,17 @@ namespace XR50TrainingAssetRepo.Services
                         {
                             foreach (var timestamp in video.VideoTimestamps)
                             {
-                                _logger.LogInformation("Adding timestamp: {Title} at {Time}", timestamp.Title, timestamp.Time);
-                                
+                                _logger.LogInformation("Adding timestamp: {Title} at {Time}", timestamp.Title, timestamp.startTime);
+
                                 var newTimestamp = new VideoTimestamp
                                 {
                                     Title = timestamp.Title,
-                                    Time = timestamp.Time,
-                                    Description = timestamp.Description
+                                    startTime = timestamp.startTime,
+                                    endTime = timestamp.endTime,
+                                    Description = timestamp.Description,
+                                    Type = timestamp.Type
                                 };
-                                
+
                                 context.Entry(newTimestamp).Property("VideoMaterialId").CurrentValue = material.id;
                                 context.VideoTimestamps.Add(newTimestamp);
                             }
@@ -477,6 +479,8 @@ namespace XR50TrainingAssetRepo.Services
             if (tryGet(json, "videoPath", out var path)) video.VideoPath = path.GetString();
             if (tryGet(json, "videoDuration", out var duration)) video.VideoDuration = duration.GetInt32();
             if (tryGet(json, "videoResolution", out var res)) video.VideoResolution = res.GetString();
+            if (tryGet(json, "startTime", out var startTime)) video.startTime = startTime.GetString();
+            if (tryGet(json, "annotations", out var annotations)) video.Annotations = annotations.GetRawText();
 
             return video;
         }
@@ -510,6 +514,7 @@ namespace XR50TrainingAssetRepo.Services
 
             if (tryGet(json, "assetId", out var assetId)) image.AssetId = assetId.GetInt32();
             if (tryGet(json, "imagePath", out var path)) image.ImagePath = path.GetString();
+            if (tryGet(json, "annotations", out var annotations)) image.Annotations = annotations.GetRawText();
 
             return image;
         }
@@ -748,7 +753,9 @@ namespace XR50TrainingAssetRepo.Services
                     VideoPath = EF.Property<string>(m, "VideoPath"),
                     VideoDuration = EF.Property<int?>(m, "VideoDuration"),
                     VideoResolution = EF.Property<string>(m, "VideoResolution"),
-                    
+                    startTime = EF.Property<string>(m, "startTime"),
+                    Annotations = EF.Property<string>(m, "Annotations"),
+
                     // Related data
                     VideoTimestamps = context.VideoTimestamps
                         .Where(vt => vt.VideoMaterialId == materialId)
@@ -756,8 +763,10 @@ namespace XR50TrainingAssetRepo.Services
                         {
                             vt.id,
                             vt.Title,
-                            vt.Time,
-                            vt.Description
+                            vt.startTime,
+                            vt.endTime,
+                            vt.Description,
+                            vt.Type
                         }).ToList(),
                     
                     MaterialRelationships = m.MaterialRelationships.Select(mr => new
@@ -909,6 +918,7 @@ namespace XR50TrainingAssetRepo.Services
                     ImageWidth = EF.Property<int?>(m, "ImageWidth"),
                     ImageHeight = EF.Property<int?>(m, "ImageHeight"),
                     ImageFormat = EF.Property<string>(m, "ImageFormat"),
+                    Annotations = EF.Property<string>(m, "Annotations"),
                     
                     MaterialRelationships = m.MaterialRelationships.Select(mr => new
                     {

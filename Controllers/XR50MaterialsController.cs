@@ -188,12 +188,16 @@ private async Task<object?> GetVideoDetails(int materialId)
         VideoPath = video.VideoPath,
         VideoDuration = video.VideoDuration,
         VideoResolution = video.VideoResolution,
+        startTime = video.startTime,
+        Annotations = video.Annotations,
         VideoTimestamps = video.VideoTimestamps?.Select(vt => new
         {
             Id = vt.id,
             Title = vt.Title,
-            Time = vt.Time,
-            Description = vt.Description
+            startTime = vt.startTime,
+            endTime = vt.endTime,
+            Description = vt.Description,
+            Type = vt.Type
         }) ?? Enumerable.Empty<object>(),
         Related = related
     };
@@ -339,6 +343,7 @@ private async Task<object?> GetImageDetails(int materialId)
         ImageWidth = image.ImageWidth,
         ImageHeight = image.ImageHeight,
         ImageFormat = image.ImageFormat,
+        Annotations = image.Annotations,
         Related = related
     };
 }
@@ -1359,25 +1364,37 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 
                 if (TryGetPropertyCaseInsensitive(jsonElement, "videoResolution", out var resolutionProp))
                     video.VideoResolution = resolutionProp.GetString();
-                
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "startTime", out var startTimeProp))
+                    video.startTime = startTimeProp.GetString();
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "annotations", out var annotationsProp))
+                    video.Annotations = annotationsProp.GetRawText();
+
                 // Parse the timestamps
                 var timestamps = new List<VideoTimestamp>();
-                if (TryGetPropertyCaseInsensitive(jsonElement, "timestamps", out var timestampsElement) && 
+                if (TryGetPropertyCaseInsensitive(jsonElement, "timestamps", out var timestampsElement) &&
                     timestampsElement.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var timestampElement in timestampsElement.EnumerateArray())
                     {
                         var timestamp = new VideoTimestamp();
-                        
+
                         if (TryGetPropertyCaseInsensitive(timestampElement, "title", out var titleProp))
                             timestamp.Title = titleProp.GetString() ?? "";
-                        
-                        if (TryGetPropertyCaseInsensitive(timestampElement, "time", out var timeProp))
-                            timestamp.Time = timeProp.GetString() ?? "";
-                        
+
+                        if (TryGetPropertyCaseInsensitive(timestampElement, "startTime", out var startTimePropTs))
+                            timestamp.startTime = startTimePropTs.GetString() ?? "";
+
+                        if (TryGetPropertyCaseInsensitive(timestampElement, "endTime", out var endTimeProp))
+                            timestamp.endTime = endTimeProp.GetString() ?? "";
+
                         if (TryGetPropertyCaseInsensitive(timestampElement, "description", out var descriptionProp))
                             timestamp.Description = descriptionProp.GetString();
-                        
+
+                        if (TryGetPropertyCaseInsensitive(timestampElement, "type", out var typeProp))
+                            timestamp.Type = typeProp.GetString();
+
                         timestamps.Add(timestamp);
                     }
                 }
@@ -2136,16 +2153,22 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                             foreach (var timestampElement in timestampsElement.EnumerateArray())
                             {
                                 var timestamp = new VideoTimestamp();
-                                
+
                                 if (TryGetPropertyCaseInsensitive(timestampElement, "title", out var titleProp))
                                     timestamp.Title = titleProp.GetString() ?? "";
-                                
-                                if (TryGetPropertyCaseInsensitive(timestampElement, "time", out var timeProp))
-                                    timestamp.Time = timeProp.GetString() ?? "";
-                                
+
+                                if (TryGetPropertyCaseInsensitive(timestampElement, "startTime", out var timeProp))
+                                    timestamp.startTime = timeProp.GetString() ?? "";
+
+                                if (TryGetPropertyCaseInsensitive(timestampElement, "endTime", out var endTimeProp))
+                                    timestamp.endTime = endTimeProp.GetString() ?? "";
+
                                 if (TryGetPropertyCaseInsensitive(timestampElement, "description", out var descProp))
                                     timestamp.Description = descProp.GetString();
-                                
+
+                                if (TryGetPropertyCaseInsensitive(timestampElement, "type", out var typeProp))
+                                    timestamp.Type = typeProp.GetString();
+
                                 timestamps.Add(timestamp);
                             }
                         }
@@ -2198,6 +2221,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         image.ImageHeight = height.GetInt32();
                     if (TryGetPropertyCaseInsensitive(jsonElement, "imageFormat", out var format))
                         image.ImageFormat = format.GetString();
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "annotations", out var annotations))
+                        image.Annotations = annotations.GetRawText();
                     break;
 
                 case PDFMaterial pdf:

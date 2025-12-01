@@ -82,7 +82,10 @@ namespace XR50TrainingAssetRepo.Models
         public int? ImageWidth { get; set; }
         public int? ImageHeight { get; set; }
         public string? ImageFormat { get; set; }
-        
+
+        [Column(TypeName = "json")]
+        public string? Annotations { get; set; }
+
         public ImageMaterial()
         {
             Type = Type.Image;
@@ -94,12 +97,15 @@ namespace XR50TrainingAssetRepo.Models
 
         public int? AssetId { get; set; }
         public string? VideoPath { get; set; }
-        public int? VideoDuration { get; set; }  
-        public string? VideoResolution { get; set; }  
-        
+        public int? VideoDuration { get; set; }
+        public string? VideoResolution { get; set; }
+        public string? startTime { get; set; }
+
+        [Column(TypeName = "json")]
+        public string? Annotations { get; set; }
 
         public List<VideoTimestamp> VideoTimestamps { get; set; }
-        
+
         public VideoMaterial()
         {
             VideoTimestamps = new List<VideoTimestamp>();

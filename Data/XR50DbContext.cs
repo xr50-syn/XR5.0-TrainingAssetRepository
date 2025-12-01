@@ -155,6 +155,13 @@ namespace XR50TrainingAssetRepo.Data
             modelBuilder.Entity<VideoMaterial>()
                 .Property(m => m.VideoResolution)
                 .HasColumnName("VideoResolution");
+            modelBuilder.Entity<VideoMaterial>()
+                .Property(m => m.startTime)
+                .HasColumnName("startTime");
+            modelBuilder.Entity<VideoMaterial>()
+                .Property(m => m.Annotations)
+                .HasColumnName("Annotations")
+                .HasColumnType("json");
 
 
             modelBuilder.Entity<ImageMaterial>()
@@ -172,6 +179,10 @@ namespace XR50TrainingAssetRepo.Data
             modelBuilder.Entity<ImageMaterial>()
                 .Property(m => m.ImageFormat)
                 .HasColumnName("ImageFormat");
+            modelBuilder.Entity<ImageMaterial>()
+                .Property(m => m.Annotations)
+                .HasColumnName("Annotations")
+                .HasColumnType("json");
 
             modelBuilder.Entity<PDFMaterial>()
                 .Property(m => m.AssetId)
