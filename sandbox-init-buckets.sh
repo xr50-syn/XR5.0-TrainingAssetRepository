@@ -31,19 +31,55 @@ for BUCKET in "${BUCKETS[@]}"; do
   # Check if bucket already exists
   if aws --endpoint-url=http://localhost:9000 s3 ls "s3://$BUCKET" 2>/dev/null; then
     echo "✓ Bucket $BUCKET already exists"
+    BUCKET_EXISTS=true
   else
     echo "  Creating bucket: $BUCKET"
     if aws --endpoint-url=http://localhost:9000 \
        --region us-east-1 \
        s3 mb "s3://$BUCKET" 2>/dev/null; then
       echo "  ✓ Successfully created bucket: $BUCKET"
+      BUCKET_EXISTS=true
     else
       echo "  ✗ Failed to create bucket: $BUCKET"
       echo "    Make sure:"
       echo "    - MinIO is running (docker-compose --profile sandbox up -d)"
       echo "    - AWS CLI is configured with MinIO credentials"
       echo "    - You can access http://localhost:9000"
+      BUCKET_EXISTS=false
     fi
+  fi
+
+  # Make bucket publicly accessible for testing
+  if [ "$BUCKET_EXISTS" = true ]; then
+    echo "  Setting public read access for testing..."
+
+    # Create temporary policy file
+    cat > /tmp/public-policy-$BUCKET.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {"AWS": "*"},
+      "Action": ["s3:GetObject"],
+      "Resource": ["arn:aws:s3:::$BUCKET/*"]
+    }
+  ]
+}
+EOF
+
+    # Apply public read policy
+    if aws --endpoint-url=http://localhost:9000 \
+       s3api put-bucket-policy \
+       --bucket "$BUCKET" \
+       --policy file:///tmp/public-policy-$BUCKET.json 2>/dev/null; then
+      echo "  ✓ Bucket $BUCKET is now publicly readable"
+    else
+      echo "  ⚠ Warning: Could not set public policy for $BUCKET"
+    fi
+
+    # Clean up temporary file
+    rm -f /tmp/public-policy-$BUCKET.json
   fi
 done
 

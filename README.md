@@ -243,7 +243,7 @@ Wait for all services to start (approximately 30-60 seconds), then verify:
 | `MINIO_ROOT_USER` | MinIO console username | `minioadmin` |
 | `MINIO_ROOT_PASSWORD` | MinIO console password | `minioadmin` |
 | `S3_FORCE_PATH_STYLE` | Use path-style URLs (required for MinIO) | `true` |
-
+| `S3_PUBLIC_ENDPOINT=` | URL from which the user can download | `http://amethyst.lab:9000` |
 **Note**: MinIO provides full data persistence. Files are stored in Docker volume `minio_data` and survive container restarts.
 
 ### Network Configuration

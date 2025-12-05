@@ -327,9 +327,9 @@ namespace XR50TrainingAssetRepo.Controllers
             }
         }
 
-       
+
         /// Get all tenants with their health status
-        
+
         [HttpGet("health-check")]
         public async Task<ActionResult> GetTenantsHealthCheck()
         {
@@ -341,7 +341,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 foreach (var tenant in allTenants)
                 {
                     var diagnostic = await _troubleshootingService.DiagnoseTenantAsync(tenant.TenantName);
-                    healthResults.Add(new 
+                    healthResults.Add(new
                     {
                         TenantName = tenant.TenantName,
                         IsHealthy = diagnostic.IsHealthy,
@@ -358,6 +358,37 @@ namespace XR50TrainingAssetRepo.Controllers
             {
                 _logger.LogError(ex, "Error performing health check");
                 return StatusCode(500, $"Error performing health check: {ex.Message}");
+            }
+        }
+
+
+        /// Migrate Annotations columns for video and image materials
+
+        [HttpPost("migrate-annotations/{tenantName}")]
+        public async Task<ActionResult> MigrateAnnotationsColumns(string tenantName)
+        {
+            try
+            {
+                _logger.LogInformation("Running Annotations column migration for tenant: {TenantName}", tenantName);
+
+                var success = await _tableCreator.MigrateAnnotationsColumnsAsync(tenantName);
+
+                if (success)
+                {
+                    return Ok(new {
+                        Message = $"Annotations columns migrated successfully for tenant {tenantName}",
+                        Details = "Added 'startTime' and 'Annotations' columns to Materials table"
+                    });
+                }
+                else
+                {
+                    return BadRequest(new { Message = $"Failed to migrate Annotations columns for tenant {tenantName}" });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating Annotations columns for tenant {TenantName}", tenantName);
+                return StatusCode(500, $"Error migrating columns: {ex.Message}");
             }
         }
     }

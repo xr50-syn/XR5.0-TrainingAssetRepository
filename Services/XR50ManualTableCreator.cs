@@ -16,6 +16,7 @@ namespace XR50TrainingAssetRepo.Services
         Task<List<string>> GetExistingTablesAsync(string tenantName);
         Task<bool> DropAllTablesAsync(string tenantName);
         Task<bool> MigrateAssetTypeColumnAsync(string tenantName);
+        Task<bool> MigrateAnnotationsColumnsAsync(string tenantName);
     }
 
     public class XR50ManualTableCreator : IXR50ManualTableCreator
@@ -299,6 +300,8 @@ namespace XR50TrainingAssetRepo.Services
             `VideoPath` varchar(500) DEFAULT NULL,
             `VideoDuration` int DEFAULT NULL,
             `VideoResolution` varchar(20) DEFAULT NULL,
+            `startTime` varchar(50) DEFAULT NULL,
+            `Annotations` json DEFAULT NULL,
 
             -- Image-specific columns
             `ImagePath` varchar(500) DEFAULT NULL,
@@ -550,6 +553,95 @@ namespace XR50TrainingAssetRepo.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error migrating Asset.Type column for tenant: {TenantName}", tenantName);
+                return false;
+            }
+        }
+
+        public async Task<bool> MigrateAnnotationsColumnsAsync(string tenantName)
+        {
+            try
+            {
+                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
+                var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
+
+                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+
+                _logger.LogInformation("=== Migrating Annotations columns for tenant: {TenantName} ===", tenantName);
+
+                using var connection = new MySqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                // Check if startTime column exists
+                var checkStartTimeQuery = @"
+                    SELECT COUNT(*)
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = @dbName
+                    AND TABLE_NAME = 'Materials'
+                    AND COLUMN_NAME = 'startTime'";
+
+                using (var checkCmd = new MySqlCommand(checkStartTimeQuery, connection))
+                {
+                    checkCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                    var columnExists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+
+                    if (!columnExists)
+                    {
+                        _logger.LogInformation("Adding startTime column to Materials table...");
+                        var alterTableQuery = @"
+                            ALTER TABLE `Materials`
+                            ADD COLUMN `startTime` varchar(50) DEFAULT NULL AFTER `VideoResolution`";
+
+                        using (var alterCmd = new MySqlCommand(alterTableQuery, connection))
+                        {
+                            await alterCmd.ExecuteNonQueryAsync();
+                            _logger.LogInformation("Successfully added startTime column");
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogInformation("startTime column already exists");
+                    }
+                }
+
+                // Check if Annotations column exists
+                var checkAnnotationsQuery = @"
+                    SELECT COUNT(*)
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = @dbName
+                    AND TABLE_NAME = 'Materials'
+                    AND COLUMN_NAME = 'Annotations'";
+
+                using (var checkCmd = new MySqlCommand(checkAnnotationsQuery, connection))
+                {
+                    checkCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                    var columnExists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+
+                    if (!columnExists)
+                    {
+                        _logger.LogInformation("Adding Annotations column to Materials table...");
+                        var alterTableQuery = @"
+                            ALTER TABLE `Materials`
+                            ADD COLUMN `Annotations` json DEFAULT NULL AFTER `startTime`";
+
+                        using (var alterCmd = new MySqlCommand(alterTableQuery, connection))
+                        {
+                            await alterCmd.ExecuteNonQueryAsync();
+                            _logger.LogInformation("Successfully added Annotations column");
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogInformation("Annotations column already exists");
+                    }
+                }
+
+                _logger.LogInformation("=== Migration completed for tenant: {TenantName} ===", tenantName);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating Annotations columns for tenant: {TenantName}", tenantName);
                 return false;
             }
         }
