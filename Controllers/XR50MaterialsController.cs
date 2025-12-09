@@ -2234,33 +2234,47 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     break;
 
                 case VideoMaterial video:
-                    // Handle video timestamps and properties
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "timestamps", out var timestampsElement))
+                    // Handle video timestamps and properties - check both root level and inside config object
+                    JsonElement? tsElement = null;
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "timestamps", out var rootTs) &&
+                        rootTs.ValueKind == JsonValueKind.Array)
+                    {
+                        tsElement = rootTs;
+                    }
+                    else if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var configEl) &&
+                             TryGetPropertyCaseInsensitive(configEl, "timestamps", out var configTs) &&
+                             configTs.ValueKind == JsonValueKind.Array)
+                    {
+                        tsElement = configTs;
+                    }
+
+                    if (tsElement.HasValue)
                     {
                         var timestamps = new List<VideoTimestamp>();
-                        if (timestampsElement.ValueKind == JsonValueKind.Array)
+                        foreach (var timestampElement in tsElement.Value.EnumerateArray())
                         {
-                            foreach (var timestampElement in timestampsElement.EnumerateArray())
-                            {
-                                var timestamp = new VideoTimestamp();
+                            var timestamp = new VideoTimestamp();
 
-                                if (TryGetPropertyCaseInsensitive(timestampElement, "title", out var titleProp))
-                                    timestamp.Title = titleProp.GetString() ?? "";
+                            if (TryGetPropertyCaseInsensitive(timestampElement, "title", out var titleProp))
+                                timestamp.Title = titleProp.GetString() ?? "";
 
-                                if (TryGetPropertyCaseInsensitive(timestampElement, "startTime", out var timeProp))
-                                    timestamp.startTime = timeProp.GetString() ?? "";
+                            if (TryGetPropertyCaseInsensitive(timestampElement, "startTime", out var timeProp))
+                                timestamp.startTime = timeProp.ValueKind == JsonValueKind.Number
+                                    ? timeProp.GetInt32().ToString()
+                                    : timeProp.GetString() ?? "";
 
-                                if (TryGetPropertyCaseInsensitive(timestampElement, "endTime", out var endTimeProp))
-                                    timestamp.endTime = endTimeProp.GetString() ?? "";
+                            if (TryGetPropertyCaseInsensitive(timestampElement, "endTime", out var endTimeProp))
+                                timestamp.endTime = endTimeProp.ValueKind == JsonValueKind.Number
+                                    ? endTimeProp.GetInt32().ToString()
+                                    : endTimeProp.GetString() ?? "";
 
-                                if (TryGetPropertyCaseInsensitive(timestampElement, "description", out var descProp))
-                                    timestamp.Description = descProp.GetString();
+                            if (TryGetPropertyCaseInsensitive(timestampElement, "description", out var descProp))
+                                timestamp.Description = descProp.GetString();
 
-                                if (TryGetPropertyCaseInsensitive(timestampElement, "type", out var typeProp))
-                                    timestamp.Type = typeProp.GetString();
+                            if (TryGetPropertyCaseInsensitive(timestampElement, "type", out var typeProp))
+                                timestamp.Type = typeProp.GetString();
 
-                                timestamps.Add(timestamp);
-                            }
+                            timestamps.Add(timestamp);
                         }
                         video.Timestamps = timestamps;
                         _logger.LogInformation("Added {Count} video timestamps", timestamps.Count);
