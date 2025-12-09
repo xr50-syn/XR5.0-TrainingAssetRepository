@@ -15,6 +15,7 @@ namespace XR50TrainingAssetRepo.Models
         [Key]
         public string ShareId { get; set; }
         public string? FileId { get; set; }
+        [NotMapped]
         public ShareType Type { get; set;}
         public string Target {get; set;}
         public Share()
