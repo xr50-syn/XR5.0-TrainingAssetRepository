@@ -36,4 +36,32 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string? URL { get; set; }
         public DateTime? Created_at { get; set; }
     }
+
+    public class SubcomponentMaterialRelationshipDto
+    {
+        public int RelationshipId { get; set; }
+        public int SubcomponentId { get; set; }
+        public string SubcomponentType { get; set; } = "";
+        public int MaterialId { get; set; }
+        public string? MaterialName { get; set; }
+        public string? MaterialType { get; set; }
+        public string? RelationshipType { get; set; }
+        public int? DisplayOrder { get; set; }
+    }
+
+    public class AssignMaterialToSubcomponentRequest
+    {
+        public string? RelationshipType { get; set; }
+        public int? DisplayOrder { get; set; }
+    }
+
+    public class MaterialSummaryDto
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+        public string? Description { get; set; }
+        public string Type { get; set; } = "";
+        public int? DisplayOrder { get; set; }
+        public string? RelationshipType { get; set; }
+    }
 }

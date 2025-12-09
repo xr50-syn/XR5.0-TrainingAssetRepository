@@ -3304,6 +3304,150 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
         }
 
+        #region Subcomponent Material Relationships
+
+        // POST: api/{tenantName}/materials/subcomponent/{subcomponentType}/{subcomponentId}/assign-material/{materialId}
+        [HttpPost("subcomponent/{subcomponentType}/{subcomponentId}/assign-material/{materialId}")]
+        public async Task<ActionResult<object>> AssignMaterialToSubcomponent(
+            string tenantName,
+            string subcomponentType,
+            int subcomponentId,
+            int materialId,
+            [FromQuery] string? relationshipType = null,
+            [FromQuery] int? displayOrder = null)
+        {
+            _logger.LogInformation("Assigning material {MaterialId} to {SubcomponentType} {SubcomponentId} for tenant: {TenantName}",
+                materialId, subcomponentType, subcomponentId, tenantName);
+
+            try
+            {
+                var relationshipId = await _materialService.AssignMaterialToSubcomponentAsync(
+                    subcomponentId, subcomponentType, materialId, relationshipType, displayOrder);
+
+                return Ok(new
+                {
+                    Message = $"Material successfully assigned to {subcomponentType}",
+                    RelationshipId = relationshipId,
+                    SubcomponentType = subcomponentType,
+                    SubcomponentId = subcomponentId,
+                    MaterialId = materialId,
+                    RelationshipType = relationshipType,
+                    DisplayOrder = displayOrder
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogWarning(ex, "Failed to assign material {MaterialId} to {SubcomponentType} {SubcomponentId}",
+                    materialId, subcomponentType, subcomponentId);
+                return NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Invalid operation assigning material {MaterialId} to {SubcomponentType} {SubcomponentId}",
+                    materialId, subcomponentType, subcomponentId);
+                return BadRequest(ex.Message);
+            }
+        }
+
+        // DELETE: api/{tenantName}/materials/subcomponent/{subcomponentType}/{subcomponentId}/remove-material/{materialId}
+        [HttpDelete("subcomponent/{subcomponentType}/{subcomponentId}/remove-material/{materialId}")]
+        public async Task<IActionResult> RemoveMaterialFromSubcomponent(
+            string tenantName,
+            string subcomponentType,
+            int subcomponentId,
+            int materialId)
+        {
+            _logger.LogInformation("Removing material {MaterialId} from {SubcomponentType} {SubcomponentId} for tenant: {TenantName}",
+                materialId, subcomponentType, subcomponentId, tenantName);
+
+            var success = await _materialService.RemoveMaterialFromSubcomponentAsync(
+                subcomponentId, subcomponentType, materialId);
+
+            if (!success)
+            {
+                return NotFound("Relationship not found");
+            }
+
+            return Ok(new { Message = $"Material successfully removed from {subcomponentType}" });
+        }
+
+        // GET: api/{tenantName}/materials/subcomponent/{subcomponentType}/{subcomponentId}/materials
+        [HttpGet("subcomponent/{subcomponentType}/{subcomponentId}/materials")]
+        public async Task<ActionResult<IEnumerable<object>>> GetMaterialsForSubcomponent(
+            string tenantName,
+            string subcomponentType,
+            int subcomponentId,
+            [FromQuery] bool includeOrder = true)
+        {
+            _logger.LogInformation("Getting materials for {SubcomponentType} {SubcomponentId} in tenant: {TenantName}",
+                subcomponentType, subcomponentId, tenantName);
+
+            var materials = await _materialService.GetMaterialsForSubcomponentAsync(
+                subcomponentId, subcomponentType, includeOrder);
+
+            var result = materials.Select(m => new
+            {
+                id = m.id,
+                Name = m.Name,
+                Description = m.Description,
+                Type = GetLowercaseType(m.Type)
+            });
+
+            return Ok(result);
+        }
+
+        // PUT: api/{tenantName}/materials/subcomponent/{subcomponentType}/{subcomponentId}/reorder-materials
+        [HttpPut("subcomponent/{subcomponentType}/{subcomponentId}/reorder-materials")]
+        public async Task<IActionResult> ReorderSubcomponentMaterials(
+            string tenantName,
+            string subcomponentType,
+            int subcomponentId,
+            [FromBody] Dictionary<int, int> materialOrderMap)
+        {
+            _logger.LogInformation("Reordering materials for {SubcomponentType} {SubcomponentId} in tenant: {TenantName}",
+                subcomponentType, subcomponentId, tenantName);
+
+            var success = await _materialService.ReorderSubcomponentMaterialsAsync(
+                subcomponentId, subcomponentType, materialOrderMap);
+
+            if (!success)
+            {
+                return BadRequest("Failed to reorder materials");
+            }
+
+            return Ok(new { Message = "Materials reordered successfully" });
+        }
+
+        // GET: api/{tenantName}/materials/subcomponent/{subcomponentType}/{subcomponentId}/relationships
+        [HttpGet("subcomponent/{subcomponentType}/{subcomponentId}/relationships")]
+        public async Task<ActionResult<IEnumerable<object>>> GetSubcomponentRelationships(
+            string tenantName,
+            string subcomponentType,
+            int subcomponentId)
+        {
+            _logger.LogInformation("Getting relationships for {SubcomponentType} {SubcomponentId} in tenant: {TenantName}",
+                subcomponentType, subcomponentId, tenantName);
+
+            var relationships = await _materialService.GetSubcomponentRelationshipsAsync(
+                subcomponentId, subcomponentType);
+
+            var result = relationships.Select(r => new
+            {
+                RelationshipId = r.Id,
+                SubcomponentId = r.SubcomponentId,
+                SubcomponentType = r.SubcomponentType,
+                MaterialId = r.RelatedMaterialId,
+                MaterialName = r.RelatedMaterial?.Name,
+                MaterialType = r.RelatedMaterial != null ? GetLowercaseType(r.RelatedMaterial.Type) : null,
+                RelationshipType = r.RelationshipType,
+                DisplayOrder = r.DisplayOrder
+            });
+
+            return Ok(result);
+        }
+
+        #endregion
+
         // GET: api/{tenantName}/materials/summary
         [HttpGet("summary")]
         public async Task<ActionResult<MaterialTypeSummary>> GetMaterialTypeSummary(string tenantName)
