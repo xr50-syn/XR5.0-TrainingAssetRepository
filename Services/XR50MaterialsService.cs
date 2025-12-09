@@ -195,10 +195,11 @@ namespace XR50TrainingAssetRepo.Services
                                 {
                                     Title = step.Title,
                                     Content = step.Content
-                       
+
                                 };
 
-                                context.Entry(newStep).Property("WorkflowMaterialId").CurrentValue = material.id;
+                                // Set the foreign key directly
+                                newStep.WorkflowMaterialId = material.id;
                                 context.WorkflowSteps.Add(newStep);
                                 
                                 _logger.LogInformation("Created new workflow step entity (ID will be auto-generated)");
@@ -230,7 +231,8 @@ namespace XR50TrainingAssetRepo.Services
                                     Description = entry.Description
                                 };
 
-                                context.Entry(newEntry).Property("ChecklistMaterialId").CurrentValue = material.id;
+                                // Set the foreign key directly
+                                newEntry.ChecklistMaterialId = material.id;
                                 context.Entries.Add(newEntry);
                             }
 
@@ -258,7 +260,8 @@ namespace XR50TrainingAssetRepo.Services
                                     Type = timestamp.Type
                                 };
 
-                                context.Entry(newTimestamp).Property("VideoMaterialId").CurrentValue = material.id;
+                                // Set the foreign key directly
+                                newTimestamp.VideoMaterialId = material.id;
                                 context.VideoTimestamps.Add(newTimestamp);
                             }
                             
@@ -283,7 +286,8 @@ namespace XR50TrainingAssetRepo.Services
                                     Description = entry.Description
                                 };
 
-                                context.Entry(newEntry).Property("QuestionnaireMaterialId").CurrentValue = material.id;
+                                // Set the foreign key directly
+                                newEntry.QuestionnaireMaterialId = material.id;
                                 context.QuestionnaireEntries.Add(newEntry);
                             }
 
@@ -314,7 +318,8 @@ namespace XR50TrainingAssetRepo.Services
                                     ScaleConfig = question.ScaleConfig
                                 };
 
-                                context.Entry(newQuestion).Property("QuizMaterialId").CurrentValue = material.id;
+                                // Set the foreign key directly
+                                newQuestion.QuizMaterialId = material.id;
                                 context.QuizQuestions.Add(newQuestion);
                                 await context.SaveChangesAsync(); // Save to get question ID
 
@@ -330,7 +335,8 @@ namespace XR50TrainingAssetRepo.Services
                                             DisplayOrder = answer.DisplayOrder
                                         };
 
-                                        context.Entry(newAnswer).Property("QuizQuestionId").CurrentValue = newQuestion.QuizQuestionId;
+                                        // Set the foreign key directly
+                                        newAnswer.QuizQuestionId = newQuestion.QuizQuestionId;
                                         context.QuizAnswers.Add(newAnswer);
                                     }
 
@@ -574,8 +580,8 @@ namespace XR50TrainingAssetRepo.Services
         {
             if (tryGet(json, "name", out var name)) material.Name = name.GetString() ?? "";
             if (tryGet(json, "description", out var desc)) material.Description = desc.GetString();
-            if (tryGet(json, "uniqueId", out var uniqueId) && uniqueId.ValueKind == System.Text.Json.JsonValueKind.Number)
-                material.UniqueId = uniqueId.GetInt32();
+            if (tryGet(json, "unique_Id", out var unique_Id) && unique_Id.ValueKind == System.Text.Json.JsonValueKind.Number)
+                material.Unique_Id = unique_Id.GetInt32();
         }
 
         public async Task<Material> UpdateMaterialAsync(Material material)
@@ -1230,8 +1236,8 @@ namespace XR50TrainingAssetRepo.Services
                 throw new ArgumentException($"Video material with ID {videoId} not found");
             }
 
-           
-            context.Entry(timestamp).Property("VideoMaterialId").CurrentValue = videoId;
+            // Set the foreign key directly
+            timestamp.VideoMaterialId = videoId;
 
             context.VideoTimestamps.Add(timestamp);
             await context.SaveChangesAsync();
@@ -1284,8 +1290,8 @@ namespace XR50TrainingAssetRepo.Services
                 throw new ArgumentException($"Checklist material with ID {checklistId} not found");
             }
 
-           
-            context.Entry(entry).Property("ChecklistMaterialId").CurrentValue = checklistId;
+            // Set the foreign key directly
+            entry.ChecklistMaterialId = checklistId;
 
             context.Entries.Add(entry);
             await context.SaveChangesAsync();
@@ -1338,8 +1344,8 @@ namespace XR50TrainingAssetRepo.Services
                 throw new ArgumentException($"Workflow material with ID {workflowId} not found");
             }
 
-           
-            context.Entry(step).Property("WorkflowMaterialId").CurrentValue = workflowId;
+            // Set the foreign key directly
+            step.WorkflowMaterialId = workflowId;
 
             context.WorkflowSteps.Add(step);
             await context.SaveChangesAsync();
@@ -1391,6 +1397,9 @@ namespace XR50TrainingAssetRepo.Services
             {
                 throw new ArgumentException($"Questionnaire material with ID {questionnaireId} not found");
             }
+
+            // Set the foreign key directly
+            entry.QuestionnaireMaterialId = questionnaireId;
 
             context.QuestionnaireEntries.Add(entry);
             await context.SaveChangesAsync();
@@ -1445,7 +1454,8 @@ namespace XR50TrainingAssetRepo.Services
                 throw new ArgumentException($"Quiz material with ID {quizId} not found");
             }
 
-            context.Entry(question).Property("QuizMaterialId").CurrentValue = quizId;
+            // Set the foreign key directly
+            question.QuizMaterialId = quizId;
             context.QuizQuestions.Add(question);
             await context.SaveChangesAsync();
 
@@ -1484,7 +1494,8 @@ namespace XR50TrainingAssetRepo.Services
                 throw new ArgumentException($"Quiz question with ID {questionId} not found");
             }
 
-            context.Entry(answer).Property("QuizQuestionId").CurrentValue = questionId;
+            // Set the foreign key directly
+            answer.QuizQuestionId = questionId;
             context.QuizAnswers.Add(answer);
             await context.SaveChangesAsync();
 
@@ -1609,7 +1620,8 @@ namespace XR50TrainingAssetRepo.Services
             {
                 foreach (var entry in initialEntries)
                 {
-                    context.Entry(entry).Property("QuestionnaireMaterialId").CurrentValue = questionnaire.id;
+                    // Set the foreign key directly
+                    entry.QuestionnaireMaterialId = questionnaire.id;
                     context.QuestionnaireEntries.Add(entry);
                 }
 
@@ -1642,7 +1654,8 @@ namespace XR50TrainingAssetRepo.Services
             {
                 foreach (var question in initialQuestions)
                 {
-                    context.Entry(question).Property("QuizMaterialId").CurrentValue = quiz.id;
+                    // Set the foreign key directly
+                    question.QuizMaterialId = quiz.id;
                     context.QuizQuestions.Add(question);
                     await context.SaveChangesAsync(); // Save to get question ID
 
@@ -1651,7 +1664,8 @@ namespace XR50TrainingAssetRepo.Services
                     {
                         foreach (var answer in question.Answers)
                         {
-                            context.Entry(answer).Property("QuizQuestionId").CurrentValue = question.QuizQuestionId;
+                            // Set the foreign key directly
+                            answer.QuizQuestionId = question.QuizQuestionId;
                             context.QuizAnswers.Add(answer);
                         }
 
@@ -1687,7 +1701,8 @@ namespace XR50TrainingAssetRepo.Services
             {
                 foreach (var step in initialSteps)
                 {
-                    context.Entry(step).Property("WorkflowMaterialId").CurrentValue = workflow.id;
+                    // Set the foreign key directly
+                    step.WorkflowMaterialId = workflow.id;
                     context.WorkflowSteps.Add(step);
                 }
 
@@ -1720,7 +1735,8 @@ namespace XR50TrainingAssetRepo.Services
             {
                 foreach (var timestamp in initialTimestamps)
                 {
-                    context.Entry(timestamp).Property("VideoMaterialId").CurrentValue = video.id;
+                    // Set the foreign key directly
+                    timestamp.VideoMaterialId = video.id;
                     context.VideoTimestamps.Add(timestamp);
                 }
 
@@ -1753,7 +1769,8 @@ namespace XR50TrainingAssetRepo.Services
             {
                 foreach (var entry in initialEntries)
                 {
-                    context.Entry(entry).Property("ChecklistMaterialId").CurrentValue = checklist.id;
+                    // Set the foreign key directly
+                    entry.ChecklistMaterialId = checklist.id;
                     context.Entries.Add(entry);
                 }
 

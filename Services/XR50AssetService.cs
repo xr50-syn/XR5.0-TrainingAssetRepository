@@ -225,6 +225,22 @@ namespace XR50TrainingAssetRepo.Services
                     buffer[4] == 0x79 && buffer[5] == 0x57 && buffer[6] == 0x65 && buffer[7] == 0x62)
                     return ("unity", AssetType.Unity);
 
+                // GLB (binary glTF): "glTF" (0x67 0x6C 0x54 0x46)
+                if (buffer[0] == 0x67 && buffer[1] == 0x6C && buffer[2] == 0x54 && buffer[3] == 0x46)
+                {
+                    _logger.LogDebug("Detected GLB file by magic bytes");
+                    return ("glb", AssetType.Unity);
+                }
+
+                // FBX: Kaydara FBX Binary
+                if (bytesRead >= 11 &&
+                    buffer[0] == 0x4B && buffer[1] == 0x61 && buffer[2] == 0x79 && buffer[3] == 0x64 &&
+                    buffer[4] == 0x61 && buffer[5] == 0x72 && buffer[6] == 0x61)
+                {
+                    _logger.LogDebug("Detected FBX file by magic bytes");
+                    return ("fbx", AssetType.Unity);
+                }
+
                 // Unknown file type - fallback to PDF as default
                 _logger.LogWarning("Unknown file signature: {Signature}",
                     string.Join(" ", buffer.Take(Math.Min(8, bytesRead)).Select(b => $"0x{b:X2}")));
@@ -254,8 +270,9 @@ namespace XR50TrainingAssetRepo.Services
             if (lower == "pdf")
                 return AssetType.PDF;
 
-            // Unity
-            if (lower == "unity" || lower == "unitypackage" || lower == "bundle")
+            // Unity and 3D models
+            if (lower == "unity" || lower == "unitypackage" || lower == "bundle" ||
+                lower == "glb" || lower == "gltf" || lower == "fbx" || lower == "obj")
                 return AssetType.Unity;
 
             // Image - png, jpg, jpeg, gif, bmp, svg, webp
@@ -783,7 +800,9 @@ namespace XR50TrainingAssetRepo.Services
                 ".json" => "data",
                 ".zip" or ".rar" or ".7z" => "archive",
                 ".unity" or ".unitypackage" => "unity",
-                ".fbx" or ".obj" or ".3ds" => "3d_model",
+                ".glb" or ".gltf" => "glb",
+                ".fbx" => "fbx",
+                ".obj" or ".3ds" => "3d_model",
                 ".wav" or ".mp3" or ".ogg" or ".flac" => "audio",
                 _ => "unknown"
             };

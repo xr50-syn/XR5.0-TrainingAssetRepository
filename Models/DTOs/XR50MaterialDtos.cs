@@ -19,7 +19,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string? Name { get; set; }
         public string? Description { get; set; }
         public string Type { get; set; } = "";
-        public int? UniqueId { get; set; }
+        public int? Unique_Id { get; set; }
         public int? AssetId { get; set; }
         public DateTime? Created_at { get; set; }
     }

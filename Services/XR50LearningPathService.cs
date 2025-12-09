@@ -594,7 +594,7 @@ namespace XR50TrainingAssetRepo.Services
                 Name = r.Material.Name,
                 Description = r.Material.Description,
                 Type = GetMaterialTypeString((int)r.Material.Type),
-                UniqueId = r.Material.UniqueId,
+                Unique_Id = r.Material.Unique_Id,
                 Created_at = r.Material.Created_at,
                 Updated_at = r.Material.Updated_at,
                 Assignment = new AssignmentMetadata

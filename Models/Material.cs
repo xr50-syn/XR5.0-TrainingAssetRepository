@@ -22,7 +22,7 @@ namespace XR50TrainingAssetRepo.Models
         public int id { get; set; }
         [Required]
         public Type Type { get; set; }
-        public int? UniqueId { get; set; }
+        public int? Unique_Id { get; set; }
         [JsonIgnore]
         public virtual ICollection<ProgramMaterial> ProgramMaterials { get; set; } = new List<ProgramMaterial>();
         [JsonIgnore]

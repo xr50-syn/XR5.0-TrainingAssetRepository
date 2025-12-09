@@ -97,7 +97,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string Name { get; set; } = "";
         public string? Description { get; set; }
         public string MaterialType { get; set; } = "Default"; // Video, Image, Checklist, etc.
-        public int? UniqueId { get; set; }
+        public int? Unique_Id { get; set; }
 
         // Type-specific properties (only set what's needed based on MaterialType)
         public int? AssetId { get; set; }
@@ -178,7 +178,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string? Name { get; set; }
         public string? Description { get; set; }
         public string Type { get; set; } = "";
-        public int? UniqueId { get; set; }
+        public int? Unique_Id { get; set; }
         public DateTime? Created_at { get; set; }
         public DateTime? Updated_at { get; set; }
 
@@ -275,7 +275,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string? Name { get; set; }
         public string? Description { get; set; }
         public string Type { get; set; } = "";
-        public int? UniqueId { get; set; }
+        public int? Unique_Id { get; set; }
 
         /// <summary>
         /// Position in the learning path sequence (1-based).
