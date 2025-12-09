@@ -1265,6 +1265,9 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 if (TryGetPropertyCaseInsensitive(jsonElement, "description", out var descProp))
                     workflow.Description = descProp.GetString();
 
+                if (TryGetPropertyCaseInsensitive(jsonElement, "unique_id", out var uniqueIdProp) && uniqueIdProp.ValueKind == JsonValueKind.Number)
+                    workflow.Unique_id = uniqueIdProp.GetInt32();
+
                 // Parse the steps - try to get from "config" object first, then direct "steps" array
                 var steps = new List<WorkflowStep>();
 
@@ -1352,7 +1355,10 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 
                 if (TryGetPropertyCaseInsensitive(jsonElement, "description", out var descProp))
                     video.Description = descProp.GetString();
-                
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "unique_id", out var uniqueIdProp) && uniqueIdProp.ValueKind == JsonValueKind.Number)
+                    video.Unique_id = uniqueIdProp.GetInt32();
+
                 if (TryGetPropertyCaseInsensitive(jsonElement, "assetId", out var assetIdProp))
                     video.AssetId = assetIdProp.GetInt32();
                 
@@ -1449,6 +1455,9 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 if (TryGetPropertyCaseInsensitive(jsonElement, "description", out var descProp))
                     checklist.Description = descProp.GetString();
 
+                if (TryGetPropertyCaseInsensitive(jsonElement, "unique_id", out var uniqueIdProp) && uniqueIdProp.ValueKind == JsonValueKind.Number)
+                    checklist.Unique_id = uniqueIdProp.GetInt32();
+
                 // Parse the entries - try to get from "config" object first, then direct "entries" array
                 var entries = new List<ChecklistEntry>();
 
@@ -1536,7 +1545,10 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 
                 if (TryGetPropertyCaseInsensitive(jsonElement, "description", out var descProp))
                     questionnaire.Description = descProp.GetString();
-                
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "unique_id", out var uniqueIdProp) && uniqueIdProp.ValueKind == JsonValueKind.Number)
+                    questionnaire.Unique_id = uniqueIdProp.GetInt32();
+
                 if (TryGetPropertyCaseInsensitive(jsonElement, "questionnaireType", out var typeProp))
                     questionnaire.QuestionnaireType = typeProp.GetString();
                 
@@ -1633,6 +1645,9 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 if (TryGetPropertyCaseInsensitive(jsonElement, "description", out var descProp))
                     quiz.Description = descProp.GetString();
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "unique_id", out var uniqueIdProp) && uniqueIdProp.ValueKind == JsonValueKind.Number)
+                    quiz.Unique_id = uniqueIdProp.GetInt32();
 
                 // Parse the questions - try to get from "config" object first, then direct "questions" array
                 var questions = new List<QuizQuestion>();
@@ -1924,6 +1939,12 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             {
                 material.Description = descProp.GetString();
                 _logger.LogInformation("Set material description: {Description}", material.Description);
+            }
+
+            if (TryGetPropertyCaseInsensitive(jsonElement, "unique_id", out var uniqueIdProp) && uniqueIdProp.ValueKind == JsonValueKind.Number)
+            {
+                material.Unique_id = uniqueIdProp.GetInt32();
+                _logger.LogInformation("Set material unique_id: {UniqueId}", material.Unique_id);
             }
 
             // Populate type-specific properties
