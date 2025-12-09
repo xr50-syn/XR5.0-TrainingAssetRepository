@@ -1388,12 +1388,27 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 if (TryGetPropertyCaseInsensitive(jsonElement, "annotations", out var annotationsProp))
                     video.Annotations = annotationsProp.GetRawText();
 
-                // Parse the timestamps
+                // Parse the timestamps - check both root level and inside config object
                 var timestamps = new List<VideoTimestamp>();
-                if (TryGetPropertyCaseInsensitive(jsonElement, "timestamps", out var timestampsElement) &&
-                    timestampsElement.ValueKind == JsonValueKind.Array)
+                JsonElement? timestampsElement = null;
+
+                // First try root level
+                if (TryGetPropertyCaseInsensitive(jsonElement, "timestamps", out var rootTimestamps) &&
+                    rootTimestamps.ValueKind == JsonValueKind.Array)
                 {
-                    foreach (var timestampElement in timestampsElement.EnumerateArray())
+                    timestampsElement = rootTimestamps;
+                }
+                // Then try inside config object
+                else if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var configElement) &&
+                         TryGetPropertyCaseInsensitive(configElement, "timestamps", out var configTimestamps) &&
+                         configTimestamps.ValueKind == JsonValueKind.Array)
+                {
+                    timestampsElement = configTimestamps;
+                }
+
+                if (timestampsElement.HasValue)
+                {
+                    foreach (var timestampElement in timestampsElement.Value.EnumerateArray())
                     {
                         var timestamp = new VideoTimestamp();
 
@@ -1401,10 +1416,14 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                             timestamp.Title = titleProp.GetString() ?? "";
 
                         if (TryGetPropertyCaseInsensitive(timestampElement, "startTime", out var startTimePropTs))
-                            timestamp.startTime = startTimePropTs.GetString() ?? "";
+                            timestamp.startTime = startTimePropTs.ValueKind == JsonValueKind.Number
+                                ? startTimePropTs.GetInt32().ToString()
+                                : startTimePropTs.GetString() ?? "";
 
                         if (TryGetPropertyCaseInsensitive(timestampElement, "endTime", out var endTimeProp))
-                            timestamp.endTime = endTimeProp.GetString() ?? "";
+                            timestamp.endTime = endTimeProp.ValueKind == JsonValueKind.Number
+                                ? endTimeProp.GetInt32().ToString()
+                                : endTimeProp.GetString() ?? "";
 
                         if (TryGetPropertyCaseInsensitive(timestampElement, "description", out var descriptionProp))
                             timestamp.Description = descriptionProp.GetString();
