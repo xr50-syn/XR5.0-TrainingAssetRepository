@@ -135,6 +135,7 @@ private async Task<object?> GetWorkflowDetails(int materialId)
         Name = workflow.Name,
         Description = workflow.Description,
         Type = GetLowercaseType(workflow.Type),
+        Unique_id = workflow.Unique_id,
         Created_at = workflow.Created_at,
         Updated_at = workflow.Updated_at,
         Config = new
@@ -182,6 +183,7 @@ private async Task<object?> GetVideoDetails(int materialId)
         Name = video.Name,
         Description = video.Description,
         Type = GetLowercaseType(video.Type),
+        Unique_id = video.Unique_id,
         Created_at = video.Created_at,
         Updated_at = video.Updated_at,
         Asset = asset,
@@ -216,6 +218,7 @@ private async Task<object?> GetChecklistDetails(int materialId)
         Name = checklist.Name,
         Description = checklist.Description,
         Type = GetLowercaseType(checklist.Type),
+        Unique_id = checklist.Unique_id,
         Created_at = checklist.Created_at,
         Updated_at = checklist.Updated_at,
         Config = new
@@ -244,6 +247,7 @@ private async Task<object?> GetQuestionnaireDetails(int materialId)
         Name = questionnaire.Name,
         Description = questionnaire.Description,
         Type = GetLowercaseType(questionnaire.Type),
+        Unique_id = questionnaire.Unique_id,
         Created_at = questionnaire.Created_at,
         Updated_at = questionnaire.Updated_at,
         QuestionnaireType = questionnaire.QuestionnaireType,
@@ -275,6 +279,7 @@ private async Task<object?> GetQuizDetails(int materialId)
         Name = quiz.Name,
         Description = quiz.Description,
         Type = GetLowercaseType(quiz.Type),
+        Unique_id = quiz.Unique_id,
         Created_at = quiz.Created_at,
         Updated_at = quiz.Updated_at,
         Config = new
@@ -336,6 +341,7 @@ private async Task<object?> GetImageDetails(int materialId)
         Name = image.Name,
         Description = image.Description,
         Type = GetLowercaseType(image.Type),
+        Unique_id = image.Unique_id,
         Created_at = image.Created_at,
         Updated_at = image.Updated_at,
         Asset = asset,
@@ -380,6 +386,7 @@ private async Task<object?> GetPDFDetails(int materialId)
         Name = pdf.Name,
         Description = pdf.Description,
         Type = GetLowercaseType(pdf.Type),
+        Unique_id = pdf.Unique_id,
         Created_at = pdf.Created_at,
         Updated_at = pdf.Updated_at,
         Asset = asset,
@@ -422,6 +429,7 @@ private async Task<object?> GetUnityDetails(int materialId)
         Name = unity.Name,
         Description = unity.Description,
         Type = GetLowercaseType(unity.Type),
+        Unique_id = unity.Unique_id,
         Created_at = unity.Created_at,
         Updated_at = unity.Updated_at,
         Asset = asset,
@@ -445,6 +453,7 @@ private async Task<object?> GetChatbotDetails(int materialId)
         Name = chatbot.Name,
         Description = chatbot.Description,
         Type = GetLowercaseType(chatbot.Type),
+        Unique_id = chatbot.Unique_id,
         Created_at = chatbot.Created_at,
         Updated_at = chatbot.Updated_at,
         ChatbotConfig = chatbot.ChatbotConfig,
@@ -467,6 +476,7 @@ private async Task<object?> GetMQTTTemplateDetails(int materialId)
         Name = mqtt.Name,
         Description = mqtt.Description,
         Type = GetLowercaseType(mqtt.Type),
+        Unique_id = mqtt.Unique_id,
         Created_at = mqtt.Created_at,
         Updated_at = mqtt.Updated_at,
         MessageType = mqtt.message_type,
@@ -507,6 +517,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         Name = material.Name,
         Description = material.Description,
         Type = GetLowercaseType(material.Type),
+        Unique_id = material.Unique_id,
         Created_at = material.Created_at,
         Updated_at = material.Updated_at,
         Asset = asset,
@@ -1913,7 +1924,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 ("checklistmaterial", _) or (_, "checklist") => new ChecklistMaterial(),
                 ("workflowmaterial", _) or (_, "workflow") => new WorkflowMaterial(),
                 ("pdfmaterial", _) or (_, "pdf") => new PDFMaterial(),
-                ("unitydemo", _) or (_, "unitydemo") => new UnityMaterial(),
+                ("unitydemo", _) or (_, "unitydemo") or ("unitymaterial", _) or (_, "unity") => new UnityMaterial(),
                 ("chatbotmaterial", _) or (_, "chatbot") => new ChatbotMaterial(),
                 ("questionnairematerial", _) or (_, "questionnaire") => new QuestionnaireMaterial(),
                 ("quizmaterial", _) or (_, "quiz") => new QuizMaterial(),
@@ -1992,74 +2003,93 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             {
                 case WorkflowMaterial workflow:
                     _logger.LogInformation("Processing workflow material...");
-                    
-                    // Handle workflow steps (case-insensitive)
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "steps", out var stepsElement))
+
+                    // Handle workflow steps - check "config" object first, then direct "steps" array
+                    JsonElement stepsElement;
+                    bool hasSteps = false;
+
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var workflowConfigElement))
                     {
-                        _logger.LogInformation("Found steps property, processing...");
-                        
+                        if (TryGetPropertyCaseInsensitive(workflowConfigElement, "steps", out stepsElement))
+                        {
+                            hasSteps = true;
+                            _logger.LogInformation("Found steps in config object");
+                        }
+                    }
+
+                    if (!hasSteps && TryGetPropertyCaseInsensitive(jsonElement, "steps", out stepsElement))
+                    {
+                        hasSteps = true;
+                        _logger.LogInformation("Found steps directly");
+                    }
+
+                    if (hasSteps && stepsElement.ValueKind == JsonValueKind.Array)
+                    {
                         var steps = new List<WorkflowStep>();
-                        if (stepsElement.ValueKind == JsonValueKind.Array)
+                        _logger.LogInformation("Steps is an array with {Count} elements", stepsElement.GetArrayLength());
+
+                        foreach (var stepElement in stepsElement.EnumerateArray())
                         {
-                            _logger.LogInformation("Steps is an array with {Count} elements", stepsElement.GetArrayLength());
-                            
-                            foreach (var stepElement in stepsElement.EnumerateArray())
+                            var step = new WorkflowStep();
+
+                            if (TryGetPropertyCaseInsensitive(stepElement, "title", out var titleProp))
                             {
-                                var step = new WorkflowStep();
-                                
-                                if (TryGetPropertyCaseInsensitive(stepElement, "title", out var titleProp))
-                                {
-                                    step.Title = titleProp.GetString() ?? "";
-                                    _logger.LogInformation("Step title: {Title}", step.Title);
-                                }
-                                
-                                if (TryGetPropertyCaseInsensitive(stepElement, "content", out var contentProp))
-                                {
-                                    step.Content = contentProp.GetString();
-                                    _logger.LogInformation("Step content: {Content}", step.Content);
-                                }
-                                
-                                steps.Add(step);
+                                step.Title = titleProp.GetString() ?? "";
+                                _logger.LogInformation("Step title: {Title}", step.Title);
                             }
+
+                            if (TryGetPropertyCaseInsensitive(stepElement, "content", out var contentProp))
+                            {
+                                step.Content = contentProp.GetString();
+                                _logger.LogInformation("Step content: {Content}", step.Content);
+                            }
+
+                            steps.Add(step);
                         }
-                        else
-                        {
-                            _logger.LogWarning("Steps property is not an array, it's: {ValueKind}", stepsElement.ValueKind);
-                        }
-                        
+
                         workflow.WorkflowSteps = steps;
                         _logger.LogInformation("Added {Count} workflow steps", steps.Count);
                     }
-                    else
+                    else if (!hasSteps)
                     {
                         _logger.LogWarning("No 'steps' property found in workflow JSON");
-                        // Log all available properties for debugging
-                        foreach (var prop in jsonElement.EnumerateObject())
-                        {
-                            _logger.LogInformation("Available property: {Name} = {Value}", prop.Name, prop.Value);
-                        }
                     }
                     break;
 
                 case ChecklistMaterial checklist:
-                    // Handle checklist entries (case-insensitive)
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "entries", out var entriesElement))
+                    // Handle checklist entries - check "config" object first, then direct "entries" array
+                    JsonElement entriesElement;
+                    bool hasEntries = false;
+
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var checklistConfigElement))
+                    {
+                        if (TryGetPropertyCaseInsensitive(checklistConfigElement, "entries", out entriesElement))
+                        {
+                            hasEntries = true;
+                            _logger.LogInformation("Found entries in config object");
+                        }
+                    }
+
+                    if (!hasEntries && TryGetPropertyCaseInsensitive(jsonElement, "entries", out entriesElement))
+                    {
+                        hasEntries = true;
+                        _logger.LogInformation("Found entries directly");
+                    }
+
+                    if (hasEntries && entriesElement.ValueKind == JsonValueKind.Array)
                     {
                         var entries = new List<ChecklistEntry>();
-                        if (entriesElement.ValueKind == JsonValueKind.Array)
+                        foreach (var entryElement in entriesElement.EnumerateArray())
                         {
-                            foreach (var entryElement in entriesElement.EnumerateArray())
-                            {
-                                var entry = new ChecklistEntry();
+                            var entry = new ChecklistEntry();
 
-                                if (TryGetPropertyCaseInsensitive(entryElement, "text", out var textProp))
-                                    entry.Text = textProp.GetString() ?? "";
+                            if (TryGetPropertyCaseInsensitive(entryElement, "text", out var textProp))
+                                entry.Text = textProp.GetString() ?? "";
 
-                                if (TryGetPropertyCaseInsensitive(entryElement, "description", out var descProp))
-                                    entry.Description = descProp.GetString();
+                            if (TryGetPropertyCaseInsensitive(entryElement, "description", out var descProp))
+                                entry.Description = descProp.GetString();
 
-                                entries.Add(entry);
-                            }
+                            entries.Add(entry);
                         }
                         checklist.Entries = entries;
                         _logger.LogInformation("Added {Count} checklist entries", entries.Count);
@@ -2097,7 +2127,12 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                             var question = new QuizQuestion();
 
                             if (TryGetPropertyCaseInsensitive(questionElement, "id", out var idProp))
-                                question.QuestionNumber = idProp.GetInt32();
+                            {
+                                if (idProp.ValueKind == JsonValueKind.String && int.TryParse(idProp.GetString(), out var idValue))
+                                    question.QuestionNumber = idValue;
+                                else if (idProp.ValueKind == JsonValueKind.Number)
+                                    question.QuestionNumber = idProp.GetInt32();
+                            }
 
                             if (TryGetPropertyCaseInsensitive(questionElement, "type", out var typeProp))
                                 question.QuestionType = typeProp.GetString() ?? "text";
@@ -2125,7 +2160,12 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                                 question.HelpText = helpProp.GetString();
 
                             if (TryGetPropertyCaseInsensitive(questionElement, "allowMultiple", out var multiProp))
-                                question.AllowMultiple = multiProp.GetBoolean();
+                            {
+                                if (multiProp.ValueKind == JsonValueKind.String && bool.TryParse(multiProp.GetString(), out var boolValue))
+                                    question.AllowMultiple = boolValue;
+                                else if (multiProp.ValueKind == JsonValueKind.True || multiProp.ValueKind == JsonValueKind.False)
+                                    question.AllowMultiple = multiProp.GetBoolean();
+                            }
 
                             if (TryGetPropertyCaseInsensitive(questionElement, "scaleConfig", out var scaleProp))
                                 question.ScaleConfig = scaleProp.GetString();
@@ -2145,10 +2185,20 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                                             answer.Text = ansTextProp.GetString() ?? "";
 
                                         if (TryGetPropertyCaseInsensitive(answerElement, "isCorrect", out var correctProp))
-                                            answer.IsCorrect = correctProp.GetBoolean();
+                                        {
+                                            if (correctProp.ValueKind == JsonValueKind.String && bool.TryParse(correctProp.GetString(), out var correctValue))
+                                                answer.IsCorrect = correctValue;
+                                            else if (correctProp.ValueKind == JsonValueKind.True || correctProp.ValueKind == JsonValueKind.False)
+                                                answer.IsCorrect = correctProp.GetBoolean();
+                                        }
 
                                         if (TryGetPropertyCaseInsensitive(answerElement, "displayOrder", out var orderProp))
-                                            answer.DisplayOrder = orderProp.GetInt32();
+                                        {
+                                            if (orderProp.ValueKind == JsonValueKind.String && int.TryParse(orderProp.GetString(), out var orderValue))
+                                                answer.DisplayOrder = orderValue;
+                                            else if (orderProp.ValueKind == JsonValueKind.Number)
+                                                answer.DisplayOrder = orderProp.GetInt32();
+                                        }
 
                                         answers.Add(answer);
                                     }
@@ -2273,6 +2323,44 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         questionnaire.QuestionnaireType = qType.GetString();
                     if (TryGetPropertyCaseInsensitive(jsonElement, "passingScore", out var score))
                         questionnaire.PassingScore = score.GetDecimal();
+
+                    // Handle questionnaire entries - check "config" object first, then direct "entries" array
+                    JsonElement qEntriesElement;
+                    bool hasQEntries = false;
+
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var qConfigElement))
+                    {
+                        if (TryGetPropertyCaseInsensitive(qConfigElement, "entries", out qEntriesElement))
+                        {
+                            hasQEntries = true;
+                            _logger.LogInformation("Found questionnaire entries in config object");
+                        }
+                    }
+
+                    if (!hasQEntries && TryGetPropertyCaseInsensitive(jsonElement, "entries", out qEntriesElement))
+                    {
+                        hasQEntries = true;
+                        _logger.LogInformation("Found questionnaire entries directly");
+                    }
+
+                    if (hasQEntries && qEntriesElement.ValueKind == JsonValueKind.Array)
+                    {
+                        var qEntries = new List<QuestionnaireEntry>();
+                        foreach (var entryElement in qEntriesElement.EnumerateArray())
+                        {
+                            var qEntry = new QuestionnaireEntry();
+
+                            if (TryGetPropertyCaseInsensitive(entryElement, "text", out var qTextProp))
+                                qEntry.Text = qTextProp.GetString() ?? "";
+
+                            if (TryGetPropertyCaseInsensitive(entryElement, "description", out var qDescProp))
+                                qEntry.Description = qDescProp.GetString();
+
+                            qEntries.Add(qEntry);
+                        }
+                        questionnaire.QuestionnaireEntries = qEntries;
+                        _logger.LogInformation("Added {Count} questionnaire entries", qEntries.Count);
+                    }
                     break;
             }
         }
