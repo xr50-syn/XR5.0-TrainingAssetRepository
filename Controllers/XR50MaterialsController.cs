@@ -2005,7 +2005,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     _logger.LogInformation("Processing workflow material...");
 
                     // Handle workflow steps - check "config" object first, then direct "steps" array
-                    JsonElement stepsElement;
+                    JsonElement stepsElement = default;
                     bool hasSteps = false;
 
                     if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var workflowConfigElement))
@@ -2058,7 +2058,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 case ChecklistMaterial checklist:
                     // Handle checklist entries - check "config" object first, then direct "entries" array
-                    JsonElement entriesElement;
+                    JsonElement entriesElement = default;
                     bool hasEntries = false;
 
                     if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var checklistConfigElement))
@@ -2325,7 +2325,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         questionnaire.PassingScore = score.GetDecimal();
 
                     // Handle questionnaire entries - check "config" object first, then direct "entries" array
-                    JsonElement qEntriesElement;
+                    JsonElement qEntriesElement = default;
                     bool hasQEntries = false;
 
                     if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var qConfigElement))
