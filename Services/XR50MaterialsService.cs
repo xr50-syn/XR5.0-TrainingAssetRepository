@@ -273,7 +273,7 @@ namespace XR50TrainingAssetRepo.Services
 
                         if (video.Timestamps?.Any() == true)
                         {
-                            foreach (var timestamp in video.Timestamps)
+                            foreach (var timestamp in video.Timestamps.ToList())
                             {
                                 _logger.LogInformation("Adding timestamp: {Title} at {Time}", timestamp.Title, timestamp.startTime);
 
