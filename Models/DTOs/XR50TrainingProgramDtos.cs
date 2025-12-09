@@ -242,4 +242,100 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         // Optional: Learning paths to create inline with custom names and properties
         public List<LearningPathCreationRequest>? learning_path { get; set; }
     }
+
+    // ====================================
+    // SIMPLIFIED DTOs (New Architecture)
+    // ====================================
+    // These DTOs hide the internal learning path structure and present learning paths
+    // as simple ordered lists of materials associated with a training program.
+    // The underlying database structure is preserved for future expansion.
+
+    /// <summary>
+    /// Simplified learning path response that hides internal IDs and structure.
+    /// Learning paths are presented as ordered lists of materials within a training program.
+    /// </summary>
+    public class SimplifiedLearningPathResponse
+    {
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+
+        /// <summary>
+        /// Ordered list of materials in this learning path.
+        /// Materials are returned in DisplayOrder sequence.
+        /// </summary>
+        public List<OrderedMaterialResponse> Materials { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Material response with display order information for learning paths.
+    /// </summary>
+    public class OrderedMaterialResponse
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+        public string? Description { get; set; }
+        public string Type { get; set; } = "";
+        public int? UniqueId { get; set; }
+
+        /// <summary>
+        /// Position in the learning path sequence (1-based).
+        /// </summary>
+        public int Order { get; set; }
+
+        public DateTime? Created_at { get; set; }
+        public DateTime? Updated_at { get; set; }
+
+        // Asset information (if applicable)
+        public int? AssetId { get; set; }
+
+        // Type-specific properties (populated based on material type)
+        public Dictionary<string, object?> TypeSpecificProperties { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Simplified complete training program response using the new architecture.
+    /// Learning paths are presented as ordered lists of materials, with internal structure hidden.
+    /// </summary>
+    public class SimplifiedCompleteTrainingProgramResponse
+    {
+        public string Status { get; set; } = "success";
+        public string Message { get; set; } = "";
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public string? Objectives { get; set; }
+        public string? Requirements { get; set; }
+        public int? MinLevelRank { get; set; }
+        public int? MaxLevelRank { get; set; }
+        public int? RequiredUptoLevelRank { get; set; }
+        public string? CreatedAt { get; set; }
+
+        /// <summary>
+        /// Materials directly assigned to the training program (not through learning paths).
+        /// </summary>
+        public List<MaterialResponse> DirectMaterials { get; set; } = new();
+
+        /// <summary>
+        /// Learning paths as ordered collections of materials.
+        /// Internal learning path IDs and cross-references are hidden.
+        /// </summary>
+        public List<SimplifiedLearningPathResponse> LearningPaths { get; set; } = new();
+
+        /// <summary>
+        /// Summary statistics for the training program.
+        /// </summary>
+        public SimplifiedTrainingProgramSummary? Summary { get; set; }
+    }
+
+    /// <summary>
+    /// Summary statistics for simplified training program response.
+    /// </summary>
+    public class SimplifiedTrainingProgramSummary
+    {
+        public int TotalDirectMaterials { get; set; }
+        public int TotalLearningPaths { get; set; }
+        public int TotalLearningPathMaterials { get; set; }
+        public Dictionary<string, int> MaterialsByType { get; set; } = new();
+        public DateTime? LastUpdated { get; set; }
+    }
 }

@@ -11,6 +11,13 @@ using XR50TrainingAssetRepo.Services;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
+    /// <summary>
+    /// DEPRECATED: This controller is deprecated as of the new architecture where learning paths
+    /// are accessed only through training program endpoints as ordered lists of materials.
+    /// Use the programs controller endpoints to access learning paths within their training programs.
+    /// This controller is preserved for potential future use but should not be used in production.
+    /// </summary>
+    [Obsolete("Learning paths are now accessed only through training program endpoints. Use /api/{tenantName}/programs/{id}/detail to retrieve learning paths as part of training programs.")]
     [Route("api/{tenantName}/[controller]")]
     [ApiController]
     public class LearningPathsController : ControllerBase

@@ -22,6 +22,10 @@ namespace XR50TrainingAssetRepo.Services
         Task<CompleteTrainingProgramResponse> CreateCompleteTrainingProgramAsync(CompleteTrainingProgramRequest request);
         Task<CompleteTrainingProgramResponse?> GetCompleteTrainingProgramAsync(int id);
         Task<IEnumerable<CompleteTrainingProgramResponse>> GetAllCompleteTrainingProgramsAsync();
+
+        // New simplified architecture methods
+        Task<SimplifiedCompleteTrainingProgramResponse?> GetSimplifiedCompleteTrainingProgramAsync(int id);
+        Task<IEnumerable<SimplifiedCompleteTrainingProgramResponse>> GetAllSimplifiedCompleteTrainingProgramsAsync();
     }
 
     public class TrainingProgramService : ITrainingProgramService
@@ -1233,7 +1237,235 @@ namespace XR50TrainingAssetRepo.Services
             return response;
         }
 
+        /// <summary>
+        /// Builds an OrderedMaterialResponse with display order information for learning paths.
+        /// </summary>
+        private async Task<OrderedMaterialResponse> BuildOrderedMaterialResponse(Material material, int displayOrder)
+        {
+            var response = new OrderedMaterialResponse
+            {
+                Id = material.id,
+                Name = material.Name,
+                Description = material.Description,
+                Type = material.Type.ToString(),
+                UniqueId = material.UniqueId,
+                Order = displayOrder,
+                Created_at = material.Created_at,
+                Updated_at = material.Updated_at
+            };
+
+            // Add type-specific properties (same logic as BuildMaterialResponse)
+            switch (material)
+            {
+                case VideoMaterial video:
+                    response.AssetId = video.AssetId;
+                    response.TypeSpecificProperties = new Dictionary<string, object?>
+                    {
+                        ["VideoPath"] = video.VideoPath,
+                        ["VideoDuration"] = video.VideoDuration,
+                        ["VideoResolution"] = video.VideoResolution
+                    };
+                    break;
+
+                case ImageMaterial image:
+                    response.AssetId = image.AssetId;
+                    response.TypeSpecificProperties = new Dictionary<string, object?>
+                    {
+                        ["ImagePath"] = image.ImagePath,
+                        ["ImageWidth"] = image.ImageWidth,
+                        ["ImageHeight"] = image.ImageHeight,
+                        ["ImageFormat"] = image.ImageFormat
+                    };
+                    break;
+
+                case PDFMaterial pdf:
+                    response.AssetId = pdf.AssetId;
+                    response.TypeSpecificProperties = new Dictionary<string, object?>
+                    {
+                        ["PdfPath"] = pdf.PdfPath,
+                        ["PdfPageCount"] = pdf.PdfPageCount,
+                        ["PdfFileSize"] = pdf.PdfFileSize
+                    };
+                    break;
+
+                case ChatbotMaterial chatbot:
+                    response.TypeSpecificProperties = new Dictionary<string, object?>
+                    {
+                        ["ChatbotConfig"] = chatbot.ChatbotConfig,
+                        ["ChatbotModel"] = chatbot.ChatbotModel,
+                        ["ChatbotPrompt"] = chatbot.ChatbotPrompt
+                    };
+                    break;
+
+                case MQTT_TemplateMaterial mqtt:
+                    response.TypeSpecificProperties = new Dictionary<string, object?>
+                    {
+                        ["MessageType"] = mqtt.message_type,
+                        ["MessageText"] = mqtt.message_text
+                    };
+                    break;
+
+                case UnityMaterial unity:
+                    response.AssetId = unity.AssetId;
+                    response.TypeSpecificProperties = new Dictionary<string, object?>
+                    {
+                        ["UnityVersion"] = unity.UnityVersion,
+                        ["UnityBuildTarget"] = unity.UnityBuildTarget,
+                        ["UnitySceneName"] = unity.UnitySceneName
+                    };
+                    break;
+
+                case DefaultMaterial defaultMat:
+                    response.AssetId = defaultMat.AssetId;
+                    break;
+            }
+
+            return response;
+        }
+
+        #endregion
+
+        #region Simplified Architecture Methods
+
+        /// <summary>
+        /// Gets a complete training program with simplified learning path representation.
+        /// Learning paths are returned as ordered lists of materials with internal structure hidden.
+        /// </summary>
+        public async Task<SimplifiedCompleteTrainingProgramResponse?> GetSimplifiedCompleteTrainingProgramAsync(int id)
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+
+            var program = await context.TrainingPrograms
+                .Include(tp => tp.Materials)
+                    .ThenInclude(pm => pm.Material)
+                .Include(tp => tp.LearningPaths)
+                    .ThenInclude(plp => plp.LearningPath)
+                .FirstOrDefaultAsync(tp => tp.id == id);
+
+            if (program == null)
+            {
+                return null;
+            }
+
+            // Get direct materials (materials assigned directly to the program, not through learning paths)
+            var directMaterials = new List<MaterialResponse>();
+            foreach (var pm in program.Materials)
+            {
+                var materialResponse = await BuildMaterialResponse(pm.Material);
+                directMaterials.Add(materialResponse);
+            }
+
+            // Get learning paths with their materials (simplified - no IDs or cross-references)
+            var learningPaths = new List<SimplifiedLearningPathResponse>();
+            int totalLearningPathMaterials = 0;
+
+            foreach (var plp in program.LearningPaths)
+            {
+                // Get materials for this learning path via MaterialRelationships
+                var pathMaterialRelationships = await context.MaterialRelationships
+                    .Where(mr => mr.RelatedEntityId == plp.LearningPath.id.ToString() &&
+                                 mr.RelatedEntityType == "LearningPath")
+                    .OrderBy(mr => mr.DisplayOrder ?? int.MaxValue)
+                    .ToListAsync();
+
+                // Parse material IDs and fetch materials
+                var materialIds = pathMaterialRelationships
+                    .Select(mr => int.TryParse(mr.MaterialId.ToString(), out int materialId) ? materialId : 0)
+                    .Where(materialId => materialId > 0)
+                    .ToList();
+
+                var pathMaterials = new List<Material>();
+                if (materialIds.Any())
+                {
+                    pathMaterials = await context.Materials
+                        .Where(m => materialIds.Contains(m.id))
+                        .ToListAsync();
+
+                    // Reorder materials according to relationship order
+                    var materialDict = pathMaterials.ToDictionary(m => m.id);
+                    pathMaterials = materialIds
+                        .Where(materialId => materialDict.ContainsKey(materialId))
+                        .Select(materialId => materialDict[materialId])
+                        .ToList();
+                }
+
+                // Build ordered material responses with display order
+                var orderedMaterialResponses = new List<OrderedMaterialResponse>();
+                for (int i = 0; i < pathMaterials.Count; i++)
+                {
+                    var orderedMaterial = await BuildOrderedMaterialResponse(pathMaterials[i], i + 1);
+                    orderedMaterialResponses.Add(orderedMaterial);
+                }
+
+                totalLearningPathMaterials += orderedMaterialResponses.Count;
+
+                learningPaths.Add(new SimplifiedLearningPathResponse
+                {
+                    Name = plp.LearningPath.LearningPathName,
+                    Description = plp.LearningPath.Description,
+                    Materials = orderedMaterialResponses
+                });
+            }
+
+            // Calculate material type summary
+            var allMaterials = directMaterials.Concat(learningPaths.SelectMany(lp => lp.Materials.Select(m => new { m.Type })));
+            var materialsByType = allMaterials
+                .GroupBy(m => m.Type)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            _logger.LogInformation("Retrieved simplified training program {Id}: {DirectMaterialCount} direct materials, {PathCount} learning paths, {PathMaterialCount} learning path materials",
+                id, directMaterials.Count, learningPaths.Count, totalLearningPathMaterials);
+
+            return new SimplifiedCompleteTrainingProgramResponse
+            {
+                Status = "success",
+                Message = $"Training program '{program.Name}' retrieved successfully",
+                Id = program.id,
+                Name = program.Name,
+                Description = program.Description,
+                Objectives = program.Objectives,
+                Requirements = program.Requirements,
+                MinLevelRank = program.min_level_rank,
+                MaxLevelRank = program.max_level_rank,
+                RequiredUptoLevelRank = program.required_upto_level_rank,
+                CreatedAt = program.Created_at,
+                DirectMaterials = directMaterials,
+                LearningPaths = learningPaths,
+                Summary = new SimplifiedTrainingProgramSummary
+                {
+                    TotalDirectMaterials = directMaterials.Count,
+                    TotalLearningPaths = learningPaths.Count,
+                    TotalLearningPathMaterials = totalLearningPathMaterials,
+                    MaterialsByType = materialsByType,
+                    LastUpdated = program.Updated_at ?? program.Created_at != null ? DateTime.Parse(program.Created_at) : DateTime.UtcNow
+                }
+            };
+        }
+
+        /// <summary>
+        /// Gets all training programs with simplified learning path representation.
+        /// </summary>
+        public async Task<IEnumerable<SimplifiedCompleteTrainingProgramResponse>> GetAllSimplifiedCompleteTrainingProgramsAsync()
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+
+            var programs = await context.TrainingPrograms.ToListAsync();
+            var results = new List<SimplifiedCompleteTrainingProgramResponse>();
+
+            foreach (var program in programs)
+            {
+                var simplifiedProgram = await GetSimplifiedCompleteTrainingProgramAsync(program.id);
+                if (simplifiedProgram != null)
+                {
+                    results.Add(simplifiedProgram);
+                }
+            }
+
+            _logger.LogInformation("Retrieved {Count} simplified complete training programs", results.Count);
+            return results;
+        }
+
         #endregion
     }
-    
+
 }

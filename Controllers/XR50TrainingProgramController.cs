@@ -472,13 +472,13 @@ namespace XR50TrainingAssetRepo.Controllers
         }
 
         [HttpGet("{id}/detail")]
-        public async Task<ActionResult<CompleteTrainingProgramResponse>> GetCompleteTrainingProgram(
-            string tenantName, 
+        public async Task<ActionResult<SimplifiedCompleteTrainingProgramResponse>> GetCompleteTrainingProgram(
+            string tenantName,
             int id)
         {
             _logger.LogInformation("Getting complete training program {Id} for tenant: {TenantName}", id, tenantName);
 
-            var result = await _trainingProgramService.GetCompleteTrainingProgramAsync(id);
+            var result = await _trainingProgramService.GetSimplifiedCompleteTrainingProgramAsync(id);
 
             if (result == null)
             {
@@ -486,27 +486,27 @@ namespace XR50TrainingAssetRepo.Controllers
                 return NotFound();
             }
 
-            _logger.LogInformation("Retrieved complete training program {Id}: {MaterialCount} materials, {PathCount} learning paths",
-                id, result.Materials.Count, result.learning_path.Count);
+            _logger.LogInformation("Retrieved simplified training program {Id}: {DirectMaterialCount} direct materials, {PathCount} learning paths",
+                id, result.DirectMaterials.Count, result.LearningPaths.Count);
 
             return Ok(result);
         }
         [HttpGet("detail")]
-        public async Task<ActionResult<IEnumerable<CompleteTrainingProgramResponse>>> GetAllCompleteTrainingPrograms(
+        public async Task<ActionResult<IEnumerable<SimplifiedCompleteTrainingProgramResponse>>> GetAllCompleteTrainingPrograms(
             string tenantName)
         {
-            _logger.LogInformation("Getting all complete training programs for tenant: {TenantName}", tenantName);
+            _logger.LogInformation("Getting all simplified training programs for tenant: {TenantName}", tenantName);
 
-            var results = await _trainingProgramService.GetAllCompleteTrainingProgramsAsync();
+            var results = await _trainingProgramService.GetAllSimplifiedCompleteTrainingProgramsAsync();
 
-            _logger.LogInformation("Retrieved {Count} complete training programs for tenant: {TenantName}",
+            _logger.LogInformation("Retrieved {Count} simplified training programs for tenant: {TenantName}",
                 results.Count(), tenantName);
 
             return Ok(results);
         }
 
         [HttpGet("{id}")]
-        public async Task<ActionResult<CompleteTrainingProgramResponse>> GetTrainingProgram(string tenantName, int id)
+        public async Task<ActionResult<SimplifiedCompleteTrainingProgramResponse>> GetTrainingProgram(string tenantName, int id)
         {
             return await GetCompleteTrainingProgram(tenantName, id);
         }
