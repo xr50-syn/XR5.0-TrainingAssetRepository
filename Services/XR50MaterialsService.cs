@@ -269,33 +269,10 @@ namespace XR50TrainingAssetRepo.Services
                         break;
 
                     case VideoMaterial video:
-                        _logger.LogInformation("🎥 Processing video material with {Count} timestamps", video.Timestamps?.Count ?? 0);
-
-                        if (video.Timestamps?.Any() == true)
-                        {
-                            foreach (var timestamp in video.Timestamps.ToList())
-                            {
-                                _logger.LogInformation("Adding timestamp: {Title} at {Time}", timestamp.Title, timestamp.startTime);
-
-                                var newTimestamp = new VideoTimestamp
-                                {
-                                    Title = timestamp.Title,
-                                    startTime = timestamp.startTime,
-                                    endTime = timestamp.endTime,
-                                    Duration = timestamp.Duration,
-                                    Description = timestamp.Description,
-                                    Type = timestamp.Type
-                                };
-
-                                // Set the foreign key directly
-                                newTimestamp.VideoMaterialId = material.id;
-                                context.Timestamps.Add(newTimestamp);
-                            }
-
-                            await context.SaveChangesAsync();
-                            _logger.LogInformation("Successfully added {Count} video timestamps to material {Id}",
-                                video.Timestamps.Count, material.id);
-                        }
+                        // Timestamps are automatically saved via EF Core navigation property
+                        // when context.Materials.Add(material) is called above
+                        _logger.LogInformation("🎥 Video material has {Count} timestamps (saved via navigation property)",
+                            video.Timestamps?.Count ?? 0);
                         break;
 
                     case QuestionnaireMaterial questionnaire:
