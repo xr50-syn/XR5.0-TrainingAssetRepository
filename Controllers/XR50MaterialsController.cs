@@ -198,6 +198,7 @@ private async Task<object?> GetVideoDetails(int materialId)
             Title = vt.Title,
             startTime = vt.startTime,
             endTime = vt.endTime,
+            Duration = vt.Duration,
             Description = vt.Description,
             Type = vt.Type
         }) ?? Enumerable.Empty<object>(),
@@ -1415,15 +1416,45 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         if (TryGetPropertyCaseInsensitive(timestampElement, "title", out var titleProp))
                             timestamp.Title = titleProp.GetString() ?? "";
 
+                        int? startTimeInt = null;
                         if (TryGetPropertyCaseInsensitive(timestampElement, "startTime", out var startTimePropTs))
-                            timestamp.startTime = startTimePropTs.ValueKind == JsonValueKind.Number
-                                ? startTimePropTs.GetInt32().ToString()
-                                : startTimePropTs.GetString() ?? "";
+                        {
+                            if (startTimePropTs.ValueKind == JsonValueKind.Number)
+                            {
+                                startTimeInt = startTimePropTs.GetInt32();
+                                timestamp.startTime = startTimeInt.ToString()!;
+                            }
+                            else
+                            {
+                                timestamp.startTime = startTimePropTs.GetString() ?? "";
+                                int.TryParse(timestamp.startTime, out var parsed);
+                                startTimeInt = parsed;
+                            }
+                        }
 
+                        // Parse duration
+                        int? tsDuration = null;
+                        if (TryGetPropertyCaseInsensitive(timestampElement, "duration", out var tsDurationProp))
+                        {
+                            if (tsDurationProp.ValueKind == JsonValueKind.Number)
+                                tsDuration = tsDurationProp.GetInt32();
+                            else if (int.TryParse(tsDurationProp.GetString(), out var parsedDuration))
+                                tsDuration = parsedDuration;
+                            timestamp.Duration = tsDuration;
+                        }
+
+                        // Parse endTime, or calculate from startTime + duration
                         if (TryGetPropertyCaseInsensitive(timestampElement, "endTime", out var endTimeProp))
+                        {
                             timestamp.endTime = endTimeProp.ValueKind == JsonValueKind.Number
                                 ? endTimeProp.GetInt32().ToString()
                                 : endTimeProp.GetString() ?? "";
+                        }
+                        else if (startTimeInt.HasValue && tsDuration.HasValue)
+                        {
+                            // Calculate endTime from startTime + duration
+                            timestamp.endTime = (startTimeInt.Value + tsDuration.Value).ToString();
+                        }
 
                         if (TryGetPropertyCaseInsensitive(timestampElement, "description", out var descriptionProp))
                             timestamp.Description = descriptionProp.GetString();
@@ -2258,15 +2289,45 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                             if (TryGetPropertyCaseInsensitive(timestampElement, "title", out var titleProp))
                                 timestamp.Title = titleProp.GetString() ?? "";
 
+                            int? startTimeInt = null;
                             if (TryGetPropertyCaseInsensitive(timestampElement, "startTime", out var timeProp))
-                                timestamp.startTime = timeProp.ValueKind == JsonValueKind.Number
-                                    ? timeProp.GetInt32().ToString()
-                                    : timeProp.GetString() ?? "";
+                            {
+                                if (timeProp.ValueKind == JsonValueKind.Number)
+                                {
+                                    startTimeInt = timeProp.GetInt32();
+                                    timestamp.startTime = startTimeInt.ToString()!;
+                                }
+                                else
+                                {
+                                    timestamp.startTime = timeProp.GetString() ?? "";
+                                    int.TryParse(timestamp.startTime, out var parsed);
+                                    startTimeInt = parsed;
+                                }
+                            }
 
+                            // Parse duration
+                            int? tsDuration = null;
+                            if (TryGetPropertyCaseInsensitive(timestampElement, "duration", out var tsDurationProp))
+                            {
+                                if (tsDurationProp.ValueKind == JsonValueKind.Number)
+                                    tsDuration = tsDurationProp.GetInt32();
+                                else if (int.TryParse(tsDurationProp.GetString(), out var parsedDuration))
+                                    tsDuration = parsedDuration;
+                                timestamp.Duration = tsDuration;
+                            }
+
+                            // Parse endTime, or calculate from startTime + duration
                             if (TryGetPropertyCaseInsensitive(timestampElement, "endTime", out var endTimeProp))
+                            {
                                 timestamp.endTime = endTimeProp.ValueKind == JsonValueKind.Number
                                     ? endTimeProp.GetInt32().ToString()
                                     : endTimeProp.GetString() ?? "";
+                            }
+                            else if (startTimeInt.HasValue && tsDuration.HasValue)
+                            {
+                                // Calculate endTime from startTime + duration
+                                timestamp.endTime = (startTimeInt.Value + tsDuration.Value).ToString();
+                            }
 
                             if (TryGetPropertyCaseInsensitive(timestampElement, "description", out var descProp))
                                 timestamp.Description = descProp.GetString();

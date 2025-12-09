@@ -11,7 +11,8 @@ namespace XR50TrainingAssetRepo.Models
         public int id { get; set; }
         public string Title { get; set; } = null!;
         public string startTime { get; set; } = null!;
-        public string endTime {get;set;} = null!;
+        public string? endTime {get;set;}
+        public int? Duration { get; set; }
         public string? Description { get; set; } = null!;
         [Column("type")]
         public string? Type {get;set;} = null!;

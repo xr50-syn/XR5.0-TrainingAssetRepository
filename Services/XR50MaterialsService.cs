@@ -282,6 +282,7 @@ namespace XR50TrainingAssetRepo.Services
                                     Title = timestamp.Title,
                                     startTime = timestamp.startTime,
                                     endTime = timestamp.endTime,
+                                    Duration = timestamp.Duration,
                                     Description = timestamp.Description,
                                     Type = timestamp.Type
                                 };
@@ -797,6 +798,7 @@ namespace XR50TrainingAssetRepo.Services
                             vt.Title,
                             vt.startTime,
                             vt.endTime,
+                            vt.Duration,
                             vt.Description,
                             vt.Type
                         }).ToList(),
