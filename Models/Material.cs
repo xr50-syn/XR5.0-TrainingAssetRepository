@@ -21,6 +21,7 @@ namespace XR50TrainingAssetRepo.Models
         [Key]
         public int id { get; set; }
         [Required]
+        [NotMapped]
         public Type Type { get; set; }
         public int? Unique_id { get; set; }
         [JsonIgnore]

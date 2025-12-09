@@ -116,10 +116,6 @@ namespace XR50TrainingAssetRepo.Data
                 .Property(m => m.id)
                 .HasColumnName("id");
 
-            modelBuilder.Entity<Material>()
-                .Property(m => m.Type)
-                .HasColumnName("Type");
-
             modelBuilder.Entity<LearningPath>()
                 .Property(lp => lp.id)
                 .HasColumnName("id");
