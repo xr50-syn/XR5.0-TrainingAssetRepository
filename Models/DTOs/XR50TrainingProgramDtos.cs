@@ -318,8 +318,9 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         /// <summary>
         /// Flat array of materials from all learning paths, preserving order.
         /// Learning path names, descriptions, and IDs are completely hidden.
+        /// Named as singular to indicate it's one unified ordered list.
         /// </summary>
-        public List<OrderedMaterialResponse> LearningPaths { get; set; } = new();
+        public List<OrderedMaterialResponse> learning_path { get; set; } = new();
 
         /// <summary>
         /// Summary statistics for the training program.

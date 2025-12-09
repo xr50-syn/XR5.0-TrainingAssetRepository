@@ -1425,7 +1425,7 @@ namespace XR50TrainingAssetRepo.Services
                 RequiredUptoLevelRank = program.required_upto_level_rank,
                 CreatedAt = program.Created_at,
                 Materials = directMaterials,
-                LearningPaths = flattenedLearningPathMaterials,
+                learning_path = flattenedLearningPathMaterials,
                 Summary = new SimplifiedTrainingProgramSummary
                 {
                     TotalDirectMaterials = directMaterials.Count,
