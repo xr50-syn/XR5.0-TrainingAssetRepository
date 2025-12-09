@@ -269,11 +269,11 @@ namespace XR50TrainingAssetRepo.Services
                         break;
 
                     case VideoMaterial video:
-                        _logger.LogInformation("🎥 Processing video material with {Count} timestamps", video.VideoTimestamps?.Count ?? 0);
-                        
-                        if (video.VideoTimestamps?.Any() == true)
+                        _logger.LogInformation("🎥 Processing video material with {Count} timestamps", video.Timestamps?.Count ?? 0);
+
+                        if (video.Timestamps?.Any() == true)
                         {
-                            foreach (var timestamp in video.VideoTimestamps)
+                            foreach (var timestamp in video.Timestamps)
                             {
                                 _logger.LogInformation("Adding timestamp: {Title} at {Time}", timestamp.Title, timestamp.startTime);
 
@@ -288,12 +288,12 @@ namespace XR50TrainingAssetRepo.Services
 
                                 // Set the foreign key directly
                                 newTimestamp.VideoMaterialId = material.id;
-                                context.VideoTimestamps.Add(newTimestamp);
+                                context.Timestamps.Add(newTimestamp);
                             }
-                            
+
                             await context.SaveChangesAsync();
-                            _logger.LogInformation("Successfully added {Count} video timestamps to material {Id}", 
-                                video.VideoTimestamps.Count, material.id);
+                            _logger.LogInformation("Successfully added {Count} video timestamps to material {Id}",
+                                video.Timestamps.Count, material.id);
                         }
                         break;
 
@@ -663,7 +663,7 @@ namespace XR50TrainingAssetRepo.Services
             return material switch
             {
                 QuestionnaireMaterial q => q.QuestionnaireEntries?.Count ?? 0,
-                VideoMaterial v => v.VideoTimestamps?.Count ?? 0,
+                VideoMaterial v => v.Timestamps?.Count ?? 0,
                 ChecklistMaterial c => c.Entries?.Count ?? 0,
                 WorkflowMaterial w => w.WorkflowSteps?.Count ?? 0,
                 QuizMaterial qz => qz.Questions?.Count ?? 0,
@@ -789,7 +789,7 @@ namespace XR50TrainingAssetRepo.Services
                     Annotations = EF.Property<string>(m, "Annotations"),
 
                     // Related data
-                    VideoTimestamps = context.VideoTimestamps
+                    Timestamps = context.Timestamps
                         .Where(vt => vt.VideoMaterialId == materialId)
                         .Select(vt => new
                         {
@@ -1245,7 +1245,7 @@ namespace XR50TrainingAssetRepo.Services
 
             return await context.Materials
                 .OfType<VideoMaterial>()
-                .Include(v => v.VideoTimestamps)
+                .Include(v => v.Timestamps)
                 .FirstOrDefaultAsync(v => v.id == id);
         }
 
@@ -1265,7 +1265,7 @@ namespace XR50TrainingAssetRepo.Services
             // Set the foreign key directly
             timestamp.VideoMaterialId = videoId;
 
-            context.VideoTimestamps.Add(timestamp);
+            context.Timestamps.Add(timestamp);
             await context.SaveChangesAsync();
 
             _logger.LogInformation("Added timestamp '{Title}' to video material {VideoId}",
@@ -1278,13 +1278,13 @@ namespace XR50TrainingAssetRepo.Services
         {
             using var context = _dbContextFactory.CreateDbContext();
 
-            var timestamp = await context.VideoTimestamps.FindAsync(timestampId);
+            var timestamp = await context.Timestamps.FindAsync(timestampId);
             if (timestamp == null)
             {
                 return false;
             }
 
-            context.VideoTimestamps.Remove(timestamp);
+            context.Timestamps.Remove(timestamp);
             await context.SaveChangesAsync();
 
             _logger.LogInformation("Removed timestamp {TimestampId} from video material {VideoId}",
@@ -1763,7 +1763,7 @@ namespace XR50TrainingAssetRepo.Services
                 {
                     // Set the foreign key directly
                     timestamp.VideoMaterialId = video.id;
-                    context.VideoTimestamps.Add(timestamp);
+                    context.Timestamps.Add(timestamp);
                 }
 
                 await context.SaveChangesAsync();
@@ -2582,7 +2582,7 @@ namespace XR50TrainingAssetRepo.Services
                 "ChecklistEntry" => await context.Entries.AnyAsync(e => e.ChecklistEntryId == subcomponentId),
                 "WorkflowStep" => await context.WorkflowSteps.AnyAsync(w => w.Id == subcomponentId),
                 "QuestionnaireEntry" => await context.QuestionnaireEntries.AnyAsync(q => q.QuestionnaireEntryId == subcomponentId),
-                "VideoTimestamp" => await context.VideoTimestamps.AnyAsync(v => v.id == subcomponentId),
+                "VideoTimestamp" => await context.Timestamps.AnyAsync(v => v.id == subcomponentId),
                 "QuizQuestion" => await context.QuizQuestions.AnyAsync(q => q.QuizQuestionId == subcomponentId),
                 _ => false
             };

@@ -921,7 +921,7 @@ namespace XR50TrainingAssetRepo.Services
                     VideoPath = request.VideoPath,
                     VideoDuration = request.VideoDuration,
                     VideoResolution = request.VideoResolution,
-                    VideoTimestamps = MapVideoTimestamps(request.Timestamps)
+                    Timestamps = MapVideoTimestamps(request.Timestamps)
                 },
                 "questionnaire" => new QuestionnaireMaterial
                 {

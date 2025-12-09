@@ -192,7 +192,7 @@ private async Task<object?> GetVideoDetails(int materialId)
         VideoResolution = video.VideoResolution,
         startTime = video.startTime,
         Annotations = video.Annotations,
-        VideoTimestamps = video.VideoTimestamps?.Select(vt => new
+        Timestamps = video.Timestamps?.Select(vt => new
         {
             Id = vt.id,
             Title = vt.Title,
@@ -2243,7 +2243,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                                 timestamps.Add(timestamp);
                             }
                         }
-                        video.VideoTimestamps = timestamps;
+                        video.Timestamps = timestamps;
                         _logger.LogInformation("Added {Count} video timestamps", timestamps.Count);
                     }
                     
@@ -2749,7 +2749,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
 
             _logger.LogInformation("Retrieved video material {Id} with {Count} timestamps for tenant: {TenantName}",
-                id, video.VideoTimestamps?.Count() ?? 0, tenantName);
+                id, video.Timestamps?.Count() ?? 0, tenantName);
 
             return Ok(video);
         }

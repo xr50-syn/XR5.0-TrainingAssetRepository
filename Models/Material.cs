@@ -104,11 +104,11 @@ namespace XR50TrainingAssetRepo.Models
         [Column(TypeName = "json")]
         public string? Annotations { get; set; }
 
-        public List<VideoTimestamp> VideoTimestamps { get; set; }
+        public List<VideoTimestamp> Timestamps { get; set; }
 
         public VideoMaterial()
         {
-            VideoTimestamps = new List<VideoTimestamp>();
+            Timestamps = new List<VideoTimestamp>();
             Type = Type.Video;
         }
     }

@@ -341,7 +341,7 @@ namespace XR50TrainingAssetRepo.Services
         )",
 
                 // Updated table creation statements with proper foreign keys
-                @"CREATE TABLE IF NOT EXISTS `VideoTimestamps` (
+                @"CREATE TABLE IF NOT EXISTS `Timestamps` (
                     `id` int NOT NULL AUTO_INCREMENT,
                     `Title` varchar(255) NOT NULL,
                     `startTime` varchar(50) NOT NULL,
@@ -786,11 +786,13 @@ CREATE TABLE IF NOT EXISTS `Shares` (
 )
 
 // Updated table creation statements with proper foreign keys
-CREATE TABLE IF NOT EXISTS `VideoTimestamps` (
+CREATE TABLE IF NOT EXISTS `Timestamps` (
     `id` int NOT NULL AUTO_INCREMENT,
     `Title` varchar(255) NOT NULL,
-    `Time` varchar(50) NOT NULL,
+    `startTime` varchar(50) NOT NULL,
+    `endTime` varchar(50) NOT NULL,
     `Description` varchar(1000) DEFAULT NULL,
+    `type` varchar(255) DEFAULT NULL,
     `VideoMaterialId` int DEFAULT NULL,
     PRIMARY KEY (`id`),
     INDEX `idx_video_material` (`VideoMaterialId`)

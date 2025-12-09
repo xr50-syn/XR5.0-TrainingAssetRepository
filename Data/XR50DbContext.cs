@@ -40,7 +40,7 @@ namespace XR50TrainingAssetRepo.Data
         public DbSet<Share> Shares { get; set; } = null!;
         public DbSet<ChecklistEntry> Entries { get; set; } = null!;
         public DbSet<QuestionnaireEntry> QuestionnaireEntries { get; set; } = null!;
-        public DbSet<VideoTimestamp> VideoTimestamps { get; set; } = null!;
+        public DbSet<VideoTimestamp> Timestamps { get; set; } = null!;
         public DbSet<WorkflowStep> WorkflowSteps { get; set; } = null!;
         public DbSet<QuizQuestion> QuizQuestions { get; set; } = null!;
         public DbSet<QuizAnswer> QuizAnswers { get; set; } = null!;
@@ -242,7 +242,7 @@ namespace XR50TrainingAssetRepo.Data
                 .HasForeignKey("QuestionnaireMaterialId")
                 .OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<VideoMaterial>()
-                .HasMany(v => v.VideoTimestamps)
+                .HasMany(v => v.Timestamps)
                 .WithOne()
                 .HasForeignKey("VideoMaterialId")
                 .OnDelete(DeleteBehavior.Cascade);
