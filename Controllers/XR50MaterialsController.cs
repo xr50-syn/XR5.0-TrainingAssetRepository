@@ -2493,7 +2493,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     }
                 }
 
-                return Ok(new { status = "success", message = $"Material '{material.name}' with ID {materialId} updated successfully" });
+                return Ok(new { status = "success", message = $"Material '{material.Name}' with ID {materialId} updated successfully" });
             }
             catch (KeyNotFoundException)
             {
