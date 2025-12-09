@@ -1408,9 +1408,11 @@ namespace XR50TrainingAssetRepo.Services
             }
 
             // Calculate material type summary
-            var allMaterials = directMaterials.Concat(learningPaths.SelectMany(lp => lp.Materials.Select(m => new { m.Type })));
-            var materialsByType = allMaterials
-                .GroupBy(m => m.Type)
+            var directMaterialTypes = directMaterials.Select(m => m.Type);
+            var learningPathMaterialTypes = learningPaths.SelectMany(lp => lp.Materials.Select(m => m.Type));
+            var allMaterialTypes = directMaterialTypes.Concat(learningPathMaterialTypes);
+            var materialsByType = allMaterialTypes
+                .GroupBy(t => t)
                 .ToDictionary(g => g.Key, g => g.Count());
 
             _logger.LogInformation("Retrieved simplified training program {Id}: {DirectMaterialCount} direct materials, {PathCount} learning paths, {PathMaterialCount} learning path materials",
@@ -1437,7 +1439,7 @@ namespace XR50TrainingAssetRepo.Services
                     TotalLearningPaths = learningPaths.Count,
                     TotalLearningPathMaterials = totalLearningPathMaterials,
                     MaterialsByType = materialsByType,
-                    LastUpdated = program.Updated_at ?? program.Created_at != null ? DateTime.Parse(program.Created_at) : DateTime.UtcNow
+                    LastUpdated = program.Created_at != null ? DateTime.Parse(program.Created_at) : DateTime.UtcNow
                 }
             };
         }
