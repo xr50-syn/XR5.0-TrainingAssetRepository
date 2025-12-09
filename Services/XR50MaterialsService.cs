@@ -119,6 +119,32 @@ namespace XR50TrainingAssetRepo.Services
         Task<bool> ReorderChildMaterialsAsync(int parentMaterialId, Dictionary<int, int> materialOrderMap);
         Task<bool> WouldCreateCircularReferenceAsync(int parentMaterialId, int childMaterialId);
         Task<MaterialHierarchy> GetMaterialHierarchyAsync(int rootMaterialId, int maxDepth = 5);
+
+        // Subcomponent-to-Material Relationships
+        Task<int> AssignMaterialToSubcomponentAsync(int subcomponentId, string subcomponentType, int materialId, string? relationshipType = null, int? displayOrder = null);
+        Task<bool> RemoveMaterialFromSubcomponentAsync(int subcomponentId, string subcomponentType, int materialId);
+        Task<IEnumerable<Material>> GetMaterialsForSubcomponentAsync(int subcomponentId, string subcomponentType, bool includeOrder = true);
+        Task<bool> ReorderSubcomponentMaterialsAsync(int subcomponentId, string subcomponentType, Dictionary<int, int> materialOrderMap);
+        Task<IEnumerable<SubcomponentMaterialRelationship>> GetSubcomponentRelationshipsAsync(int subcomponentId, string subcomponentType);
+
+        // Convenience methods for each subcomponent type
+        Task<int> AssignMaterialToChecklistEntryAsync(int entryId, int materialId, string? relationshipType = null, int? displayOrder = null);
+        Task<int> AssignMaterialToWorkflowStepAsync(int stepId, int materialId, string? relationshipType = null, int? displayOrder = null);
+        Task<int> AssignMaterialToQuestionnaireEntryAsync(int entryId, int materialId, string? relationshipType = null, int? displayOrder = null);
+        Task<int> AssignMaterialToVideoTimestampAsync(int timestampId, int materialId, string? relationshipType = null, int? displayOrder = null);
+        Task<int> AssignMaterialToQuizQuestionAsync(int questionId, int materialId, string? relationshipType = null, int? displayOrder = null);
+
+        Task<IEnumerable<Material>> GetMaterialsForChecklistEntryAsync(int entryId, bool includeOrder = true);
+        Task<IEnumerable<Material>> GetMaterialsForWorkflowStepAsync(int stepId, bool includeOrder = true);
+        Task<IEnumerable<Material>> GetMaterialsForQuestionnaireEntryAsync(int entryId, bool includeOrder = true);
+        Task<IEnumerable<Material>> GetMaterialsForVideoTimestampAsync(int timestampId, bool includeOrder = true);
+        Task<IEnumerable<Material>> GetMaterialsForQuizQuestionAsync(int questionId, bool includeOrder = true);
+
+        Task<bool> RemoveMaterialFromChecklistEntryAsync(int entryId, int materialId);
+        Task<bool> RemoveMaterialFromWorkflowStepAsync(int stepId, int materialId);
+        Task<bool> RemoveMaterialFromQuestionnaireEntryAsync(int entryId, int materialId);
+        Task<bool> RemoveMaterialFromVideoTimestampAsync(int timestampId, int materialId);
+        Task<bool> RemoveMaterialFromQuizQuestionAsync(int questionId, int materialId);
     }
     public class MaterialService : IMaterialService
     {
@@ -2477,6 +2503,240 @@ namespace XR50TrainingAssetRepo.Services
         {
             return nodes.Count + nodes.Sum(n => CountTotalMaterials(n.Children));
         }
+
+        // ========== Subcomponent-to-Material Relationships ==========
+
+        private static readonly HashSet<string> ValidSubcomponentTypes = new HashSet<string>
+        {
+            "ChecklistEntry",
+            "WorkflowStep",
+            "QuestionnaireEntry",
+            "VideoTimestamp",
+            "QuizQuestion"
+        };
+
+        public async Task<int> AssignMaterialToSubcomponentAsync(
+            int subcomponentId,
+            string subcomponentType,
+            int materialId,
+            string? relationshipType = null,
+            int? displayOrder = null)
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+
+            // Validate subcomponent type
+            if (!ValidSubcomponentTypes.Contains(subcomponentType))
+                throw new ArgumentException($"Invalid subcomponent type: {subcomponentType}");
+
+            // Validate subcomponent exists
+            var subcomponentExists = await ValidateSubcomponentExistsAsync(context, subcomponentId, subcomponentType);
+            if (!subcomponentExists)
+                throw new ArgumentException($"{subcomponentType} with ID {subcomponentId} not found");
+
+            // Validate material exists
+            var material = await context.Materials.FindAsync(materialId);
+            if (material == null)
+                throw new ArgumentException($"Material with ID {materialId} not found");
+
+            // Check if relationship already exists
+            var existingRelationship = await context.SubcomponentMaterialRelationships
+                .FirstOrDefaultAsync(smr => smr.SubcomponentId == subcomponentId &&
+                                           smr.SubcomponentType == subcomponentType &&
+                                           smr.RelatedMaterialId == materialId);
+
+            if (existingRelationship != null)
+                throw new InvalidOperationException("Relationship already exists");
+
+            // Auto-assign display order if not specified
+            if (displayOrder == null)
+            {
+                var maxOrder = await context.SubcomponentMaterialRelationships
+                    .Where(smr => smr.SubcomponentId == subcomponentId &&
+                                 smr.SubcomponentType == subcomponentType)
+                    .MaxAsync(smr => (int?)smr.DisplayOrder) ?? 0;
+                displayOrder = maxOrder + 1;
+            }
+
+            var relationship = new SubcomponentMaterialRelationship
+            {
+                SubcomponentId = subcomponentId,
+                SubcomponentType = subcomponentType,
+                RelatedMaterialId = materialId,
+                RelationshipType = relationshipType,
+                DisplayOrder = displayOrder
+            };
+
+            context.SubcomponentMaterialRelationships.Add(relationship);
+            await context.SaveChangesAsync();
+
+            _logger.LogInformation("Assigned material {MaterialId} to {SubcomponentType} {SubcomponentId} (Relationship ID: {RelationshipId})",
+                materialId, subcomponentType, subcomponentId, relationship.Id);
+
+            return relationship.Id;
+        }
+
+        private async Task<bool> ValidateSubcomponentExistsAsync(XR50TrainingContext context, int subcomponentId, string subcomponentType)
+        {
+            return subcomponentType switch
+            {
+                "ChecklistEntry" => await context.Entries.AnyAsync(e => e.ChecklistEntryId == subcomponentId),
+                "WorkflowStep" => await context.WorkflowSteps.AnyAsync(w => w.Id == subcomponentId),
+                "QuestionnaireEntry" => await context.QuestionnaireEntries.AnyAsync(q => q.QuestionnaireEntryId == subcomponentId),
+                "VideoTimestamp" => await context.VideoTimestamps.AnyAsync(v => v.id == subcomponentId),
+                "QuizQuestion" => await context.QuizQuestions.AnyAsync(q => q.QuizQuestionId == subcomponentId),
+                _ => false
+            };
+        }
+
+        public async Task<bool> RemoveMaterialFromSubcomponentAsync(
+            int subcomponentId,
+            string subcomponentType,
+            int materialId)
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+
+            var relationship = await context.SubcomponentMaterialRelationships
+                .FirstOrDefaultAsync(smr => smr.SubcomponentId == subcomponentId &&
+                                           smr.SubcomponentType == subcomponentType &&
+                                           smr.RelatedMaterialId == materialId);
+
+            if (relationship == null)
+                return false;
+
+            context.SubcomponentMaterialRelationships.Remove(relationship);
+            await context.SaveChangesAsync();
+
+            _logger.LogInformation("Removed material {MaterialId} from {SubcomponentType} {SubcomponentId}",
+                materialId, subcomponentType, subcomponentId);
+
+            return true;
+        }
+
+        public async Task<IEnumerable<Material>> GetMaterialsForSubcomponentAsync(
+            int subcomponentId,
+            string subcomponentType,
+            bool includeOrder = true)
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+
+            var relationshipsQuery = context.SubcomponentMaterialRelationships
+                .Where(smr => smr.SubcomponentId == subcomponentId &&
+                             smr.SubcomponentType == subcomponentType);
+
+            if (includeOrder)
+            {
+                relationshipsQuery = relationshipsQuery.OrderBy(smr => smr.DisplayOrder ?? int.MaxValue);
+            }
+
+            var relationships = await relationshipsQuery.ToListAsync();
+            var materialIds = relationships.Select(r => r.RelatedMaterialId).ToList();
+
+            if (!materialIds.Any())
+                return Enumerable.Empty<Material>();
+
+            var materials = await context.Materials
+                .Where(m => materialIds.Contains(m.id))
+                .ToListAsync();
+
+            // Return in order if requested
+            if (includeOrder)
+            {
+                var materialDict = materials.ToDictionary(m => m.id);
+                return materialIds
+                    .Where(id => materialDict.ContainsKey(id))
+                    .Select(id => materialDict[id]);
+            }
+
+            return materials;
+        }
+
+        public async Task<bool> ReorderSubcomponentMaterialsAsync(
+            int subcomponentId,
+            string subcomponentType,
+            Dictionary<int, int> materialOrderMap)
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+
+            var relationships = await context.SubcomponentMaterialRelationships
+                .Where(smr => smr.SubcomponentId == subcomponentId &&
+                             smr.SubcomponentType == subcomponentType)
+                .ToListAsync();
+
+            foreach (var relationship in relationships)
+            {
+                if (materialOrderMap.TryGetValue(relationship.RelatedMaterialId, out int newOrder))
+                {
+                    relationship.DisplayOrder = newOrder;
+                }
+            }
+
+            await context.SaveChangesAsync();
+
+            _logger.LogInformation("Reordered {Count} materials for {SubcomponentType} {SubcomponentId}",
+                materialOrderMap.Count, subcomponentType, subcomponentId);
+
+            return true;
+        }
+
+        public async Task<IEnumerable<SubcomponentMaterialRelationship>> GetSubcomponentRelationshipsAsync(
+            int subcomponentId,
+            string subcomponentType)
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+
+            return await context.SubcomponentMaterialRelationships
+                .Include(smr => smr.RelatedMaterial)
+                .Where(smr => smr.SubcomponentId == subcomponentId &&
+                             smr.SubcomponentType == subcomponentType)
+                .OrderBy(smr => smr.DisplayOrder)
+                .ToListAsync();
+        }
+
+        // Convenience methods for each subcomponent type
+        public Task<int> AssignMaterialToChecklistEntryAsync(int entryId, int materialId, string? relationshipType = null, int? displayOrder = null)
+            => AssignMaterialToSubcomponentAsync(entryId, "ChecklistEntry", materialId, relationshipType, displayOrder);
+
+        public Task<int> AssignMaterialToWorkflowStepAsync(int stepId, int materialId, string? relationshipType = null, int? displayOrder = null)
+            => AssignMaterialToSubcomponentAsync(stepId, "WorkflowStep", materialId, relationshipType, displayOrder);
+
+        public Task<int> AssignMaterialToQuestionnaireEntryAsync(int entryId, int materialId, string? relationshipType = null, int? displayOrder = null)
+            => AssignMaterialToSubcomponentAsync(entryId, "QuestionnaireEntry", materialId, relationshipType, displayOrder);
+
+        public Task<int> AssignMaterialToVideoTimestampAsync(int timestampId, int materialId, string? relationshipType = null, int? displayOrder = null)
+            => AssignMaterialToSubcomponentAsync(timestampId, "VideoTimestamp", materialId, relationshipType, displayOrder);
+
+        public Task<int> AssignMaterialToQuizQuestionAsync(int questionId, int materialId, string? relationshipType = null, int? displayOrder = null)
+            => AssignMaterialToSubcomponentAsync(questionId, "QuizQuestion", materialId, relationshipType, displayOrder);
+
+        public Task<IEnumerable<Material>> GetMaterialsForChecklistEntryAsync(int entryId, bool includeOrder = true)
+            => GetMaterialsForSubcomponentAsync(entryId, "ChecklistEntry", includeOrder);
+
+        public Task<IEnumerable<Material>> GetMaterialsForWorkflowStepAsync(int stepId, bool includeOrder = true)
+            => GetMaterialsForSubcomponentAsync(stepId, "WorkflowStep", includeOrder);
+
+        public Task<IEnumerable<Material>> GetMaterialsForQuestionnaireEntryAsync(int entryId, bool includeOrder = true)
+            => GetMaterialsForSubcomponentAsync(entryId, "QuestionnaireEntry", includeOrder);
+
+        public Task<IEnumerable<Material>> GetMaterialsForVideoTimestampAsync(int timestampId, bool includeOrder = true)
+            => GetMaterialsForSubcomponentAsync(timestampId, "VideoTimestamp", includeOrder);
+
+        public Task<IEnumerable<Material>> GetMaterialsForQuizQuestionAsync(int questionId, bool includeOrder = true)
+            => GetMaterialsForSubcomponentAsync(questionId, "QuizQuestion", includeOrder);
+
+        public Task<bool> RemoveMaterialFromChecklistEntryAsync(int entryId, int materialId)
+            => RemoveMaterialFromSubcomponentAsync(entryId, "ChecklistEntry", materialId);
+
+        public Task<bool> RemoveMaterialFromWorkflowStepAsync(int stepId, int materialId)
+            => RemoveMaterialFromSubcomponentAsync(stepId, "WorkflowStep", materialId);
+
+        public Task<bool> RemoveMaterialFromQuestionnaireEntryAsync(int entryId, int materialId)
+            => RemoveMaterialFromSubcomponentAsync(entryId, "QuestionnaireEntry", materialId);
+
+        public Task<bool> RemoveMaterialFromVideoTimestampAsync(int timestampId, int materialId)
+            => RemoveMaterialFromSubcomponentAsync(timestampId, "VideoTimestamp", materialId);
+
+        public Task<bool> RemoveMaterialFromQuizQuestionAsync(int questionId, int materialId)
+            => RemoveMaterialFromSubcomponentAsync(questionId, "QuizQuestion", materialId);
 
     }
 

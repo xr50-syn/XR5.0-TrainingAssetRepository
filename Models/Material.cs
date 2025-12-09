@@ -228,6 +228,29 @@ namespace XR50TrainingAssetRepo.Models
         public virtual Material Material { get; set; }
     }
 
+    public class SubcomponentMaterialRelationship
+    {
+        [Key]
+        public int Id { get; set; }
+
+        [Required]
+        public int SubcomponentId { get; set; }
+
+        [Required]
+        [StringLength(50)]
+        public string SubcomponentType { get; set; } = "";
+
+        [Required]
+        public int RelatedMaterialId { get; set; }
+
+        [StringLength(50)]
+        public string? RelationshipType { get; set; }
+
+        public int? DisplayOrder { get; set; }
+
+        public virtual Material? RelatedMaterial { get; set; }
+    }
+
     public class QuizQuestion
     {
         [Key]

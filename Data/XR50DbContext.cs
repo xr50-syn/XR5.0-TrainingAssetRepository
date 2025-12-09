@@ -49,6 +49,7 @@ namespace XR50TrainingAssetRepo.Data
         public DbSet<GroupUser> GroupUsers { get; set; } = null!;
         public DbSet<TenantAdmin> TenantAdmins { get; set; } = null!;
         public DbSet<MaterialRelationship> MaterialRelationships { get; set; } = null!;
+        public DbSet<SubcomponentMaterialRelationship> SubcomponentMaterialRelationships { get; set; } = null!;
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured && _tenantService != null && _configuration != null)
@@ -291,6 +292,26 @@ namespace XR50TrainingAssetRepo.Data
             
             modelBuilder.Entity<MaterialRelationship>()
                 .HasIndex(mr => new { mr.RelatedEntityId, mr.RelatedEntityType });
+
+            // SubcomponentMaterialRelationship configuration
+            modelBuilder.Entity<SubcomponentMaterialRelationship>()
+                .HasKey(smr => smr.Id);
+
+            modelBuilder.Entity<SubcomponentMaterialRelationship>()
+                .HasOne(smr => smr.RelatedMaterial)
+                .WithMany()
+                .HasForeignKey(smr => smr.RelatedMaterialId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<SubcomponentMaterialRelationship>()
+                .HasIndex(smr => new { smr.SubcomponentId, smr.SubcomponentType });
+
+            modelBuilder.Entity<SubcomponentMaterialRelationship>()
+                .HasIndex(smr => smr.RelatedMaterialId);
+
+            modelBuilder.Entity<SubcomponentMaterialRelationship>()
+                .HasIndex(smr => new { smr.SubcomponentId, smr.SubcomponentType, smr.RelatedMaterialId })
+                .IsUnique();
 
             modelBuilder.Entity<VideoTimestamp>()
                 .Property<int?>("VideoMaterialId");

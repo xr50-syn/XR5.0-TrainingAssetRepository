@@ -17,6 +17,7 @@ namespace XR50TrainingAssetRepo.Services
         Task<bool> DropAllTablesAsync(string tenantName);
         Task<bool> MigrateAssetTypeColumnAsync(string tenantName);
         Task<bool> MigrateAnnotationsColumnsAsync(string tenantName);
+        Task<bool> MigrateSubcomponentMaterialRelationshipsTableAsync(string tenantName);
     }
 
     public class XR50ManualTableCreator : IXR50ManualTableCreator
@@ -343,8 +344,10 @@ namespace XR50TrainingAssetRepo.Services
                 @"CREATE TABLE IF NOT EXISTS `VideoTimestamps` (
                     `id` int NOT NULL AUTO_INCREMENT,
                     `Title` varchar(255) NOT NULL,
-                    `Time` varchar(50) NOT NULL,
+                    `startTime` varchar(50) NOT NULL,
+                    `endTime` varchar(50) NOT NULL,
                     `Description` varchar(1000) DEFAULT NULL,
+                    `type` varchar(255) DEFAULT NULL,
                     `VideoMaterialId` int DEFAULT NULL,
                     PRIMARY KEY (`id`),
                     INDEX `idx_video_material` (`VideoMaterialId`)
@@ -477,6 +480,21 @@ namespace XR50TrainingAssetRepo.Services
                     INDEX `idx_id` (`MaterialId`),
                     INDEX `idx_related_entity` (`RelatedEntityId`, `RelatedEntityType`),
                     INDEX `idx_relationship_type` (`RelationshipType`)
+                )",
+
+                // Subcomponent-to-Material Relationships Table
+                @"CREATE TABLE IF NOT EXISTS `SubcomponentMaterialRelationships` (
+                    `Id` int NOT NULL AUTO_INCREMENT,
+                    `SubcomponentId` int NOT NULL,
+                    `SubcomponentType` varchar(50) NOT NULL,
+                    `RelatedMaterialId` int NOT NULL,
+                    `RelationshipType` varchar(50) DEFAULT NULL,
+                    `DisplayOrder` int DEFAULT NULL,
+                    PRIMARY KEY (`Id`),
+                    INDEX `idx_subcomponent` (`SubcomponentId`, `SubcomponentType`),
+                    INDEX `idx_material` (`RelatedMaterialId`),
+                    UNIQUE INDEX `idx_unique_relationship` (`SubcomponentId`, `SubcomponentType`, `RelatedMaterialId`),
+                    CONSTRAINT `fk_subcomponent_material` FOREIGN KEY (`RelatedMaterialId`) REFERENCES `Materials` (`id`) ON DELETE CASCADE
                 )"
             };
         }
@@ -642,6 +660,71 @@ namespace XR50TrainingAssetRepo.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error migrating Annotations columns for tenant: {TenantName}", tenantName);
+                return false;
+            }
+        }
+
+        public async Task<bool> MigrateSubcomponentMaterialRelationshipsTableAsync(string tenantName)
+        {
+            try
+            {
+                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
+                var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
+
+                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+
+                _logger.LogInformation("=== Migrating SubcomponentMaterialRelationships table for tenant: {TenantName} ===", tenantName);
+
+                using var connection = new MySqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                // Check if table exists
+                var checkTableQuery = @"
+                    SELECT COUNT(*)
+                    FROM INFORMATION_SCHEMA.TABLES
+                    WHERE TABLE_SCHEMA = @dbName
+                    AND TABLE_NAME = 'SubcomponentMaterialRelationships'";
+
+                using (var checkCmd = new MySqlCommand(checkTableQuery, connection))
+                {
+                    checkCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                    var tableExists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+
+                    if (tableExists)
+                    {
+                        _logger.LogInformation("SubcomponentMaterialRelationships table already exists for tenant: {TenantName}", tenantName);
+                        return true;
+                    }
+                }
+
+                // Create the table
+                var createTableQuery = @"
+                    CREATE TABLE `SubcomponentMaterialRelationships` (
+                        `Id` int NOT NULL AUTO_INCREMENT,
+                        `SubcomponentId` int NOT NULL,
+                        `SubcomponentType` varchar(50) NOT NULL,
+                        `RelatedMaterialId` int NOT NULL,
+                        `RelationshipType` varchar(50) DEFAULT NULL,
+                        `DisplayOrder` int DEFAULT NULL,
+                        PRIMARY KEY (`Id`),
+                        INDEX `idx_subcomponent` (`SubcomponentId`, `SubcomponentType`),
+                        INDEX `idx_material` (`RelatedMaterialId`),
+                        UNIQUE INDEX `idx_unique_relationship` (`SubcomponentId`, `SubcomponentType`, `RelatedMaterialId`),
+                        CONSTRAINT `fk_subcomponent_material` FOREIGN KEY (`RelatedMaterialId`) REFERENCES `Materials` (`id`) ON DELETE CASCADE
+                    )";
+
+                using (var createCmd = new MySqlCommand(createTableQuery, connection))
+                {
+                    await createCmd.ExecuteNonQueryAsync();
+                    _logger.LogInformation("Successfully created SubcomponentMaterialRelationships table for tenant: {TenantName}", tenantName);
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating SubcomponentMaterialRelationships table for tenant: {TenantName}", tenantName);
                 return false;
             }
         }
