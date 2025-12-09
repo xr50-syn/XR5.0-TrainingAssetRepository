@@ -485,7 +485,7 @@ PUT /api/tenant1/materials/123
   "Type": "quiz",
   "Name": "Updated Quiz Material",
   "Description": "Complete quiz",
-  "Unique_Id": 12345,
+  "Unique_id": 12345,
   "Questions": [
     {
       "QuestionNumber": 1,

@@ -580,8 +580,8 @@ namespace XR50TrainingAssetRepo.Services
         {
             if (tryGet(json, "name", out var name)) material.Name = name.GetString() ?? "";
             if (tryGet(json, "description", out var desc)) material.Description = desc.GetString();
-            if (tryGet(json, "unique_Id", out var unique_Id) && unique_Id.ValueKind == System.Text.Json.JsonValueKind.Number)
-                material.Unique_Id = unique_Id.GetInt32();
+            if (tryGet(json, "unique_id", out var unique_id) && unique_id.ValueKind == System.Text.Json.JsonValueKind.Number)
+                material.Unique_id = unique_id.GetInt32();
         }
 
         public async Task<Material> UpdateMaterialAsync(Material material)

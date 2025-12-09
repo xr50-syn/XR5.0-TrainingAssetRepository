@@ -958,7 +958,7 @@ namespace XR50TrainingAssetRepo.Services
             // Set common properties
             material.Name = request.Name;
             material.Description = request.Description;
-            material.Unique_Id = request.Unique_Id;
+            material.Unique_id = request.Unique_id;
             material.Created_at = DateTime.UtcNow;
             material.Updated_at = DateTime.UtcNow;
 
@@ -1147,7 +1147,7 @@ namespace XR50TrainingAssetRepo.Services
 
             material.Name = request.Name;
             material.Description = request.Description;
-            material.Unique_Id = request.Unique_Id;
+            material.Unique_id = request.Unique_id;
             material.Created_at = DateTime.UtcNow;
             material.Updated_at = DateTime.UtcNow;
 
@@ -1162,7 +1162,7 @@ namespace XR50TrainingAssetRepo.Services
                 Name = material.Name,
                 Description = material.Description,
                 Type = material.Type.ToString(),
-                Unique_Id = material.Unique_Id,
+                Unique_id = material.Unique_id,
                 Created_at = material.Created_at,
                 Updated_at = material.Updated_at,
                 Assignment = new AssignmentMetadata { AssignmentType = "Simple" }
@@ -1248,7 +1248,7 @@ namespace XR50TrainingAssetRepo.Services
                 Name = material.Name,
                 Description = material.Description,
                 Type = material.Type.ToString(),
-                Unique_Id = material.Unique_Id,
+                Unique_id = material.Unique_id,
                 Order = displayOrder,
                 Created_at = material.Created_at,
                 Updated_at = material.Updated_at

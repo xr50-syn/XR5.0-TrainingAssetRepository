@@ -697,7 +697,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
                     Type = GetLowercaseType(createdMaterial.Type),
-                    Unique_Id = createdMaterial.Unique_Id,
+                    Unique_id = createdMaterial.Unique_id,
                     AssetId = createdMaterial switch
                     {
                         VideoMaterial v => v.AssetId,
@@ -897,7 +897,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         Name = createdMaterial.Name,
                         Description = createdMaterial.Description,
                         Type = GetLowercaseType(createdMaterial.Type),
-                        Unique_Id = createdMaterial.Unique_Id,
+                        Unique_id = createdMaterial.Unique_id,
                         AssetId = createdAsset.Id,
                         Created_at = createdMaterial.Created_at
                     };
@@ -1323,7 +1323,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
                     Type = GetLowercaseType(createdMaterial.Type),
-                    Unique_Id = createdMaterial.Unique_Id,
+                    Unique_id = createdMaterial.Unique_id,
                     Created_at = createdMaterial.Created_at
                 };
 
@@ -1418,7 +1418,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
                     Type = GetLowercaseType(createdMaterial.Type),
-                    Unique_Id = createdMaterial.Unique_Id,
+                    Unique_id = createdMaterial.Unique_id,
                     AssetId = video.AssetId,
                     Created_at = createdMaterial.Created_at
                 };
@@ -1507,7 +1507,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
                     Type = GetLowercaseType(createdMaterial.Type),
-                    Unique_Id = createdMaterial.Unique_Id,
+                    Unique_id = createdMaterial.Unique_id,
                     Created_at = createdMaterial.Created_at
                 };
 
@@ -1604,7 +1604,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
                     Type = GetLowercaseType(createdMaterial.Type),
-                    Unique_Id = createdMaterial.Unique_Id,
+                    Unique_id = createdMaterial.Unique_id,
                     Created_at = createdMaterial.Created_at
                 };
 
@@ -1749,7 +1749,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
                     Type = GetLowercaseType(createdMaterial.Type),
-                    Unique_Id = createdMaterial.Unique_Id,
+                    Unique_id = createdMaterial.Unique_id,
                     Created_at = createdMaterial.Created_at
                 };
 
@@ -1795,7 +1795,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
                     Type = GetLowercaseType(createdMaterial.Type),
-                    Unique_Id = createdMaterial.Unique_Id,
+                    Unique_id = createdMaterial.Unique_id,
                     AssetId = (createdMaterial as DefaultMaterial)?.AssetId ??
                               (createdMaterial as VideoMaterial)?.AssetId ??
                               (createdMaterial as ImageMaterial)?.AssetId ??

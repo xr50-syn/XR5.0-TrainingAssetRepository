@@ -287,7 +287,7 @@ namespace XR50TrainingAssetRepo.Services
             `Updated_at` datetime DEFAULT NULL,
             `Type` int NOT NULL,
             `Discriminator` varchar(50) NOT NULL,
-            `Unique_Id` int DEFAULT NULL,
+            `Unique_id` int DEFAULT NULL,
 
             -- MQTT_TemplateMaterial specific columns
             `message_type` varchar(255) DEFAULT NULL,
@@ -332,7 +332,7 @@ namespace XR50TrainingAssetRepo.Services
             PRIMARY KEY (`id`),
             INDEX `idx_discriminator` (`Discriminator`),
             INDEX `idx_type` (`Type`),
-            INDEX `idx_unique_id` (`Unique_Id`),
+            INDEX `idx_unique_id` (`Unique_id`),
             INDEX `idx_asset_id` (`AssetId`),
             INDEX `idx_video_path` (`VideoPath`),
             INDEX `idx_image_path` (`ImagePath`),
