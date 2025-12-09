@@ -1355,9 +1355,10 @@ namespace XR50TrainingAssetRepo.Services
                 directMaterials.Add(materialResponse);
             }
 
-            // Get learning paths with their materials (simplified - no IDs or cross-references)
-            var learningPaths = new List<SimplifiedLearningPathResponse>();
+            // Get learning paths with their materials (flattened - just materials, no names/descriptions)
+            var flattenedLearningPathMaterials = new List<OrderedMaterialResponse>();
             int totalLearningPathMaterials = 0;
+            int globalOrder = 1;
 
             foreach (var plp in program.LearningPaths)
             {
@@ -1389,34 +1390,26 @@ namespace XR50TrainingAssetRepo.Services
                         .ToList();
                 }
 
-                // Build ordered material responses with display order
-                var orderedMaterialResponses = new List<OrderedMaterialResponse>();
+                // Build ordered material responses and add to flattened list
                 for (int i = 0; i < pathMaterials.Count; i++)
                 {
-                    var orderedMaterial = await BuildOrderedMaterialResponse(pathMaterials[i], i + 1);
-                    orderedMaterialResponses.Add(orderedMaterial);
+                    var orderedMaterial = await BuildOrderedMaterialResponse(pathMaterials[i], globalOrder++);
+                    flattenedLearningPathMaterials.Add(orderedMaterial);
                 }
 
-                totalLearningPathMaterials += orderedMaterialResponses.Count;
-
-                learningPaths.Add(new SimplifiedLearningPathResponse
-                {
-                    Name = plp.LearningPath.LearningPathName,
-                    Description = plp.LearningPath.Description,
-                    Materials = orderedMaterialResponses
-                });
+                totalLearningPathMaterials += pathMaterials.Count;
             }
 
             // Calculate material type summary
             var directMaterialTypes = directMaterials.Select(m => m.Type);
-            var learningPathMaterialTypes = learningPaths.SelectMany(lp => lp.Materials.Select(m => m.Type));
+            var learningPathMaterialTypes = flattenedLearningPathMaterials.Select(m => m.Type);
             var allMaterialTypes = directMaterialTypes.Concat(learningPathMaterialTypes);
             var materialsByType = allMaterialTypes
                 .GroupBy(t => t)
                 .ToDictionary(g => g.Key, g => g.Count());
 
-            _logger.LogInformation("Retrieved simplified training program {Id}: {DirectMaterialCount} direct materials, {PathCount} learning paths, {PathMaterialCount} learning path materials",
-                id, directMaterials.Count, learningPaths.Count, totalLearningPathMaterials);
+            _logger.LogInformation("Retrieved simplified training program {Id}: {DirectMaterialCount} direct materials, {PathMaterialCount} learning path materials",
+                id, directMaterials.Count, totalLearningPathMaterials);
 
             return new SimplifiedCompleteTrainingProgramResponse
             {
@@ -1431,12 +1424,12 @@ namespace XR50TrainingAssetRepo.Services
                 MaxLevelRank = program.max_level_rank,
                 RequiredUptoLevelRank = program.required_upto_level_rank,
                 CreatedAt = program.Created_at,
-                DirectMaterials = directMaterials,
-                LearningPaths = learningPaths,
+                Materials = directMaterials,
+                LearningPaths = flattenedLearningPathMaterials,
                 Summary = new SimplifiedTrainingProgramSummary
                 {
                     TotalDirectMaterials = directMaterials.Count,
-                    TotalLearningPaths = learningPaths.Count,
+                    TotalLearningPaths = program.LearningPaths.Count,
                     TotalLearningPathMaterials = totalLearningPathMaterials,
                     MaterialsByType = materialsByType,
                     LastUpdated = program.Created_at != null ? DateTime.Parse(program.Created_at) : DateTime.UtcNow

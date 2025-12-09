@@ -294,7 +294,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
 
     /// <summary>
     /// Simplified complete training program response using the new architecture.
-    /// Learning paths are presented as ordered lists of materials, with internal structure hidden.
+    /// Learning paths are presented as flat ordered lists of materials, with internal structure hidden.
     /// </summary>
     public class SimplifiedCompleteTrainingProgramResponse
     {
@@ -313,13 +313,13 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         /// <summary>
         /// Materials directly assigned to the training program (not through learning paths).
         /// </summary>
-        public List<MaterialResponse> DirectMaterials { get; set; } = new();
+        public List<MaterialResponse> Materials { get; set; } = new();
 
         /// <summary>
-        /// Learning paths as ordered collections of materials.
-        /// Internal learning path IDs and cross-references are hidden.
+        /// Flat array of materials from all learning paths, preserving order.
+        /// Learning path names, descriptions, and IDs are completely hidden.
         /// </summary>
-        public List<SimplifiedLearningPathResponse> LearningPaths { get; set; } = new();
+        public List<OrderedMaterialResponse> LearningPaths { get; set; } = new();
 
         /// <summary>
         /// Summary statistics for the training program.

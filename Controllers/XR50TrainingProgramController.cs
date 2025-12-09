@@ -486,8 +486,8 @@ namespace XR50TrainingAssetRepo.Controllers
                 return NotFound();
             }
 
-            _logger.LogInformation("Retrieved simplified training program {Id}: {DirectMaterialCount} direct materials, {PathCount} learning paths",
-                id, result.DirectMaterials.Count, result.LearningPaths.Count);
+            _logger.LogInformation("Retrieved simplified training program {Id}: {MaterialCount} direct materials, {LearningPathMaterialCount} learning path materials",
+                id, result.Materials.Count, result.LearningPaths.Count);
 
             return Ok(result);
         }
