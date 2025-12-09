@@ -398,6 +398,15 @@ namespace XR50TrainingAssetRepo.Services
                 Console.WriteLine($"Did not find Tenant with name: {tenantName}");
                 return;
             }
+
+            // Check storage type and only do OwnCloud operations for OwnCloud tenants
+            if (!tenant.IsOwnCloudStorage())
+            {
+                _logger.LogInformation("Tenant {TenantName} uses {StorageType} storage, skipping OwnCloud deletion",
+                    tenant.TenantName, tenant.StorageType);
+                return; // Skip all OwnCloud operations for non-OwnCloud tenants
+            }
+
             User adminUser = await GetOwnerUserAsync(tenant.OwnerName,tenant.TenantSchema);
             var values = new List<KeyValuePair<string, string>>();
             FormUrlEncodedContent messageContent = new FormUrlEncodedContent(values);
