@@ -208,10 +208,47 @@ namespace XR50TrainingAssetRepo.Services
                 // 4. Create material assignments ONLY if materials are provided
                 if (request.Materials.Any())
                 {
-                    var programMaterials = request.Materials.Select(materialId => new ProgramMaterial
+                    // Create a lookup for material assignments with rank data
+                    var assignmentLookup = request.MaterialAssignments?
+                        .ToDictionary(a => a.id, a => a) ?? new Dictionary<int, ProgramMaterialAssignmentRequest>();
+
+                    var programMaterials = request.Materials.Select(materialId =>
                     {
-                        TrainingProgramId = trainingProgram.id,
-                        MaterialId = materialId
+                        var pm = new ProgramMaterial
+                        {
+                            TrainingProgramId = trainingProgram.id,
+                            MaterialId = materialId
+                        };
+
+                        // Apply rank data if available
+                        if (assignmentLookup.TryGetValue(materialId, out var assignment))
+                        {
+                            pm.inherit_from_program = assignment.inherit_from_program;
+
+                            // If inherit_from_program is true, copy program's ranks
+                            if (assignment.inherit_from_program == true)
+                            {
+                                pm.min_level_rank = trainingProgram.min_level_rank;
+                                pm.max_level_rank = trainingProgram.max_level_rank;
+                                pm.required_upto_level_rank = trainingProgram.required_upto_level_rank;
+                            }
+                            else
+                            {
+                                pm.min_level_rank = assignment.min_level_rank;
+                                pm.max_level_rank = assignment.max_level_rank;
+                                pm.required_upto_level_rank = assignment.required_upto_level_rank;
+                            }
+                        }
+                        else
+                        {
+                            // Default to inheriting from program
+                            pm.inherit_from_program = true;
+                            pm.min_level_rank = trainingProgram.min_level_rank;
+                            pm.max_level_rank = trainingProgram.max_level_rank;
+                            pm.required_upto_level_rank = trainingProgram.required_upto_level_rank;
+                        }
+
+                        return pm;
                     }).ToList();
 
                     context.ProgramMaterials.AddRange(programMaterials);
@@ -220,10 +257,59 @@ namespace XR50TrainingAssetRepo.Services
                 // 5. Create learning path assignments ONLY if learning paths are provided
                 if (learningPathIds.Any())
                 {
-                    var programLearningPaths = learningPathIds.Select(learningPathId => new ProgramLearningPath
+                    // Create a lookup for learning path assignments with rank data
+                    var lpAssignmentLookup = request.learning_path?
+                        .Where(lp => !string.IsNullOrEmpty(lp.Name))
+                        .ToDictionary(lp => lp.Name, lp => lp) ?? new Dictionary<string, LearningPathCreationRequest>();
+
+                    var lpNameToId = new Dictionary<string, int>();
+                    foreach (var lpId in learningPathIds)
                     {
-                        TrainingProgramId = trainingProgram.id,
-                        LearningPathId = learningPathId
+                        var lp = await context.LearningPaths.FindAsync(lpId);
+                        if (lp != null)
+                        {
+                            lpNameToId[lp.LearningPathName] = lp.id;
+                        }
+                    }
+
+                    var programLearningPaths = learningPathIds.Select(learningPathId =>
+                    {
+                        var plp = new ProgramLearningPath
+                        {
+                            TrainingProgramId = trainingProgram.id,
+                            LearningPathId = learningPathId
+                        };
+
+                        // Find the learning path name and look up rank data
+                        var lpEntry = lpNameToId.FirstOrDefault(kvp => kvp.Value == learningPathId);
+                        if (!string.IsNullOrEmpty(lpEntry.Key) && lpAssignmentLookup.TryGetValue(lpEntry.Key, out var lpRequest))
+                        {
+                            plp.inherit_from_program = lpRequest.inherit_from_program;
+
+                            // If inherit_from_program is true, copy program's ranks
+                            if (lpRequest.inherit_from_program == true)
+                            {
+                                plp.min_level_rank = trainingProgram.min_level_rank;
+                                plp.max_level_rank = trainingProgram.max_level_rank;
+                                plp.required_upto_level_rank = trainingProgram.required_upto_level_rank;
+                            }
+                            else
+                            {
+                                plp.min_level_rank = lpRequest.min_level_rank;
+                                plp.max_level_rank = lpRequest.max_level_rank;
+                                plp.required_upto_level_rank = lpRequest.required_upto_level_rank;
+                            }
+                        }
+                        else
+                        {
+                            // Default to inheriting from program
+                            plp.inherit_from_program = true;
+                            plp.min_level_rank = trainingProgram.min_level_rank;
+                            plp.max_level_rank = trainingProgram.max_level_rank;
+                            plp.required_upto_level_rank = trainingProgram.required_upto_level_rank;
+                        }
+
+                        return plp;
                     }).ToList();
 
                     context.ProgramLearningPaths.AddRange(programLearningPaths);
@@ -503,10 +589,47 @@ namespace XR50TrainingAssetRepo.Services
                         throw new ArgumentException($"Materials not found: {string.Join(", ", missingMaterials)}");
                     }
 
-                    var newMaterials = request.Materials.Select(materialId => new ProgramMaterial
+                    // Create a lookup for material assignments with rank data
+                    var assignmentLookup = request.MaterialAssignments?
+                        .ToDictionary(a => a.id, a => a) ?? new Dictionary<int, ProgramMaterialAssignmentRequest>();
+
+                    var newMaterials = request.Materials.Select(materialId =>
                     {
-                        TrainingProgramId = id,
-                        MaterialId = materialId
+                        var pm = new ProgramMaterial
+                        {
+                            TrainingProgramId = id,
+                            MaterialId = materialId
+                        };
+
+                        // Apply rank data if available
+                        if (assignmentLookup.TryGetValue(materialId, out var assignment))
+                        {
+                            pm.inherit_from_program = assignment.inherit_from_program;
+
+                            // If inherit_from_program is true, copy program's ranks
+                            if (assignment.inherit_from_program == true)
+                            {
+                                pm.min_level_rank = existing.min_level_rank;
+                                pm.max_level_rank = existing.max_level_rank;
+                                pm.required_upto_level_rank = existing.required_upto_level_rank;
+                            }
+                            else
+                            {
+                                pm.min_level_rank = assignment.min_level_rank;
+                                pm.max_level_rank = assignment.max_level_rank;
+                                pm.required_upto_level_rank = assignment.required_upto_level_rank;
+                            }
+                        }
+                        else
+                        {
+                            // Default to inheriting from program
+                            pm.inherit_from_program = true;
+                            pm.min_level_rank = existing.min_level_rank;
+                            pm.max_level_rank = existing.max_level_rank;
+                            pm.required_upto_level_rank = existing.required_upto_level_rank;
+                        }
+
+                        return pm;
                     }).ToList();
 
                     context.ProgramMaterials.AddRange(newMaterials);
@@ -617,10 +740,59 @@ namespace XR50TrainingAssetRepo.Services
 
                 if (learningPathIds.Any())
                 {
-                    var newLearningPaths = learningPathIds.Select(learningPathId => new ProgramLearningPath
+                    // Create a lookup for learning path assignments with rank data
+                    var lpAssignmentLookup = request.learning_path?
+                        .Where(lp => !string.IsNullOrEmpty(lp.Name))
+                        .ToDictionary(lp => lp.Name, lp => lp) ?? new Dictionary<string, LearningPathCreationRequest>();
+
+                    var lpNameToId = new Dictionary<string, int>();
+                    foreach (var lpId in learningPathIds)
                     {
-                        TrainingProgramId = id,
-                        LearningPathId = learningPathId
+                        var lp = await context.LearningPaths.FindAsync(lpId);
+                        if (lp != null)
+                        {
+                            lpNameToId[lp.LearningPathName] = lp.id;
+                        }
+                    }
+
+                    var newLearningPaths = learningPathIds.Select(learningPathId =>
+                    {
+                        var plp = new ProgramLearningPath
+                        {
+                            TrainingProgramId = id,
+                            LearningPathId = learningPathId
+                        };
+
+                        // Find the learning path name and look up rank data
+                        var lpEntry = lpNameToId.FirstOrDefault(kvp => kvp.Value == learningPathId);
+                        if (!string.IsNullOrEmpty(lpEntry.Key) && lpAssignmentLookup.TryGetValue(lpEntry.Key, out var lpRequest))
+                        {
+                            plp.inherit_from_program = lpRequest.inherit_from_program;
+
+                            // If inherit_from_program is true, copy program's ranks
+                            if (lpRequest.inherit_from_program == true)
+                            {
+                                plp.min_level_rank = existing.min_level_rank;
+                                plp.max_level_rank = existing.max_level_rank;
+                                plp.required_upto_level_rank = existing.required_upto_level_rank;
+                            }
+                            else
+                            {
+                                plp.min_level_rank = lpRequest.min_level_rank;
+                                plp.max_level_rank = lpRequest.max_level_rank;
+                                plp.required_upto_level_rank = lpRequest.required_upto_level_rank;
+                            }
+                        }
+                        else
+                        {
+                            // Default to inheriting from program
+                            plp.inherit_from_program = true;
+                            plp.min_level_rank = existing.min_level_rank;
+                            plp.max_level_rank = existing.max_level_rank;
+                            plp.required_upto_level_rank = existing.required_upto_level_rank;
+                        }
+
+                        return plp;
                     }).ToList();
 
                     context.ProgramLearningPaths.AddRange(newLearningPaths);
@@ -1007,11 +1179,11 @@ namespace XR50TrainingAssetRepo.Services
                 return null;
             }
 
-            // Get materials with their complete information
+            // Get materials with their complete information (including rank data from junction table)
             var materials = new List<MaterialResponse>();
             foreach (var pm in program.Materials)
             {
-                var materialResponse = await BuildMaterialResponse(pm.Material);
+                var materialResponse = await BuildMaterialResponse(pm.Material, pm);
                 materials.Add(materialResponse);
             }
 
@@ -1059,7 +1231,10 @@ namespace XR50TrainingAssetRepo.Services
                     id = plp.LearningPath.id,
                     LearningPathName = plp.LearningPath.LearningPathName,
                     Description = plp.LearningPath.Description,
-                    inherit_from_program = true, // Default to true for now
+                    inherit_from_program = plp.inherit_from_program,
+                    min_level_rank = plp.min_level_rank,
+                    max_level_rank = plp.max_level_rank,
+                    required_upto_level_rank = plp.required_upto_level_rank,
                     Materials = pathMaterialResponses
                 });
             }
@@ -1154,7 +1329,7 @@ namespace XR50TrainingAssetRepo.Services
             return material;
         }
 
-        private async Task<MaterialResponse> BuildMaterialResponse(Material material)
+        private async Task<MaterialResponse> BuildMaterialResponse(Material material, ProgramMaterial? programMaterial = null)
         {
             var response = new MaterialResponse
             {
@@ -1165,7 +1340,12 @@ namespace XR50TrainingAssetRepo.Services
                 Unique_id = material.Unique_id,
                 Created_at = material.Created_at,
                 Updated_at = material.Updated_at,
-                Assignment = new AssignmentMetadata { AssignmentType = "Simple" }
+                Assignment = new AssignmentMetadata { AssignmentType = "Simple" },
+                // Add rank properties from the junction table
+                inherit_from_program = programMaterial?.inherit_from_program,
+                min_level_rank = programMaterial?.min_level_rank,
+                max_level_rank = programMaterial?.max_level_rank,
+                required_upto_level_rank = programMaterial?.required_upto_level_rank
             };
 
             // Add type-specific properties
@@ -1240,7 +1420,13 @@ namespace XR50TrainingAssetRepo.Services
         /// <summary>
         /// Builds an OrderedMaterialResponse with display order information for learning paths.
         /// </summary>
-        private async Task<OrderedMaterialResponse> BuildOrderedMaterialResponse(Material material, int displayOrder)
+        private async Task<OrderedMaterialResponse> BuildOrderedMaterialResponse(
+            Material material,
+            int displayOrder,
+            bool? inheritFromProgram = null,
+            int? minLevelRank = null,
+            int? maxLevelRank = null,
+            int? requiredUptoLevelRank = null)
         {
             var response = new OrderedMaterialResponse
             {
@@ -1251,7 +1437,12 @@ namespace XR50TrainingAssetRepo.Services
                 Unique_id = material.Unique_id,
                 Order = displayOrder,
                 Created_at = material.Created_at,
-                Updated_at = material.Updated_at
+                Updated_at = material.Updated_at,
+                // Add rank properties
+                inherit_from_program = inheritFromProgram,
+                min_level_rank = minLevelRank,
+                max_level_rank = maxLevelRank,
+                required_upto_level_rank = requiredUptoLevelRank
             };
 
             // Add type-specific properties (same logic as BuildMaterialResponse)
@@ -1351,7 +1542,7 @@ namespace XR50TrainingAssetRepo.Services
             var directMaterials = new List<MaterialResponse>();
             foreach (var pm in program.Materials)
             {
-                var materialResponse = await BuildMaterialResponse(pm.Material);
+                var materialResponse = await BuildMaterialResponse(pm.Material, pm);
                 directMaterials.Add(materialResponse);
             }
 
@@ -1391,9 +1582,16 @@ namespace XR50TrainingAssetRepo.Services
                 }
 
                 // Build ordered material responses and add to flattened list
+                // Use the learning path's rank data for all materials in the path
                 for (int i = 0; i < pathMaterials.Count; i++)
                 {
-                    var orderedMaterial = await BuildOrderedMaterialResponse(pathMaterials[i], globalOrder++);
+                    var orderedMaterial = await BuildOrderedMaterialResponse(
+                        pathMaterials[i],
+                        globalOrder++,
+                        plp.inherit_from_program,
+                        plp.min_level_rank,
+                        plp.max_level_rank,
+                        plp.required_upto_level_rank);
                     flattenedLearningPathMaterials.Add(orderedMaterial);
                 }
 

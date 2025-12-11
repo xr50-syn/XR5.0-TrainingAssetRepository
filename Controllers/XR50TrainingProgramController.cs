@@ -70,7 +70,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 if (jsonElement.TryGetProperty("materials", out var materialsElement) &&
                     materialsElement.ValueKind == JsonValueKind.Array)
                 {
-                    var (existingIds, materialCreationRequests) = ParseMaterialsArray(materialsElement);
+                    var (existingIds, materialCreationRequests, materialAssignments) = ParseMaterialsArray(materialsElement);
 
                     // Create inline materials
                     if (materialCreationRequests.Any())
@@ -90,6 +90,9 @@ namespace XR50TrainingAssetRepo.Controllers
 
                     // Combine existing IDs with newly created IDs
                     request.Materials = existingIds.Concat(createdMaterialIds).ToList();
+
+                    // Add material assignments with rank data
+                    request.MaterialAssignments = materialAssignments;
                 }
 
                 // Parse learning_path array - handle object[] with learning path creation details
@@ -162,11 +165,13 @@ namespace XR50TrainingAssetRepo.Controllers
                     required_upto_level_rank = jsonElement.TryGetProperty("required_upto_level_rank", out var reqRank) ? ParseNullableInt(reqRank) : null
                 };
 
-                // Parse materials array - handle both int[] and object[] with id property
+                // Parse materials array - handle both int[] and object[] with id property and rank data
                 if (jsonElement.TryGetProperty("materials", out var materialsElement) &&
                     materialsElement.ValueKind == JsonValueKind.Array)
                 {
-                    request.Materials = ParseIdArray(materialsElement);
+                    var (existingIds, _, materialAssignments) = ParseMaterialsArray(materialsElement);
+                    request.Materials = existingIds;
+                    request.MaterialAssignments = materialAssignments;
                 }
 
                 // Parse learning_path array - handle object[] with learning path creation details
@@ -258,7 +263,10 @@ namespace XR50TrainingAssetRepo.Controllers
                         id = item.TryGetProperty("id", out var idProp) ? idProp.GetString() : null,
                         Name = item.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? "" : "",
                         Description = item.TryGetProperty("description", out var descProp) && descProp.ValueKind != JsonValueKind.Null ? descProp.GetString() : null,
-                        inherit_from_program = item.TryGetProperty("inherit_from_program", out var inheritProp) && inheritProp.ValueKind == JsonValueKind.True ? true : (inheritProp.ValueKind == JsonValueKind.False ? false : null)
+                        inherit_from_program = item.TryGetProperty("inherit_from_program", out var inheritProp) && inheritProp.ValueKind == JsonValueKind.True ? true : (inheritProp.ValueKind == JsonValueKind.False ? false : null),
+                        min_level_rank = item.TryGetProperty("min_level_rank", out var minProp) ? ParseNullableInt(minProp) : null,
+                        max_level_rank = item.TryGetProperty("max_level_rank", out var maxProp) ? ParseNullableInt(maxProp) : null,
+                        required_upto_level_rank = item.TryGetProperty("required_upto_level_rank", out var reqProp) ? ParseNullableInt(reqProp) : null
                     };
                     learningPaths.Add(learningPath);
                 }
@@ -266,10 +274,11 @@ namespace XR50TrainingAssetRepo.Controllers
             return learningPaths;
         }
 
-        private (List<int> existingIds, List<JsonElement> materialCreationRequests) ParseMaterialsArray(JsonElement arrayElement)
+        private (List<int> existingIds, List<JsonElement> materialCreationRequests, List<ProgramMaterialAssignmentRequest> materialAssignments) ParseMaterialsArray(JsonElement arrayElement)
         {
             var existingIds = new List<int>();
             var materialCreationRequests = new List<JsonElement>();
+            var materialAssignments = new List<ProgramMaterialAssignmentRequest>();
 
             foreach (var item in arrayElement.EnumerateArray())
             {
@@ -283,13 +292,32 @@ namespace XR50TrainingAssetRepo.Controllers
                     // Check if it's a reference to existing material (has numeric id) or a new material to create
                     if (item.TryGetProperty("id", out var idProp))
                     {
+                        int? materialId = null;
                         if (idProp.ValueKind == JsonValueKind.Number)
                         {
-                            existingIds.Add(idProp.GetInt32());
+                            materialId = idProp.GetInt32();
                         }
-                        else if (idProp.ValueKind == JsonValueKind.String && int.TryParse(idProp.GetString(), out int id))
+                        else if (idProp.ValueKind == JsonValueKind.String && int.TryParse(idProp.GetString(), out int parsedId))
                         {
-                            existingIds.Add(id);
+                            materialId = parsedId;
+                        }
+
+                        if (materialId.HasValue)
+                        {
+                            existingIds.Add(materialId.Value);
+
+                            // Extract rank properties if present
+                            var assignment = new ProgramMaterialAssignmentRequest
+                            {
+                                id = materialId.Value,
+                                inherit_from_program = item.TryGetProperty("inherit_from_program", out var inheritProp)
+                                    ? (inheritProp.ValueKind == JsonValueKind.True ? true : (inheritProp.ValueKind == JsonValueKind.False ? false : null))
+                                    : null,
+                                min_level_rank = item.TryGetProperty("min_level_rank", out var minProp) ? ParseNullableInt(minProp) : null,
+                                max_level_rank = item.TryGetProperty("max_level_rank", out var maxProp) ? ParseNullableInt(maxProp) : null,
+                                required_upto_level_rank = item.TryGetProperty("required_upto_level_rank", out var reqProp) ? ParseNullableInt(reqProp) : null
+                            };
+                            materialAssignments.Add(assignment);
                         }
                         else
                         {
@@ -312,7 +340,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 }
             }
 
-            return (existingIds, materialCreationRequests);
+            return (existingIds, materialCreationRequests, materialAssignments);
         }
 
         private async Task<CreateMaterialResponse?> CreateMaterialFromJson(string tenantName, JsonElement materialData)

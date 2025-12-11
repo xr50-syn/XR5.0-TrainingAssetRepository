@@ -37,7 +37,13 @@ namespace XR50TrainingAssetRepo.Models
     {
         public int TrainingProgramId { get; set; }
         public int MaterialId { get; set; }
-            
+
+        // Level rank properties for this assignment
+        public bool? inherit_from_program { get; set; }
+        public int? min_level_rank { get; set; }
+        public int? max_level_rank { get; set; }
+        public int? required_upto_level_rank { get; set; }
+
         // Navigation properties
         public virtual TrainingProgram TrainingProgram { get; set; }
         public virtual Material Material { get; set; }
@@ -47,7 +53,13 @@ namespace XR50TrainingAssetRepo.Models
     {
         public int TrainingProgramId { get; set; }
         public int LearningPathId { get; set; }
-            
+
+        // Level rank properties for this assignment
+        public bool? inherit_from_program { get; set; }
+        public int? min_level_rank { get; set; }
+        public int? max_level_rank { get; set; }
+        public int? required_upto_level_rank { get; set; }
+
         // Navigation properties
         public virtual TrainingProgram TrainingProgram { get; set; }
         public virtual LearningPath LearningPath { get; set; }

@@ -18,6 +18,7 @@ namespace XR50TrainingAssetRepo.Services
         Task<bool> MigrateAssetTypeColumnAsync(string tenantName);
         Task<bool> MigrateAnnotationsColumnsAsync(string tenantName);
         Task<bool> MigrateSubcomponentMaterialRelationshipsTableAsync(string tenantName);
+        Task<bool> MigrateProgramAssignmentRanksAsync(string tenantName);
     }
 
     public class XR50ManualTableCreator : IXR50ManualTableCreator
@@ -440,6 +441,10 @@ namespace XR50TrainingAssetRepo.Services
                 @"CREATE TABLE IF NOT EXISTS `ProgramMaterials` (
                     `TrainingProgramId` int NOT NULL,
                     `MaterialId` int NOT NULL,
+                    `inherit_from_program` tinyint(1) DEFAULT 1,
+                    `min_level_rank` int DEFAULT NULL,
+                    `max_level_rank` int DEFAULT NULL,
+                    `required_upto_level_rank` int DEFAULT NULL,
                     PRIMARY KEY (`TrainingProgramId`, `MaterialId`),
                     INDEX `idx_program` (`TrainingProgramId`),
                     INDEX `idx_material` (`MaterialId`)
@@ -448,6 +453,10 @@ namespace XR50TrainingAssetRepo.Services
                 @"CREATE TABLE IF NOT EXISTS `ProgramLearningPaths` (
                     `TrainingProgramId` int NOT NULL,
                     `LearningPathId` int NOT NULL,
+                    `inherit_from_program` tinyint(1) DEFAULT 1,
+                    `min_level_rank` int DEFAULT NULL,
+                    `max_level_rank` int DEFAULT NULL,
+                    `required_upto_level_rank` int DEFAULT NULL,
                     PRIMARY KEY (`TrainingProgramId`, `LearningPathId`),
                     INDEX `idx_program` (`TrainingProgramId`),
                     INDEX `idx_path` (`LearningPathId`)
@@ -726,6 +735,103 @@ namespace XR50TrainingAssetRepo.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error migrating SubcomponentMaterialRelationships table for tenant: {TenantName}", tenantName);
+                return false;
+            }
+        }
+
+        public async Task<bool> MigrateProgramAssignmentRanksAsync(string tenantName)
+        {
+            try
+            {
+                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
+                var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
+
+                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+
+                _logger.LogInformation("=== Migrating Program Assignment Rank columns for tenant: {TenantName} ===", tenantName);
+
+                using var connection = new MySqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                // Migrate ProgramMaterials table
+                var columnsToAdd = new[] { "inherit_from_program", "min_level_rank", "max_level_rank", "required_upto_level_rank" };
+
+                foreach (var columnName in columnsToAdd)
+                {
+                    // Check if column exists in ProgramMaterials
+                    var checkPmColumnQuery = @"
+                        SELECT COUNT(*)
+                        FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_SCHEMA = @dbName
+                        AND TABLE_NAME = 'ProgramMaterials'
+                        AND COLUMN_NAME = @columnName";
+
+                    using (var checkCmd = new MySqlCommand(checkPmColumnQuery, connection))
+                    {
+                        checkCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                        checkCmd.Parameters.AddWithValue("@columnName", columnName);
+                        var columnExists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+
+                        if (!columnExists)
+                        {
+                            _logger.LogInformation("Adding {ColumnName} column to ProgramMaterials table...", columnName);
+                            var alterQuery = columnName == "inherit_from_program"
+                                ? $"ALTER TABLE `ProgramMaterials` ADD COLUMN `{columnName}` tinyint(1) DEFAULT 1"
+                                : $"ALTER TABLE `ProgramMaterials` ADD COLUMN `{columnName}` int DEFAULT NULL";
+
+                            using (var alterCmd = new MySqlCommand(alterQuery, connection))
+                            {
+                                await alterCmd.ExecuteNonQueryAsync();
+                                _logger.LogInformation("Successfully added {ColumnName} column to ProgramMaterials", columnName);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogInformation("{ColumnName} column already exists in ProgramMaterials", columnName);
+                        }
+                    }
+
+                    // Check if column exists in ProgramLearningPaths
+                    var checkPlpColumnQuery = @"
+                        SELECT COUNT(*)
+                        FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_SCHEMA = @dbName
+                        AND TABLE_NAME = 'ProgramLearningPaths'
+                        AND COLUMN_NAME = @columnName";
+
+                    using (var checkCmd = new MySqlCommand(checkPlpColumnQuery, connection))
+                    {
+                        checkCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                        checkCmd.Parameters.AddWithValue("@columnName", columnName);
+                        var columnExists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+
+                        if (!columnExists)
+                        {
+                            _logger.LogInformation("Adding {ColumnName} column to ProgramLearningPaths table...", columnName);
+                            var alterQuery = columnName == "inherit_from_program"
+                                ? $"ALTER TABLE `ProgramLearningPaths` ADD COLUMN `{columnName}` tinyint(1) DEFAULT 1"
+                                : $"ALTER TABLE `ProgramLearningPaths` ADD COLUMN `{columnName}` int DEFAULT NULL";
+
+                            using (var alterCmd = new MySqlCommand(alterQuery, connection))
+                            {
+                                await alterCmd.ExecuteNonQueryAsync();
+                                _logger.LogInformation("Successfully added {ColumnName} column to ProgramLearningPaths", columnName);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogInformation("{ColumnName} column already exists in ProgramLearningPaths", columnName);
+                        }
+                    }
+                }
+
+                _logger.LogInformation("=== Migration completed for tenant: {TenantName} ===", tenantName);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating Program Assignment Rank columns for tenant: {TenantName}", tenantName);
                 return false;
             }
         }

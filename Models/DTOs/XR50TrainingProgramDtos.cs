@@ -18,6 +18,9 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         [Required]
         public List<int> Materials { get; set; } = new();
 
+        // Material assignments with rank configuration (populated by controller when objects are provided)
+        public List<ProgramMaterialAssignmentRequest>? MaterialAssignments { get; set; }
+
         // Optional: Learning path IDs to assign as well
         public List<int>? LearningPaths { get; set; }
 
@@ -149,6 +152,9 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string Name { get; set; } = "";
         public string? Description { get; set; }
         public bool? inherit_from_program { get; set; }
+        public int? min_level_rank { get; set; }
+        public int? max_level_rank { get; set; }
+        public int? required_upto_level_rank { get; set; }
     }
 
     public class CompleteTrainingProgramResponse
@@ -190,6 +196,12 @@ namespace XR50TrainingAssetRepo.Models.DTOs
 
         // Assignment metadata (if from complex relationships)
         public AssignmentMetadata? Assignment { get; set; }
+
+        // Level rank properties for this assignment
+        public bool? inherit_from_program { get; set; }
+        public int? min_level_rank { get; set; }
+        public int? max_level_rank { get; set; }
+        public int? required_upto_level_rank { get; set; }
     }
 
     public class LearningPathResponse
@@ -198,6 +210,9 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string LearningPathName { get; set; } = "";
         public string Description { get; set; } = "";
         public bool? inherit_from_program { get; set; }
+        public int? min_level_rank { get; set; }
+        public int? max_level_rank { get; set; }
+        public int? required_upto_level_rank { get; set; }
 
         // Materials in this learning path
         public List<MaterialResponse> Materials { get; set; } = new();
@@ -209,6 +224,18 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string? RelationshipType { get; set; }
         public int? DisplayOrder { get; set; }
         public int? RelationshipId { get; set; } // For complex relationships
+    }
+
+    /// <summary>
+    /// Request DTO for assigning a material to a program with optional rank configuration.
+    /// </summary>
+    public class ProgramMaterialAssignmentRequest
+    {
+        public int id { get; set; }
+        public bool? inherit_from_program { get; set; }
+        public int? min_level_rank { get; set; }
+        public int? max_level_rank { get; set; }
+        public int? required_upto_level_rank { get; set; }
     }
 
     public class TrainingProgramSummary
@@ -235,6 +262,9 @@ namespace XR50TrainingAssetRepo.Models.DTOs
 
         // Material IDs to assign to this program
         public List<int> Materials { get; set; } = new();
+
+        // Material assignments with rank configuration (populated by controller when objects are provided)
+        public List<ProgramMaterialAssignmentRequest>? MaterialAssignments { get; set; }
 
         // Learning path IDs to assign to this program
         public List<int> LearningPaths { get; set; } = new();
@@ -290,6 +320,12 @@ namespace XR50TrainingAssetRepo.Models.DTOs
 
         // Type-specific properties (populated based on material type)
         public Dictionary<string, object?> TypeSpecificProperties { get; set; } = new();
+
+        // Level rank properties for this assignment
+        public bool? inherit_from_program { get; set; }
+        public int? min_level_rank { get; set; }
+        public int? max_level_rank { get; set; }
+        public int? required_upto_level_rank { get; set; }
     }
 
     /// <summary>
