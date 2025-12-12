@@ -609,8 +609,10 @@ namespace XR50TrainingAssetRepo.Services
                         $"Cannot change material type from {existing.GetType().Name} to {material.GetType().Name}");
                 }
 
-                // Preserve creation timestamp
+                // Preserve creation timestamp, unique_id, and AssetId
                 var createdAt = existing.Created_at;
+                var uniqueId = existing.Unique_id;
+                var existingAssetId = GetAssetId(existing);
 
                 // Explicitly delete child entries first (cascade delete may not work with nullable FKs)
                 await DeleteChildEntriesAsync(context, material.id, existing.GetType());
@@ -622,6 +624,16 @@ namespace XR50TrainingAssetRepo.Services
                 // Add new material with same ID (full replacement including all child collections)
                 material.Created_at = createdAt;
                 material.Updated_at = DateTime.UtcNow;
+                // Preserve unique_id if not provided in update
+                if (material.Unique_id == null && uniqueId != null)
+                {
+                    material.Unique_id = uniqueId;
+                }
+                // Preserve AssetId if not provided in update
+                if (existingAssetId != null && GetAssetId(material) == null)
+                {
+                    SetAssetId(material, existingAssetId.Value);
+                }
                 context.Materials.Add(material);
                 await context.SaveChangesAsync();
 
@@ -685,6 +697,41 @@ namespace XR50TrainingAssetRepo.Services
                 QuizMaterial qz => qz.Questions?.Count ?? 0,
                 _ => 0
             };
+        }
+
+        private int? GetAssetId(Material material)
+        {
+            return material switch
+            {
+                VideoMaterial v => v.AssetId,
+                ImageMaterial i => i.AssetId,
+                PDFMaterial p => p.AssetId,
+                UnityMaterial u => u.AssetId,
+                DefaultMaterial d => d.AssetId,
+                _ => null
+            };
+        }
+
+        private void SetAssetId(Material material, int assetId)
+        {
+            switch (material)
+            {
+                case VideoMaterial v:
+                    v.AssetId = assetId;
+                    break;
+                case ImageMaterial i:
+                    i.AssetId = assetId;
+                    break;
+                case PDFMaterial p:
+                    p.AssetId = assetId;
+                    break;
+                case UnityMaterial u:
+                    u.AssetId = assetId;
+                    break;
+                case DefaultMaterial d:
+                    d.AssetId = assetId;
+                    break;
+            }
         }
 
         public async Task<bool> DeleteMaterialAsync(int id)
