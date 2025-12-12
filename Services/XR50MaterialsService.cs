@@ -612,7 +612,10 @@ namespace XR50TrainingAssetRepo.Services
                 // Preserve creation timestamp
                 var createdAt = existing.Created_at;
 
-                // Delete old material (cascades to child collections automatically)
+                // Explicitly delete child entries first (cascade delete may not work with nullable FKs)
+                await DeleteChildEntriesAsync(context, material.id, existing.GetType());
+
+                // Delete old material
                 context.Materials.Remove(existing);
                 await context.SaveChangesAsync();
 
@@ -634,6 +637,41 @@ namespace XR50TrainingAssetRepo.Services
                 await transaction.RollbackAsync();
                 throw;
             }
+        }
+
+        private async Task DeleteChildEntriesAsync(XR50TrainingContext context, int materialId, System.Type materialType)
+        {
+            if (materialType == typeof(ChecklistMaterial))
+            {
+                var entries = await context.Entries.Where(e => e.ChecklistMaterialId == materialId).ToListAsync();
+                context.Entries.RemoveRange(entries);
+            }
+            else if (materialType == typeof(WorkflowMaterial))
+            {
+                var steps = await context.WorkflowSteps.Where(s => s.WorkflowMaterialId == materialId).ToListAsync();
+                context.WorkflowSteps.RemoveRange(steps);
+            }
+            else if (materialType == typeof(VideoMaterial))
+            {
+                var timestamps = await context.Timestamps.Where(t => t.VideoMaterialId == materialId).ToListAsync();
+                context.Timestamps.RemoveRange(timestamps);
+            }
+            else if (materialType == typeof(QuestionnaireMaterial))
+            {
+                var entries = await context.QuestionnaireEntries.Where(e => e.QuestionnaireMaterialId == materialId).ToListAsync();
+                context.QuestionnaireEntries.RemoveRange(entries);
+            }
+            else if (materialType == typeof(QuizMaterial))
+            {
+                // First delete answers (child of questions), then questions
+                var questions = await context.QuizQuestions.Where(q => q.QuizMaterialId == materialId).ToListAsync();
+                var questionIds = questions.Select(q => q.QuizQuestionId).ToList();
+                var answers = await context.QuizAnswers.Where(a => questionIds.Contains(a.QuizQuestionId)).ToListAsync();
+                context.QuizAnswers.RemoveRange(answers);
+                context.QuizQuestions.RemoveRange(questions);
+            }
+
+            await context.SaveChangesAsync();
         }
 
         private int GetChildCollectionCount(Material material)
