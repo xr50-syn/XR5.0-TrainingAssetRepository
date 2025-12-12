@@ -133,12 +133,14 @@ namespace XR50TrainingAssetRepo.Services
         Task<int> AssignMaterialToQuestionnaireEntryAsync(int entryId, int materialId, string? relationshipType = null, int? displayOrder = null);
         Task<int> AssignMaterialToVideoTimestampAsync(int timestampId, int materialId, string? relationshipType = null, int? displayOrder = null);
         Task<int> AssignMaterialToQuizQuestionAsync(int questionId, int materialId, string? relationshipType = null, int? displayOrder = null);
+        Task<int> AssignMaterialToImageAnnotationAsync(int annotationId, int materialId, string? relationshipType = null, int? displayOrder = null);
 
         Task<IEnumerable<Material>> GetMaterialsForChecklistEntryAsync(int entryId, bool includeOrder = true);
         Task<IEnumerable<Material>> GetMaterialsForWorkflowStepAsync(int stepId, bool includeOrder = true);
         Task<IEnumerable<Material>> GetMaterialsForQuestionnaireEntryAsync(int entryId, bool includeOrder = true);
         Task<IEnumerable<Material>> GetMaterialsForVideoTimestampAsync(int timestampId, bool includeOrder = true);
         Task<IEnumerable<Material>> GetMaterialsForQuizQuestionAsync(int questionId, bool includeOrder = true);
+        Task<IEnumerable<Material>> GetMaterialsForImageAnnotationAsync(int annotationId, bool includeOrder = true);
 
         Task<bool> RemoveMaterialFromChecklistEntryAsync(int entryId, int materialId);
         Task<bool> RemoveMaterialFromWorkflowStepAsync(int stepId, int materialId);
@@ -524,7 +526,7 @@ namespace XR50TrainingAssetRepo.Services
 
             if (tryGet(json, "assetId", out var assetId)) image.AssetId = assetId.GetInt32();
             if (tryGet(json, "imagePath", out var path)) image.ImagePath = path.GetString();
-            if (tryGet(json, "annotations", out var annotations)) image.Annotations = annotations.GetRawText();
+            // Note: annotations are now parsed as ImageAnnotation entities in the controller
 
             return image;
         }
@@ -682,6 +684,11 @@ namespace XR50TrainingAssetRepo.Services
                 context.QuizAnswers.RemoveRange(answers);
                 context.QuizQuestions.RemoveRange(questions);
             }
+            else if (materialType == typeof(ImageMaterial))
+            {
+                var annotations = await context.ImageAnnotations.Where(a => a.ImageMaterialId == materialId).ToListAsync();
+                context.ImageAnnotations.RemoveRange(annotations);
+            }
 
             await context.SaveChangesAsync();
         }
@@ -695,6 +702,7 @@ namespace XR50TrainingAssetRepo.Services
                 ChecklistMaterial c => c.Entries?.Count ?? 0,
                 WorkflowMaterial w => w.WorkflowSteps?.Count ?? 0,
                 QuizMaterial qz => qz.Questions?.Count ?? 0,
+                ImageMaterial img => img.ImageAnnotations?.Count ?? 0,
                 _ => 0
             };
         }
@@ -825,6 +833,7 @@ namespace XR50TrainingAssetRepo.Services
             using var context = _dbContextFactory.CreateDbContext();
             return await context.Materials
                 .OfType<ImageMaterial>()
+                .Include(m => m.ImageAnnotations)
                 .FirstOrDefaultAsync(m => m.id == id);
         }
 
@@ -997,36 +1006,67 @@ namespace XR50TrainingAssetRepo.Services
         private async Task<object> GetImageMaterialCompleteAsync(int materialId)
         {
             using var context = _dbContextFactory.CreateDbContext();
-            
+
             var image = await context.Materials
+                .OfType<ImageMaterial>()
+                .Include(m => m.ImageAnnotations)
                 .Where(m => m.id == materialId)
-                .Select(m => new
-                {
-                    id = m.id,
-                    Name = m.Name,
-                    Description = m.Description,
-                    Type = m.Type.ToString(),
-                    Created_at = m.Created_at,
-                    Updated_at = m.Updated_at,
- 
-                    AssetId = EF.Property<string>(m, "AssetId"),
-                    ImagePath = EF.Property<string>(m, "ImagePath"),
-                    ImageWidth = EF.Property<int?>(m, "ImageWidth"),
-                    ImageHeight = EF.Property<int?>(m, "ImageHeight"),
-                    ImageFormat = EF.Property<string>(m, "ImageFormat"),
-                    Annotations = EF.Property<string>(m, "Annotations"),
-                    
-                    MaterialRelationships = m.MaterialRelationships.Select(mr => new
-                    {
-                        mr.Id,
-                        mr.RelatedEntityType,
-                        mr.RelatedEntityId,
-                        mr.RelationshipType
-                    }).ToList()
-                })
                 .FirstOrDefaultAsync();
 
-            return image;
+            if (image == null) return null!;
+
+            // Get related materials for each annotation
+            var annotationIds = image.ImageAnnotations?.Select(a => a.ImageAnnotationId).ToList() ?? new List<int>();
+            var annotationRelationships = await context.SubcomponentMaterialRelationships
+                .Where(r => r.SubcomponentType == "ImageAnnotation" && annotationIds.Contains(r.SubcomponentId))
+                .ToListAsync();
+
+            var relatedMaterialIds = annotationRelationships.Select(r => r.RelatedMaterialId).Distinct().ToList();
+            var relatedMaterials = await context.Materials
+                .Where(m => relatedMaterialIds.Contains(m.id))
+                .ToDictionaryAsync(m => m.id);
+
+            return new
+            {
+                id = image.id,
+                Name = image.Name,
+                Description = image.Description,
+                Type = image.Type.ToString().ToLower(),
+                Unique_id = image.Unique_id,
+                Created_at = image.Created_at,
+                Updated_at = image.Updated_at,
+                AssetId = image.AssetId,
+                ImagePath = image.ImagePath,
+                ImageWidth = image.ImageWidth,
+                ImageHeight = image.ImageHeight,
+                ImageFormat = image.ImageFormat,
+                Annotations = image.ImageAnnotations?.Select(a => new
+                {
+                    id = a.ImageAnnotationId,
+                    clientId = a.ClientId,
+                    text = a.Text,
+                    fontsize = a.FontSize,
+                    x = a.X,
+                    y = a.Y,
+                    related = annotationRelationships
+                        .Where(r => r.SubcomponentId == a.ImageAnnotationId)
+                        .Select(r => relatedMaterials.TryGetValue(r.RelatedMaterialId, out var mat) ? new
+                        {
+                            id = mat.id.ToString(),
+                            name = mat.Name,
+                            type = mat.Type.ToString().ToLower()
+                        } : null)
+                        .Where(r => r != null)
+                        .ToList()
+                }).ToList(),
+                MaterialRelationships = image.MaterialRelationships?.Select(mr => new
+                {
+                    mr.Id,
+                    mr.RelatedEntityType,
+                    mr.RelatedEntityId,
+                    mr.RelationshipType
+                }).ToList()
+            };
         }
 
         private async Task<object> GetPDFMaterialCompleteAsync(int materialId)
@@ -2648,6 +2688,7 @@ namespace XR50TrainingAssetRepo.Services
                 "QuestionnaireEntry" => await context.QuestionnaireEntries.AnyAsync(q => q.QuestionnaireEntryId == subcomponentId),
                 "VideoTimestamp" => await context.Timestamps.AnyAsync(v => v.id == subcomponentId),
                 "QuizQuestion" => await context.QuizQuestions.AnyAsync(q => q.QuizQuestionId == subcomponentId),
+                "ImageAnnotation" => await context.ImageAnnotations.AnyAsync(a => a.ImageAnnotationId == subcomponentId),
                 _ => false
             };
         }
@@ -2772,6 +2813,9 @@ namespace XR50TrainingAssetRepo.Services
         public Task<int> AssignMaterialToQuizQuestionAsync(int questionId, int materialId, string? relationshipType = null, int? displayOrder = null)
             => AssignMaterialToSubcomponentAsync(questionId, "QuizQuestion", materialId, relationshipType, displayOrder);
 
+        public Task<int> AssignMaterialToImageAnnotationAsync(int annotationId, int materialId, string? relationshipType = null, int? displayOrder = null)
+            => AssignMaterialToSubcomponentAsync(annotationId, "ImageAnnotation", materialId, relationshipType, displayOrder);
+
         public Task<IEnumerable<Material>> GetMaterialsForChecklistEntryAsync(int entryId, bool includeOrder = true)
             => GetMaterialsForSubcomponentAsync(entryId, "ChecklistEntry", includeOrder);
 
@@ -2786,6 +2830,9 @@ namespace XR50TrainingAssetRepo.Services
 
         public Task<IEnumerable<Material>> GetMaterialsForQuizQuestionAsync(int questionId, bool includeOrder = true)
             => GetMaterialsForSubcomponentAsync(questionId, "QuizQuestion", includeOrder);
+
+        public Task<IEnumerable<Material>> GetMaterialsForImageAnnotationAsync(int annotationId, bool includeOrder = true)
+            => GetMaterialsForSubcomponentAsync(annotationId, "ImageAnnotation", includeOrder);
 
         public Task<bool> RemoveMaterialFromChecklistEntryAsync(int entryId, int materialId)
             => RemoveMaterialFromSubcomponentAsync(entryId, "ChecklistEntry", materialId);

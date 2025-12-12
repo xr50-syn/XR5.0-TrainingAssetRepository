@@ -83,11 +83,11 @@ namespace XR50TrainingAssetRepo.Models
         public int? ImageHeight { get; set; }
         public string? ImageFormat { get; set; }
 
-        [Column(TypeName = "json")]
-        public string? Annotations { get; set; }
+        public List<ImageAnnotation> ImageAnnotations { get; set; }
 
         public ImageMaterial()
         {
+            ImageAnnotations = new List<ImageAnnotation>();
             Type = Type.Image;
         }
     }

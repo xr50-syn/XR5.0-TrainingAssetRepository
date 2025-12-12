@@ -407,6 +407,18 @@ namespace XR50TrainingAssetRepo.Services
                     INDEX `idx_questionnaire_material` (`QuestionnaireMaterialId`)
                 )",
 
+                @"CREATE TABLE IF NOT EXISTS `ImageAnnotations` (
+                    `ImageAnnotationId` int NOT NULL AUTO_INCREMENT,
+                    `ClientId` varchar(50) DEFAULT NULL,
+                    `Text` varchar(2000) DEFAULT NULL,
+                    `FontSize` int DEFAULT NULL,
+                    `X` double NOT NULL DEFAULT 0,
+                    `Y` double NOT NULL DEFAULT 0,
+                    `ImageMaterialId` int DEFAULT NULL,
+                    PRIMARY KEY (`ImageAnnotationId`),
+                    INDEX `idx_image_material` (`ImageMaterialId`)
+                )",
+
                 @"CREATE TABLE IF NOT EXISTS `Shares` (
                     `ShareId` varchar(50) NOT NULL,
                     `FileId` varchar(50) DEFAULT NULL,

@@ -336,6 +336,26 @@ private async Task<object?> GetImageDetails(int materialId)
     // Get related materials
     var related = await GetRelatedMaterialsAsync(materialId);
 
+    // Get related materials for each annotation
+    var annotationsWithRelated = new List<object>();
+    if (image.ImageAnnotations != null)
+    {
+        foreach (var annotation in image.ImageAnnotations)
+        {
+            var annotationRelated = await GetAnnotationRelatedMaterialsAsync(annotation.ImageAnnotationId);
+            annotationsWithRelated.Add(new
+            {
+                id = annotation.ImageAnnotationId,
+                clientId = annotation.ClientId,
+                text = annotation.Text,
+                fontsize = annotation.FontSize,
+                x = annotation.X,
+                y = annotation.Y,
+                related = annotationRelated
+            });
+        }
+    }
+
     return new
     {
         id = image.id.ToString(),
@@ -350,7 +370,7 @@ private async Task<object?> GetImageDetails(int materialId)
         ImageWidth = image.ImageWidth,
         ImageHeight = image.ImageHeight,
         ImageFormat = image.ImageFormat,
-        Annotations = image.Annotations,
+        Annotations = annotationsWithRelated,
         Related = related
     };
 }
@@ -2014,6 +2034,57 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             return material;
         }
 
+        /// <summary>
+        /// Parses material from JSON for update operations, using existing material's type as fallback
+        /// </summary>
+        private Material? ParseMaterialFromJsonForUpdate(JsonElement jsonElement, Material existingMaterial)
+        {
+            // Check if JSON specifies a type
+            bool hasTypeInJson = TryGetPropertyCaseInsensitive(jsonElement, "discriminator", out _) ||
+                                 TryGetPropertyCaseInsensitive(jsonElement, "type", out _) ||
+                                 TryGetPropertyCaseInsensitive(jsonElement, "materialType", out _);
+
+            if (hasTypeInJson)
+            {
+                // Type is specified in JSON, use normal parsing
+                return ParseMaterialFromJson(jsonElement);
+            }
+
+            // No type in JSON - create material instance matching existing type
+            _logger.LogInformation("No type in update JSON, using existing material type: {Type}", existingMaterial.GetType().Name);
+
+            Material material = existingMaterial switch
+            {
+                VideoMaterial => new VideoMaterial(),
+                ImageMaterial => new ImageMaterial(),
+                ChecklistMaterial => new ChecklistMaterial(),
+                WorkflowMaterial => new WorkflowMaterial(),
+                PDFMaterial => new PDFMaterial(),
+                UnityMaterial => new UnityMaterial(),
+                ChatbotMaterial => new ChatbotMaterial(),
+                QuestionnaireMaterial => new QuestionnaireMaterial(),
+                QuizMaterial => new QuizMaterial(),
+                MQTT_TemplateMaterial => new MQTT_TemplateMaterial(),
+                DefaultMaterial => new DefaultMaterial(),
+                _ => new DefaultMaterial()
+            };
+
+            // Populate common properties
+            if (TryGetPropertyCaseInsensitive(jsonElement, "name", out var nameProp))
+                material.Name = nameProp.GetString();
+
+            if (TryGetPropertyCaseInsensitive(jsonElement, "description", out var descProp))
+                material.Description = descProp.GetString();
+
+            if (TryGetPropertyCaseInsensitive(jsonElement, "unique_id", out var uniqueIdProp) && uniqueIdProp.ValueKind == JsonValueKind.Number)
+                material.Unique_id = uniqueIdProp.GetInt32();
+
+            // Populate type-specific properties
+            PopulateTypeSpecificProperties(material, jsonElement);
+
+            return material;
+        }
+
         // Helper method for case-insensitive property lookup
         private bool TryGetPropertyCaseInsensitive(JsonElement jsonElement, string propertyName, out JsonElement property)
         {
@@ -2386,8 +2457,56 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         image.ImageHeight = height.GetInt32();
                     if (TryGetPropertyCaseInsensitive(jsonElement, "imageFormat", out var format))
                         image.ImageFormat = format.GetString();
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "annotations", out var annotations))
-                        image.Annotations = annotations.GetRawText();
+                    // Parse annotations array
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "annotations", out var annotationsElement) &&
+                        annotationsElement.ValueKind == JsonValueKind.Array)
+                    {
+                        var imageAnnotations = new List<ImageAnnotation>();
+                        foreach (var annotationElement in annotationsElement.EnumerateArray())
+                        {
+                            var annotation = new ImageAnnotation();
+
+                            // Preserve ImageAnnotationId for updates
+                            if (TryGetPropertyCaseInsensitive(annotationElement, "imageAnnotationId", out var annotationIdProp))
+                            {
+                                if (annotationIdProp.ValueKind == JsonValueKind.Number)
+                                    annotation.ImageAnnotationId = annotationIdProp.GetInt32();
+                                else if (annotationIdProp.ValueKind == JsonValueKind.String && int.TryParse(annotationIdProp.GetString(), out var annotationId))
+                                    annotation.ImageAnnotationId = annotationId;
+                            }
+
+                            // Client ID (string like "of1pw6n")
+                            if (TryGetPropertyCaseInsensitive(annotationElement, "id", out var clientIdProp) ||
+                                TryGetPropertyCaseInsensitive(annotationElement, "clientId", out clientIdProp))
+                                annotation.ClientId = clientIdProp.GetString();
+
+                            if (TryGetPropertyCaseInsensitive(annotationElement, "text", out var textProp))
+                                annotation.Text = textProp.GetString();
+
+                            if (TryGetPropertyCaseInsensitive(annotationElement, "fontsize", out var fontsizeProp) ||
+                                TryGetPropertyCaseInsensitive(annotationElement, "fontSize", out fontsizeProp))
+                            {
+                                if (fontsizeProp.ValueKind == JsonValueKind.Number)
+                                    annotation.FontSize = fontsizeProp.GetInt32();
+                            }
+
+                            if (TryGetPropertyCaseInsensitive(annotationElement, "x", out var xProp))
+                            {
+                                if (xProp.ValueKind == JsonValueKind.Number)
+                                    annotation.X = xProp.GetDouble();
+                            }
+
+                            if (TryGetPropertyCaseInsensitive(annotationElement, "y", out var yProp))
+                            {
+                                if (yProp.ValueKind == JsonValueKind.Number)
+                                    annotation.Y = yProp.GetDouble();
+                            }
+
+                            imageAnnotations.Add(annotation);
+                        }
+                        image.ImageAnnotations = imageAnnotations;
+                        _logger.LogInformation("Parsed {Count} image annotations", imageAnnotations.Count);
+                    }
                     break;
 
                 case PDFMaterial pdf:
@@ -2500,8 +2619,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     return NotFound($"Material with ID {materialId} not found");
                 }
 
-                // Parse the material from JSON (excluding 'related' array)
-                var material = ParseMaterialFromJson(jsonElement);
+                // Parse the material from JSON, using existing material's type as fallback
+                var material = ParseMaterialFromJsonForUpdate(jsonElement, existingMaterial);
                 if (material == null)
                 {
                     return BadRequest("Invalid material data or unsupported material type");
@@ -3326,6 +3445,18 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             var childMaterials = await _materialService.GetChildMaterialsAsync(materialId, includeOrder: true);
 
             return childMaterials.Select(m => new
+            {
+                id = m.id.ToString(),
+                Name = m.Name,
+                Description = m.Description
+            }).ToList<object>();
+        }
+
+        private async Task<List<object>> GetAnnotationRelatedMaterialsAsync(int annotationId)
+        {
+            var relatedMaterials = await _materialService.GetMaterialsForSubcomponentAsync(annotationId, "ImageAnnotation", includeOrder: true);
+
+            return relatedMaterials.Select(m => new
             {
                 id = m.id.ToString(),
                 Name = m.Name,

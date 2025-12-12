@@ -50,6 +50,7 @@ namespace XR50TrainingAssetRepo.Data
         public DbSet<TenantAdmin> TenantAdmins { get; set; } = null!;
         public DbSet<MaterialRelationship> MaterialRelationships { get; set; } = null!;
         public DbSet<SubcomponentMaterialRelationship> SubcomponentMaterialRelationships { get; set; } = null!;
+        public DbSet<ImageAnnotation> ImageAnnotations { get; set; } = null!;
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured && _tenantService != null && _configuration != null)
@@ -181,9 +182,10 @@ namespace XR50TrainingAssetRepo.Data
                 .Property(m => m.ImageFormat)
                 .HasColumnName("ImageFormat");
             modelBuilder.Entity<ImageMaterial>()
-                .Property(m => m.Annotations)
-                .HasColumnName("Annotations")
-                .HasColumnType("json");
+                .HasMany(m => m.ImageAnnotations)
+                .WithOne()
+                .HasForeignKey("ImageMaterialId")
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<PDFMaterial>()
                 .Property(m => m.AssetId)
