@@ -294,6 +294,17 @@ namespace XR50TrainingAssetRepo.Services
                 using var stream = file.OpenReadStream();
                 var (detectedFiletype, detectedType) = await DetectFileTypeFromStream(stream);
 
+                // If binary detection failed (unknown), try to infer from file extension
+                if (detectedFiletype == "unknown")
+                {
+                    var extensionFiletype = GetFiletypeFromFilename(asset.Filename ?? file.FileName);
+                    var extensionType = InferAssetTypeFromFiletype(extensionFiletype);
+                    _logger.LogInformation("Binary detection failed, using extension-based detection for {Filename}: {Filetype} -> {Type}",
+                        asset.Filename ?? file.FileName, extensionFiletype, extensionType);
+                    detectedFiletype = extensionFiletype;
+                    detectedType = extensionType;
+                }
+
                 // Use detected values if asset properties not explicitly set
                 if (string.IsNullOrEmpty(asset.Filetype))
                 {
