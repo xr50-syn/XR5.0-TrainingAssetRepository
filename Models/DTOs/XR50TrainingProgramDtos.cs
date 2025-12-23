@@ -336,15 +336,15 @@ namespace XR50TrainingAssetRepo.Models.DTOs
     {
         public string Status { get; set; } = "success";
         public string Message { get; set; } = "";
-        public int Id { get; set; }
+        public int id { get; set; }
         public string Name { get; set; } = "";
         public string? Description { get; set; }
         public string? Objectives { get; set; }
         public string? Requirements { get; set; }
-        public int? MinLevelRank { get; set; }
-        public int? MaxLevelRank { get; set; }
-        public int? RequiredUptoLevelRank { get; set; }
-        public string? CreatedAt { get; set; }
+        public int? min_level_rank { get; set; }
+        public int? max_level_rank { get; set; }
+        public int? required_upto_level_rank { get; set; }
+        public string? Created_at { get; set; }
 
         /// <summary>
         /// Materials directly assigned to the training program (not through learning paths).
