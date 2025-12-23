@@ -1664,6 +1664,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                         // Parse related materials for this entry
                         var relatedIds = ParseRelatedMaterialIds(entryElement);
+                        _logger.LogInformation("Entry {Index} '{Text}': found {Count} related material IDs: [{Ids}]",
+                            entryIndex, entry.Text, relatedIds.Count, string.Join(", ", relatedIds));
                         if (relatedIds.Any())
                         {
                             entryRelatedMaterials[entryIndex] = relatedIds;
@@ -1673,7 +1675,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     }
                 }
 
-                _logger.LogInformation("Parsed checklist: {Name} with {EntryCount} entries", checklist.Name, entries.Count);
+                _logger.LogInformation("Parsed checklist: {Name} with {EntryCount} entries, {RelatedCount} entries have related materials",
+                    checklist.Name, entries.Count, entryRelatedMaterials.Count);
 
                 // Use the service method directly instead of the controller method
                 var createdMaterial = await _materialService.CreateChecklistWithEntriesAsync(checklist, entries);
@@ -1681,7 +1684,14 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 _logger.LogInformation("Created checklist material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
 
+                // Log entry IDs after creation
+                foreach (var entry in entries)
+                {
+                    _logger.LogInformation("Entry '{Text}' has ChecklistEntryId: {Id}", entry.Text, entry.ChecklistEntryId);
+                }
+
                 // Process related materials for entries
+                _logger.LogInformation("Processing related materials for {Count} entries", entryRelatedMaterials.Count);
                 await ProcessSubcomponentRelatedMaterialsAsync(
                     "ChecklistEntry",
                     entries,
@@ -2753,11 +2763,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 await _materialService.UpdateMaterialAsync(material);
                 _logger.LogInformation("Updated material {Id} for tenant: {TenantName}", materialId, tenantName);
 
-                // Process related materials for image annotations if applicable
-                if (material is ImageMaterial imageMaterial && imageMaterial.ImageAnnotations?.Any() == true)
-                {
-                    await ProcessImageAnnotationRelatedMaterialsAsync(jsonElement, imageMaterial.ImageAnnotations.ToList());
-                }
+                // Process related materials for subcomponents based on material type
+                await ProcessSubcomponentRelatedMaterialsForUpdateAsync(material, jsonElement);
 
                 // Handle 'related' array if provided
                 if (TryGetPropertyCaseInsensitive(jsonElement, "related", out var relatedElement) &&
@@ -3719,6 +3726,171 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         _logger.LogWarning(ex, "Failed to assign material {MaterialId} to {SubcomponentType} {SubcomponentId}",
                             relatedMaterialId, subcomponentType, subcomponentId);
                     }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Processes related materials for all subcomponent types after a material update.
+        /// </summary>
+        private async Task ProcessSubcomponentRelatedMaterialsForUpdateAsync(Material material, JsonElement jsonElement)
+        {
+            switch (material)
+            {
+                case ChecklistMaterial checklist when checklist.Entries?.Any() == true:
+                    await ProcessChecklistEntryRelatedMaterialsAsync(jsonElement, checklist.Entries.ToList());
+                    break;
+
+                case QuestionnaireMaterial questionnaire when questionnaire.QuestionnaireEntries?.Any() == true:
+                    await ProcessQuestionnaireEntryRelatedMaterialsAsync(jsonElement, questionnaire.QuestionnaireEntries.ToList());
+                    break;
+
+                case WorkflowMaterial workflow when workflow.WorkflowSteps?.Any() == true:
+                    await ProcessWorkflowStepRelatedMaterialsAsync(jsonElement, workflow.WorkflowSteps.ToList());
+                    break;
+
+                case VideoMaterial video when video.Timestamps?.Any() == true:
+                    await ProcessVideoTimestampRelatedMaterialsAsync(jsonElement, video.Timestamps.ToList());
+                    break;
+
+                case ImageMaterial image when image.ImageAnnotations?.Any() == true:
+                    await ProcessImageAnnotationRelatedMaterialsAsync(jsonElement, image.ImageAnnotations.ToList());
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Processes related materials for checklist entries after update.
+        /// </summary>
+        private async Task ProcessChecklistEntryRelatedMaterialsAsync(JsonElement jsonElement, List<ChecklistEntry> savedEntries)
+        {
+            var entriesElement = GetEntriesElementFromJson(jsonElement, "entries");
+            if (!entriesElement.HasValue) return;
+
+            int entryIndex = 0;
+            foreach (var entryElement in entriesElement.Value.EnumerateArray())
+            {
+                var relatedIds = ParseRelatedMaterialIds(entryElement);
+                if (relatedIds.Any() && entryIndex < savedEntries.Count)
+                {
+                    var entry = savedEntries[entryIndex];
+                    await AssignRelatedMaterialsToSubcomponentAsync(entry.ChecklistEntryId, "ChecklistEntry", relatedIds);
+                }
+                entryIndex++;
+            }
+        }
+
+        /// <summary>
+        /// Processes related materials for questionnaire entries after update.
+        /// </summary>
+        private async Task ProcessQuestionnaireEntryRelatedMaterialsAsync(JsonElement jsonElement, List<QuestionnaireEntry> savedEntries)
+        {
+            var entriesElement = GetEntriesElementFromJson(jsonElement, "entries");
+            if (!entriesElement.HasValue) return;
+
+            int entryIndex = 0;
+            foreach (var entryElement in entriesElement.Value.EnumerateArray())
+            {
+                var relatedIds = ParseRelatedMaterialIds(entryElement);
+                if (relatedIds.Any() && entryIndex < savedEntries.Count)
+                {
+                    var entry = savedEntries[entryIndex];
+                    await AssignRelatedMaterialsToSubcomponentAsync(entry.QuestionnaireEntryId, "QuestionnaireEntry", relatedIds);
+                }
+                entryIndex++;
+            }
+        }
+
+        /// <summary>
+        /// Processes related materials for workflow steps after update.
+        /// </summary>
+        private async Task ProcessWorkflowStepRelatedMaterialsAsync(JsonElement jsonElement, List<WorkflowStep> savedSteps)
+        {
+            var stepsElement = GetEntriesElementFromJson(jsonElement, "steps");
+            if (!stepsElement.HasValue) return;
+
+            int stepIndex = 0;
+            foreach (var stepElement in stepsElement.Value.EnumerateArray())
+            {
+                var relatedIds = ParseRelatedMaterialIds(stepElement);
+                if (relatedIds.Any() && stepIndex < savedSteps.Count)
+                {
+                    var step = savedSteps[stepIndex];
+                    await AssignRelatedMaterialsToSubcomponentAsync(step.Id, "WorkflowStep", relatedIds);
+                }
+                stepIndex++;
+            }
+        }
+
+        /// <summary>
+        /// Processes related materials for video timestamps after update.
+        /// </summary>
+        private async Task ProcessVideoTimestampRelatedMaterialsAsync(JsonElement jsonElement, List<VideoTimestamp> savedTimestamps)
+        {
+            var timestampsElement = GetEntriesElementFromJson(jsonElement, "timestamps");
+            if (!timestampsElement.HasValue) return;
+
+            int timestampIndex = 0;
+            foreach (var timestampElement in timestampsElement.Value.EnumerateArray())
+            {
+                var relatedIds = ParseRelatedMaterialIds(timestampElement);
+                if (relatedIds.Any() && timestampIndex < savedTimestamps.Count)
+                {
+                    var timestamp = savedTimestamps[timestampIndex];
+                    await AssignRelatedMaterialsToSubcomponentAsync(timestamp.id, "VideoTimestamp", relatedIds);
+                }
+                timestampIndex++;
+            }
+        }
+
+        /// <summary>
+        /// Helper to get entries/steps/timestamps element from JSON (checks both root and config).
+        /// </summary>
+        private JsonElement? GetEntriesElementFromJson(JsonElement jsonElement, string propertyName)
+        {
+            // Try root level first
+            if (TryGetPropertyCaseInsensitive(jsonElement, propertyName, out var rootElement) &&
+                rootElement.ValueKind == JsonValueKind.Array)
+            {
+                return rootElement;
+            }
+
+            // Try inside config object
+            if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var configElement) &&
+                TryGetPropertyCaseInsensitive(configElement, propertyName, out var configEntries) &&
+                configEntries.ValueKind == JsonValueKind.Array)
+            {
+                return configEntries;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Helper to assign related materials to a subcomponent.
+        /// </summary>
+        private async Task AssignRelatedMaterialsToSubcomponentAsync(int subcomponentId, string subcomponentType, List<int> relatedMaterialIds)
+        {
+            _logger.LogInformation("Assigning {Count} related materials to {Type} {Id}",
+                relatedMaterialIds.Count, subcomponentType, subcomponentId);
+
+            int displayOrder = 1;
+            foreach (var relatedMaterialId in relatedMaterialIds)
+            {
+                try
+                {
+                    await _materialService.AssignMaterialToSubcomponentAsync(
+                        subcomponentId, subcomponentType, relatedMaterialId, "related", displayOrder);
+
+                    _logger.LogInformation("Assigned material {MaterialId} to {SubcomponentType} {SubcomponentId}",
+                        relatedMaterialId, subcomponentType, subcomponentId);
+
+                    displayOrder++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to assign material {MaterialId} to {SubcomponentType} {SubcomponentId}",
+                        relatedMaterialId, subcomponentType, subcomponentId);
                 }
             }
         }
