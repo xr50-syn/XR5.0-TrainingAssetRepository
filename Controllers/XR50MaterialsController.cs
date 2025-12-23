@@ -1302,6 +1302,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 // Parse the steps - try to get from "config" object first, then direct "steps" array
                 var steps = new List<WorkflowStep>();
+                var stepRelatedMaterials = new Dictionary<int, List<int>>();
 
                 JsonElement stepsElement = default;
                 bool hasSteps = false;
@@ -1325,6 +1326,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 if (hasSteps && stepsElement.ValueKind == JsonValueKind.Array)
                 {
+                    int stepIndex = 0;
                     foreach (var stepElement in stepsElement.EnumerateArray())
                     {
                         var step = new WorkflowStep();
@@ -1336,6 +1338,15 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                             step.Content = contentProp.GetString();
 
                         steps.Add(step);
+
+                        // Parse related materials for this step
+                        var relatedIds = ParseRelatedMaterialIds(stepElement);
+                        if (relatedIds.Any())
+                        {
+                            stepRelatedMaterials[stepIndex] = relatedIds;
+                        }
+
+                        stepIndex++;
                     }
                 }
 
@@ -1346,6 +1357,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 _logger.LogInformation("Created workflow material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
+
+                // Process related materials for steps
+                await ProcessSubcomponentRelatedMaterialsAsync(
+                    "WorkflowStep",
+                    steps,
+                    stepRelatedMaterials,
+                    s => s.Id);
 
                 // Process related materials if provided
                 await ProcessRelatedMaterialsAsync(createdMaterial.id, jsonElement);
@@ -1411,6 +1429,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 // Parse the timestamps - check both root level and inside config object
                 var timestamps = new List<VideoTimestamp>();
+                var timestampRelatedMaterials = new Dictionary<int, List<int>>();
                 JsonElement? timestampsElement = null;
 
                 // First try root level
@@ -1429,6 +1448,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 if (timestampsElement.HasValue)
                 {
+                    int timestampIndex = 0;
                     foreach (var timestampElement in timestampsElement.Value.EnumerateArray())
                     {
                         var timestamp = new VideoTimestamp();
@@ -1483,16 +1503,32 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                             timestamp.Type = typeProp.GetString();
 
                         timestamps.Add(timestamp);
+
+                        // Parse related materials for this timestamp
+                        var relatedIds = ParseRelatedMaterialIds(timestampElement);
+                        if (relatedIds.Any())
+                        {
+                            timestampRelatedMaterials[timestampIndex] = relatedIds;
+                        }
+
+                        timestampIndex++;
                     }
                 }
-                
+
                 _logger.LogInformation("🎬 Parsed video: {Name} with {TimestampCount} timestamps", video.Name, timestamps.Count);
-                
+
                 // Use the service method directly instead of the controller method
                 var createdMaterial = await _materialService.CreateVideoWithTimestampsAsync(video, timestamps);
-                
+
                 _logger.LogInformation("Created video material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
+
+                // Process related materials for timestamps
+                await ProcessSubcomponentRelatedMaterialsAsync(
+                    "VideoTimestamp",
+                    timestamps,
+                    timestampRelatedMaterials,
+                    t => t.id);
 
                 // Process related materials if provided
                 await ProcessRelatedMaterialsAsync(createdMaterial.id, jsonElement);
@@ -1541,6 +1577,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 // Parse the entries - try to get from "config" object first, then direct "entries" array
                 var entries = new List<ChecklistEntry>();
+                var entryRelatedMaterials = new Dictionary<int, List<int>>();
 
                 JsonElement entriesElement = default;
                 bool hasEntries = false;
@@ -1564,6 +1601,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 if (hasEntries && entriesElement.ValueKind == JsonValueKind.Array)
                 {
+                    int entryIndex = 0;
                     foreach (var entryElement in entriesElement.EnumerateArray())
                     {
                         var entry = new ChecklistEntry();
@@ -1575,16 +1613,32 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                             entry.Description = descriptionProp.GetString();
 
                         entries.Add(entry);
+
+                        // Parse related materials for this entry
+                        var relatedIds = ParseRelatedMaterialIds(entryElement);
+                        if (relatedIds.Any())
+                        {
+                            entryRelatedMaterials[entryIndex] = relatedIds;
+                        }
+
+                        entryIndex++;
                     }
                 }
-                
+
                 _logger.LogInformation("Parsed checklist: {Name} with {EntryCount} entries", checklist.Name, entries.Count);
-                
+
                 // Use the service method directly instead of the controller method
                 var createdMaterial = await _materialService.CreateChecklistWithEntriesAsync(checklist, entries);
-                
+
                 _logger.LogInformation("Created checklist material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
+
+                // Process related materials for entries
+                await ProcessSubcomponentRelatedMaterialsAsync(
+                    "ChecklistEntry",
+                    entries,
+                    entryRelatedMaterials,
+                    e => e.ChecklistEntryId);
 
                 // Process related materials if provided
                 await ProcessRelatedMaterialsAsync(createdMaterial.id, jsonElement);
@@ -1641,6 +1695,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 // Parse the entries - try to get from "config" object first, then direct "entries" array
                 var entries = new List<QuestionnaireEntry>();
+                var entryRelatedMaterials = new Dictionary<int, List<int>>();
 
                 JsonElement entriesElement = default;
                 bool hasEntries = false;
@@ -1664,6 +1719,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 if (hasEntries && entriesElement.ValueKind == JsonValueKind.Array)
                 {
+                    int entryIndex = 0;
                     foreach (var entryElement in entriesElement.EnumerateArray())
                     {
                         var entry = new QuestionnaireEntry();
@@ -1675,16 +1731,32 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                             entry.Description = descriptionProp.GetString();
 
                         entries.Add(entry);
+
+                        // Parse related materials for this entry
+                        var relatedIds = ParseRelatedMaterialIds(entryElement);
+                        if (relatedIds.Any())
+                        {
+                            entryRelatedMaterials[entryIndex] = relatedIds;
+                        }
+
+                        entryIndex++;
                     }
                 }
-                
+
                 _logger.LogInformation("Parsed questionnaire: {Name} with {EntryCount} entries", questionnaire.Name, entries.Count);
-                
+
                 // For questionnaires, we can use the existing service method directly
                 var createdMaterial = await _materialService.CreateQuestionnaireMaterialWithEntriesAsync(questionnaire, entries);
-                
+
                 _logger.LogInformation("Created questionnaire material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
+
+                // Process related materials for entries
+                await ProcessSubcomponentRelatedMaterialsAsync(
+                    "QuestionnaireEntry",
+                    entries,
+                    entryRelatedMaterials,
+                    e => e.QuestionnaireEntryId);
 
                 // Process related materials if provided
                 await ProcessRelatedMaterialsAsync(createdMaterial.id, jsonElement);
@@ -2633,6 +2705,12 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 await _materialService.UpdateMaterialAsync(material);
                 _logger.LogInformation("Updated material {Id} for tenant: {TenantName}", materialId, tenantName);
 
+                // Process related materials for image annotations if applicable
+                if (material is ImageMaterial imageMaterial && imageMaterial.ImageAnnotations?.Any() == true)
+                {
+                    await ProcessImageAnnotationRelatedMaterialsAsync(jsonElement, imageMaterial.ImageAnnotations.ToList());
+                }
+
                 // Handle 'related' array if provided
                 if (TryGetPropertyCaseInsensitive(jsonElement, "related", out var relatedElement) &&
                     relatedElement.ValueKind == JsonValueKind.Array)
@@ -3527,6 +3605,182 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     // Continue processing other relationships even if one fails
                 }
             }
+        }
+
+        /// <summary>
+        /// Processes related materials for subcomponents (checklist entries, workflow steps, etc.)
+        /// after they have been created and have IDs assigned.
+        /// </summary>
+        /// <typeparam name="T">The type of subcomponent (e.g., ChecklistEntry, WorkflowStep)</typeparam>
+        /// <param name="subcomponentType">The subcomponent type string for the relationship table</param>
+        /// <param name="subcomponents">List of created subcomponents with their IDs</param>
+        /// <param name="relatedMaterialsMap">Dictionary mapping subcomponent index to list of related material IDs</param>
+        private async Task ProcessSubcomponentRelatedMaterialsAsync<T>(
+            string subcomponentType,
+            List<T> subcomponents,
+            Dictionary<int, List<int>> relatedMaterialsMap,
+            Func<T, int> getIdFunc)
+        {
+            if (relatedMaterialsMap == null || !relatedMaterialsMap.Any())
+                return;
+
+            _logger.LogInformation("Processing related materials for {Count} {Type} subcomponents",
+                relatedMaterialsMap.Count, subcomponentType);
+
+            foreach (var kvp in relatedMaterialsMap)
+            {
+                int index = kvp.Key;
+                var relatedMaterialIds = kvp.Value;
+
+                if (index >= subcomponents.Count)
+                {
+                    _logger.LogWarning("Subcomponent index {Index} out of range, skipping", index);
+                    continue;
+                }
+
+                var subcomponent = subcomponents[index];
+                int subcomponentId = getIdFunc(subcomponent);
+
+                int displayOrder = 1;
+                foreach (var relatedMaterialId in relatedMaterialIds)
+                {
+                    try
+                    {
+                        await _materialService.AssignMaterialToSubcomponentAsync(
+                            subcomponentId, subcomponentType, relatedMaterialId, "related", displayOrder);
+
+                        _logger.LogInformation("Assigned material {MaterialId} to {SubcomponentType} {SubcomponentId}",
+                            relatedMaterialId, subcomponentType, subcomponentId);
+
+                        displayOrder++;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to assign material {MaterialId} to {SubcomponentType} {SubcomponentId}",
+                            relatedMaterialId, subcomponentType, subcomponentId);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Processes related materials for image annotations after the image material has been saved.
+        /// Matches annotations from JSON with saved annotations by ClientId or index.
+        /// </summary>
+        private async Task ProcessImageAnnotationRelatedMaterialsAsync(JsonElement jsonElement, List<ImageAnnotation> savedAnnotations)
+        {
+            // Find annotations in JSON
+            JsonElement? annotationsElement = null;
+
+            if (TryGetPropertyCaseInsensitive(jsonElement, "annotations", out var rootAnnotations) &&
+                rootAnnotations.ValueKind == JsonValueKind.Array)
+            {
+                annotationsElement = rootAnnotations;
+            }
+            else if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var configElement) &&
+                     TryGetPropertyCaseInsensitive(configElement, "annotations", out var configAnnotations) &&
+                     configAnnotations.ValueKind == JsonValueKind.Array)
+            {
+                annotationsElement = configAnnotations;
+            }
+
+            if (!annotationsElement.HasValue)
+                return;
+
+            var annotationRelatedMaterials = new Dictionary<int, List<int>>();
+            int annotationIndex = 0;
+
+            foreach (var annotationElement in annotationsElement.Value.EnumerateArray())
+            {
+                var relatedIds = ParseRelatedMaterialIds(annotationElement);
+                if (relatedIds.Any())
+                {
+                    // Try to match by ClientId first
+                    string? clientId = null;
+                    if (TryGetPropertyCaseInsensitive(annotationElement, "id", out var clientIdProp) ||
+                        TryGetPropertyCaseInsensitive(annotationElement, "clientId", out clientIdProp))
+                    {
+                        clientId = clientIdProp.GetString();
+                    }
+
+                    // Find matching saved annotation
+                    ImageAnnotation? matchedAnnotation = null;
+                    if (!string.IsNullOrEmpty(clientId))
+                    {
+                        matchedAnnotation = savedAnnotations.FirstOrDefault(a => a.ClientId == clientId);
+                    }
+
+                    // Fall back to index matching
+                    if (matchedAnnotation == null && annotationIndex < savedAnnotations.Count)
+                    {
+                        matchedAnnotation = savedAnnotations[annotationIndex];
+                    }
+
+                    if (matchedAnnotation != null)
+                    {
+                        int displayOrder = 1;
+                        foreach (var relatedMaterialId in relatedIds)
+                        {
+                            try
+                            {
+                                await _materialService.AssignMaterialToSubcomponentAsync(
+                                    matchedAnnotation.ImageAnnotationId, "ImageAnnotation", relatedMaterialId, "related", displayOrder);
+
+                                _logger.LogInformation("Assigned material {MaterialId} to ImageAnnotation {AnnotationId}",
+                                    relatedMaterialId, matchedAnnotation.ImageAnnotationId);
+
+                                displayOrder++;
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Failed to assign material {MaterialId} to ImageAnnotation {AnnotationId}",
+                                    relatedMaterialId, matchedAnnotation.ImageAnnotationId);
+                            }
+                        }
+                    }
+                }
+
+                annotationIndex++;
+            }
+        }
+
+        /// <summary>
+        /// Parses related material IDs from a JSON element's 'related' array.
+        /// </summary>
+        private List<int> ParseRelatedMaterialIds(JsonElement element)
+        {
+            var result = new List<int>();
+
+            if (!TryGetPropertyCaseInsensitive(element, "related", out var relatedElement))
+                return result;
+
+            if (relatedElement.ValueKind != JsonValueKind.Array)
+                return result;
+
+            foreach (var relatedItem in relatedElement.EnumerateArray())
+            {
+                if (!TryGetPropertyCaseInsensitive(relatedItem, "id", out var idProp))
+                    continue;
+
+                int materialId;
+                if (idProp.ValueKind == JsonValueKind.String)
+                {
+                    if (!int.TryParse(idProp.GetString(), out materialId))
+                        continue;
+                }
+                else if (idProp.ValueKind == JsonValueKind.Number)
+                {
+                    materialId = idProp.GetInt32();
+                }
+                else
+                {
+                    continue;
+                }
+
+                result.Add(materialId);
+            }
+
+            return result;
         }
 
         #region Subcomponent Material Relationships

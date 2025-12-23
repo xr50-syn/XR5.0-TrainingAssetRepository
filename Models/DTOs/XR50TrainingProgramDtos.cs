@@ -119,31 +119,50 @@ namespace XR50TrainingAssetRepo.Models.DTOs
     }
     public class ChecklistEntryDto
     {
+        public int? id { get; set; }
         public string Text { get; set; } = "";
         public string? Description { get; set; }
+        public List<RelatedMaterialRequest>? related { get; set; }
     }
 
     public class WorkflowStepDto
     {
+        public int? id { get; set; }
         public string Title { get; set; } = "";
         public string? Content { get; set; }
+        public List<RelatedMaterialRequest>? related { get; set; }
     }
 
     public class QuestionnaireEntryDto
     {
+        public int? id { get; set; }
         public string Question { get; set; } = "";
         public string? QuestionType { get; set; }
         public List<string>? Options { get; set; }
         public string? CorrectAnswer { get; set; }
         public bool Required { get; set; } = true;
+        public List<RelatedMaterialRequest>? related { get; set; }
     }
 
     public class VideoTimestampDto
     {
+        public int? id { get; set; }
         public string Title { get; set; } = "";
         public string Time { get; set; } = "";
         public string? Description { get; set; }
         public string? AnnotationType { get; set; }
+        public List<RelatedMaterialRequest>? related { get; set; }
+    }
+
+    public class ImageAnnotationDto
+    {
+        public int? id { get; set; }
+        public string? ClientId { get; set; }
+        public string? Text { get; set; }
+        public int? FontSize { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public List<RelatedMaterialRequest>? related { get; set; }
     }
 
     public class LearningPathCreationRequest

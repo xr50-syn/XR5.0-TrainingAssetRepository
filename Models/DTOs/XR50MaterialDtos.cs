@@ -64,4 +64,26 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public int? DisplayOrder { get; set; }
         public string? RelationshipType { get; set; }
     }
+
+    /// <summary>
+    /// DTO for specifying related materials in subcomponent requests.
+    /// Only the id is required - name and description are optional for convenience.
+    /// </summary>
+    public class RelatedMaterialRequest
+    {
+        public int id { get; set; }
+        public string? name { get; set; }
+        public string? description { get; set; }
+    }
+
+    /// <summary>
+    /// DTO for returning related materials in subcomponent responses.
+    /// </summary>
+    public class RelatedMaterialResponse
+    {
+        public int id { get; set; }
+        public string? name { get; set; }
+        public string? description { get; set; }
+        public string? type { get; set; }
+    }
 }
