@@ -129,25 +129,37 @@ private async Task<object?> GetWorkflowDetails(int materialId)
 
     var related = await GetRelatedMaterialsAsync(materialId);
 
+    // Build steps with their related materials
+    var stepsWithRelated = new List<object>();
+    if (workflow.WorkflowSteps != null)
+    {
+        foreach (var ws in workflow.WorkflowSteps)
+        {
+            var stepRelated = await GetSubcomponentRelatedMaterialsAsync(ws.Id, "WorkflowStep");
+            stepsWithRelated.Add(new
+            {
+                id = ws.Id.ToString(),
+                title = ws.Title,
+                content = ws.Content,
+                related = stepRelated
+            });
+        }
+    }
+
     return new
     {
         id = workflow.id.ToString(),
-        Name = workflow.Name,
-        Description = workflow.Description,
-        Type = GetLowercaseType(workflow.Type),
-        Unique_id = workflow.Unique_id,
-        Created_at = workflow.Created_at,
-        Updated_at = workflow.Updated_at,
-        Config = new
+        name = workflow.Name,
+        description = workflow.Description,
+        type = GetLowercaseType(workflow.Type),
+        unique_id = workflow.Unique_id,
+        created_at = workflow.Created_at,
+        updated_at = workflow.Updated_at,
+        config = new
         {
-            Steps = workflow.WorkflowSteps?.Select(ws => new
-            {
-                Id = ws.Id,
-                Title = ws.Title,
-                Content = ws.Content
-            }) ?? Enumerable.Empty<object>()
+            steps = stepsWithRelated
         },
-        Related = related
+        related = related
     };
 }
 
@@ -165,44 +177,56 @@ private async Task<object?> GetVideoDetails(int materialId)
         {
             asset = new
             {
-                Id = assetEntity.Id,
-                Filename = assetEntity.Filename,
-                Description = assetEntity.Description,
-                Filetype = assetEntity.Filetype,
-                Src = assetEntity.Src,
-                URL = assetEntity.URL
+                id = assetEntity.Id,
+                filename = assetEntity.Filename,
+                description = assetEntity.Description,
+                filetype = assetEntity.Filetype,
+                src = assetEntity.Src,
+                url = assetEntity.URL
             };
         }
     }
 
     var related = await GetRelatedMaterialsAsync(materialId);
 
+    // Build timestamps with their related materials
+    var timestampsWithRelated = new List<object>();
+    if (video.Timestamps != null)
+    {
+        foreach (var vt in video.Timestamps)
+        {
+            var timestampRelated = await GetSubcomponentRelatedMaterialsAsync(vt.id, "VideoTimestamp");
+            timestampsWithRelated.Add(new
+            {
+                id = vt.id.ToString(),
+                title = vt.Title,
+                startTime = vt.startTime,
+                endTime = vt.endTime,
+                duration = vt.Duration,
+                description = vt.Description,
+                type = vt.Type,
+                related = timestampRelated
+            });
+        }
+    }
+
     return new
     {
         id = video.id.ToString(),
-        Name = video.Name,
-        Description = video.Description,
-        Type = GetLowercaseType(video.Type),
-        Unique_id = video.Unique_id,
-        Created_at = video.Created_at,
-        Updated_at = video.Updated_at,
-        Asset = asset,
-        VideoPath = video.VideoPath,
-        VideoDuration = video.VideoDuration,
-        VideoResolution = video.VideoResolution,
+        name = video.Name,
+        description = video.Description,
+        type = GetLowercaseType(video.Type),
+        unique_id = video.Unique_id,
+        created_at = video.Created_at,
+        updated_at = video.Updated_at,
+        asset = asset,
+        videoPath = video.VideoPath,
+        videoDuration = video.VideoDuration,
+        videoResolution = video.VideoResolution,
         startTime = video.startTime,
-        Annotations = video.Annotations,
-        Timestamps = video.Timestamps?.Select(vt => new
-        {
-            Id = vt.id,
-            Title = vt.Title,
-            startTime = vt.startTime,
-            endTime = vt.endTime,
-            Duration = vt.Duration,
-            Description = vt.Description,
-            Type = vt.Type
-        }) ?? Enumerable.Empty<object>(),
-        Related = related
+        annotations = video.Annotations,
+        timestamps = timestampsWithRelated,
+        related = related
     };
 }
 
@@ -213,25 +237,37 @@ private async Task<object?> GetChecklistDetails(int materialId)
 
     var related = await GetRelatedMaterialsAsync(materialId);
 
+    // Build entries with their related materials
+    var entriesWithRelated = new List<object>();
+    if (checklist.Entries != null)
+    {
+        foreach (var ce in checklist.Entries)
+        {
+            var entryRelated = await GetSubcomponentRelatedMaterialsAsync(ce.ChecklistEntryId, "ChecklistEntry");
+            entriesWithRelated.Add(new
+            {
+                id = ce.ChecklistEntryId.ToString(),
+                text = ce.Text,
+                description = ce.Description,
+                related = entryRelated
+            });
+        }
+    }
+
     return new
     {
         id = checklist.id.ToString(),
-        Name = checklist.Name,
-        Description = checklist.Description,
-        Type = GetLowercaseType(checklist.Type),
-        Unique_id = checklist.Unique_id,
-        Created_at = checklist.Created_at,
-        Updated_at = checklist.Updated_at,
-        Config = new
+        name = checklist.Name,
+        description = checklist.Description,
+        type = GetLowercaseType(checklist.Type),
+        unique_id = checklist.Unique_id,
+        created_at = checklist.Created_at,
+        updated_at = checklist.Updated_at,
+        config = new
         {
-            Entries = checklist.Entries?.Select(ce => new
-            {
-                Id = ce.ChecklistEntryId,
-                Text = ce.Text,
-                Description = ce.Description
-            }) ?? Enumerable.Empty<object>()
+            entries = entriesWithRelated
         },
-        Related = related
+        related = related
     };
 }
 
@@ -242,28 +278,40 @@ private async Task<object?> GetQuestionnaireDetails(int materialId)
 
     var related = await GetRelatedMaterialsAsync(materialId);
 
+    // Build entries with their related materials
+    var entriesWithRelated = new List<object>();
+    if (questionnaire.QuestionnaireEntries != null)
+    {
+        foreach (var qe in questionnaire.QuestionnaireEntries)
+        {
+            var entryRelated = await GetSubcomponentRelatedMaterialsAsync(qe.QuestionnaireEntryId, "QuestionnaireEntry");
+            entriesWithRelated.Add(new
+            {
+                id = qe.QuestionnaireEntryId.ToString(),
+                text = qe.Text,
+                description = qe.Description,
+                related = entryRelated
+            });
+        }
+    }
+
     return new
     {
         id = questionnaire.id.ToString(),
-        Name = questionnaire.Name,
-        Description = questionnaire.Description,
-        Type = GetLowercaseType(questionnaire.Type),
-        Unique_id = questionnaire.Unique_id,
-        Created_at = questionnaire.Created_at,
-        Updated_at = questionnaire.Updated_at,
-        QuestionnaireType = questionnaire.QuestionnaireType,
-        PassingScore = questionnaire.PassingScore,
-        QuestionnaireConfig = questionnaire.QuestionnaireConfig,
-        Config = new
+        name = questionnaire.Name,
+        description = questionnaire.Description,
+        type = GetLowercaseType(questionnaire.Type),
+        unique_id = questionnaire.Unique_id,
+        created_at = questionnaire.Created_at,
+        updated_at = questionnaire.Updated_at,
+        questionnaireType = questionnaire.QuestionnaireType,
+        passingScore = questionnaire.PassingScore,
+        questionnaireConfig = questionnaire.QuestionnaireConfig,
+        config = new
         {
-            Entries = questionnaire.QuestionnaireEntries?.Select(qe => new
-            {
-                Id = qe.QuestionnaireEntryId,
-                Text = qe.Text,
-                Description = qe.Description
-            }) ?? Enumerable.Empty<object>()
+            entries = entriesWithRelated
         },
-        Related = related
+        related = related
     };
 }
 
@@ -3530,6 +3578,18 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }).ToList<object>();
         }
 
+        private async Task<List<object>> GetSubcomponentRelatedMaterialsAsync(int subcomponentId, string subcomponentType)
+        {
+            var relatedMaterials = await _materialService.GetMaterialsForSubcomponentAsync(subcomponentId, subcomponentType, includeOrder: true);
+
+            return relatedMaterials.Select(m => new
+            {
+                id = m.id.ToString(),
+                name = m.Name,
+                description = m.Description
+            }).ToList<object>();
+        }
+
         private async Task<List<object>> GetAnnotationRelatedMaterialsAsync(int annotationId)
         {
             var relatedMaterials = await _materialService.GetMaterialsForSubcomponentAsync(annotationId, "ImageAnnotation", includeOrder: true);
@@ -3537,8 +3597,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             return relatedMaterials.Select(m => new
             {
                 id = m.id.ToString(),
-                Name = m.Name,
-                Description = m.Description
+                name = m.Name,
+                description = m.Description
             }).ToList<object>();
         }
 
