@@ -346,10 +346,11 @@ private async Task<object?> GetQuizDetails(int materialId)
                 ScaleConfig = q.ScaleConfig,
                 Answers = q.Answers?.Select(a => new
                 {
-                    Id = a.QuizAnswerId,
-                    Text = a.Text,
-                    IsCorrect = a.IsCorrect,
-                    DisplayOrder = a.DisplayOrder
+                    id = a.QuizAnswerId,
+                    text = a.Text,
+                    correctAnswer = a.CorrectAnswer,
+                    displayOrder = a.DisplayOrder,
+                    extra = a.Extra
                 }) ?? Enumerable.Empty<object>()
             }) ?? Enumerable.Empty<object>()
         },
@@ -1939,11 +1940,23 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                                     if (TryGetPropertyCaseInsensitive(answerElement, "text", out var ansTextProp))
                                         answer.Text = ansTextProp.GetString() ?? "";
 
-                                    if (TryGetPropertyCaseInsensitive(answerElement, "isCorrect", out var correctProp))
-                                        answer.IsCorrect = correctProp.GetBoolean();
+                                    // Support both "correctAnswer" and legacy "isCorrect" property names
+                                    if (TryGetPropertyCaseInsensitive(answerElement, "correctAnswer", out var correctProp) ||
+                                        TryGetPropertyCaseInsensitive(answerElement, "isCorrect", out correctProp))
+                                    {
+                                        if (correctProp.ValueKind == JsonValueKind.True)
+                                            answer.CorrectAnswer = true;
+                                        else if (correctProp.ValueKind == JsonValueKind.String)
+                                            answer.CorrectAnswer = bool.TryParse(correctProp.GetString(), out var b) && b;
+                                        else if (correctProp.ValueKind == JsonValueKind.False)
+                                            answer.CorrectAnswer = false;
+                                    }
 
                                     if (TryGetPropertyCaseInsensitive(answerElement, "displayOrder", out var orderProp))
                                         answer.DisplayOrder = orderProp.GetInt32();
+
+                                    if (TryGetPropertyCaseInsensitive(answerElement, "extra", out var extraProp))
+                                        answer.Extra = extraProp.GetString();
 
                                     answers.Add(answer);
                                 }
@@ -1957,6 +1970,17 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 }
 
                 _logger.LogInformation("Parsed quiz: {Name} with {QuestionCount} questions", quiz.Name, questions.Count);
+
+                // Validate each question based on its type
+                foreach (var question in questions)
+                {
+                    var (isValid, error) = ValidateQuestionByType(question);
+                    if (!isValid)
+                    {
+                        _logger.LogWarning("Question validation failed: {Error}", error);
+                        return BadRequest(error);
+                    }
+                }
 
                 // Use the service method to create quiz with questions
                 var createdMaterial = await _materialService.CreateQuizWithQuestionsAsync(quiz, questions);
@@ -2246,6 +2270,46 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             return false;
         }
 
+        // Known question types with special validation rules
+        private static readonly string[] KnownQuestionTypes = { "text", "boolean", "choice", "checkboxes", "scale" };
+
+        /// <summary>
+        /// Validates a quiz question based on its type.
+        /// Returns (isValid, errorMessage) tuple.
+        /// Lenient validation: unknown types are allowed, only known types have specific rules.
+        /// </summary>
+        private (bool isValid, string? error) ValidateQuestionByType(QuizQuestion question)
+        {
+            var type = question.QuestionType?.ToLowerInvariant() ?? "text";
+
+            switch (type)
+            {
+                case "boolean":
+                    if (question.Answers?.Count != 2)
+                        return (false, $"Boolean question '{question.Text}' must have exactly 2 answers");
+                    break;
+
+                case "scale":
+                    if (string.IsNullOrEmpty(question.ScaleConfig))
+                        return (false, $"Scale question '{question.Text}' requires scaleConfig");
+                    break;
+
+                case "choice":
+                    if (question.Answers == null || question.Answers.Count < 2)
+                        return (false, $"Choice question '{question.Text}' requires at least 2 answers");
+                    break;
+
+                case "checkboxes":
+                    if (question.Answers == null || question.Answers.Count < 2)
+                        return (false, $"Checkboxes question '{question.Text}' requires at least 2 answers");
+                    break;
+
+                // text and unknown types have no specific validation
+            }
+
+            return (true, null);
+        }
+
         private void PopulateTypeSpecificProperties(Material material, JsonElement jsonElement)
         {
             _logger.LogInformation(" Populating type-specific properties for {MaterialType}", material.GetType().Name);
@@ -2435,12 +2499,14 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                                         if (TryGetPropertyCaseInsensitive(answerElement, "text", out var ansTextProp))
                                             answer.Text = ansTextProp.GetString() ?? "";
 
-                                        if (TryGetPropertyCaseInsensitive(answerElement, "isCorrect", out var correctProp))
+                                        // Support both "correctAnswer" and legacy "isCorrect" property names
+                                        if (TryGetPropertyCaseInsensitive(answerElement, "correctAnswer", out var correctProp) ||
+                                            TryGetPropertyCaseInsensitive(answerElement, "isCorrect", out correctProp))
                                         {
                                             if (correctProp.ValueKind == JsonValueKind.String && bool.TryParse(correctProp.GetString(), out var correctValue))
-                                                answer.IsCorrect = correctValue;
+                                                answer.CorrectAnswer = correctValue;
                                             else if (correctProp.ValueKind == JsonValueKind.True || correctProp.ValueKind == JsonValueKind.False)
-                                                answer.IsCorrect = correctProp.GetBoolean();
+                                                answer.CorrectAnswer = correctProp.GetBoolean();
                                         }
 
                                         if (TryGetPropertyCaseInsensitive(answerElement, "displayOrder", out var orderProp))
@@ -2450,6 +2516,9 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                                             else if (orderProp.ValueKind == JsonValueKind.Number)
                                                 answer.DisplayOrder = orderProp.GetInt32();
                                         }
+
+                                        if (TryGetPropertyCaseInsensitive(answerElement, "extra", out var extraProp))
+                                            answer.Extra = extraProp.GetString();
 
                                         answers.Add(answer);
                                     }

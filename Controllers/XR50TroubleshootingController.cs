@@ -391,5 +391,36 @@ namespace XR50TrainingAssetRepo.Controllers
                 return StatusCode(500, $"Error migrating columns: {ex.Message}");
             }
         }
+
+        /// <summary>
+        /// Migrate QuizAnswers table to rename IsCorrect to CorrectAnswer and add Extra column
+        /// </summary>
+        [HttpPost("migrate-quiz-answers/{tenantName}")]
+        public async Task<ActionResult> MigrateQuizAnswersTable(string tenantName)
+        {
+            try
+            {
+                _logger.LogInformation("Running QuizAnswers table migration for tenant: {TenantName}", tenantName);
+
+                var success = await _tableCreator.MigrateQuizAnswersTableAsync(tenantName);
+
+                if (success)
+                {
+                    return Ok(new {
+                        Message = $"QuizAnswers table migrated successfully for tenant {tenantName}",
+                        Details = "Renamed 'IsCorrect' to 'CorrectAnswer' and added 'Extra' column"
+                    });
+                }
+                else
+                {
+                    return BadRequest(new { Message = $"Failed to migrate QuizAnswers table for tenant {tenantName}" });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating QuizAnswers table for tenant {TenantName}", tenantName);
+                return StatusCode(500, $"Error migrating QuizAnswers table: {ex.Message}");
+            }
+        }
     }
 }

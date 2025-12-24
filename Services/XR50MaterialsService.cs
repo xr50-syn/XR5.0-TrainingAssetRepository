@@ -337,8 +337,9 @@ namespace XR50TrainingAssetRepo.Services
                                         var newAnswer = new QuizAnswer
                                         {
                                             Text = answer.Text,
-                                            IsCorrect = answer.IsCorrect,
-                                            DisplayOrder = answer.DisplayOrder
+                                            CorrectAnswer = answer.CorrectAnswer,
+                                            DisplayOrder = answer.DisplayOrder,
+                                            Extra = answer.Extra
                                         };
 
                                         // Set the foreign key directly

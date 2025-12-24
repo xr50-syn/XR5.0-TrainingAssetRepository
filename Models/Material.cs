@@ -298,9 +298,12 @@ namespace XR50TrainingAssetRepo.Models
         [StringLength(1000)]
         public string Text { get; set; } = "";
 
-        public bool IsCorrect { get; set; } = false;
+        public bool CorrectAnswer { get; set; } = false;
 
         public int? DisplayOrder { get; set; }
+
+        [StringLength(500)]
+        public string? Extra { get; set; }
 
         public int QuizQuestionId { get; set; }
     }

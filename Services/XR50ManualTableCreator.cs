@@ -19,6 +19,7 @@ namespace XR50TrainingAssetRepo.Services
         Task<bool> MigrateAnnotationsColumnsAsync(string tenantName);
         Task<bool> MigrateSubcomponentMaterialRelationshipsTableAsync(string tenantName);
         Task<bool> MigrateProgramAssignmentRanksAsync(string tenantName);
+        Task<bool> MigrateQuizAnswersTableAsync(string tenantName);
     }
 
     public class XR50ManualTableCreator : IXR50ManualTableCreator
@@ -391,8 +392,9 @@ namespace XR50TrainingAssetRepo.Services
                 @"CREATE TABLE IF NOT EXISTS `QuizAnswers` (
                     `QuizAnswerId` int NOT NULL AUTO_INCREMENT,
                     `Text` varchar(1000) NOT NULL,
-                    `IsCorrect` tinyint(1) NOT NULL DEFAULT 0,
+                    `CorrectAnswer` tinyint(1) NOT NULL DEFAULT 0,
                     `DisplayOrder` int DEFAULT NULL,
+                    `Extra` varchar(500) DEFAULT NULL,
                     `QuizQuestionId` int DEFAULT NULL,
                     PRIMARY KEY (`QuizAnswerId`),
                     INDEX `idx_quiz_question` (`QuizQuestionId`)
@@ -848,6 +850,113 @@ namespace XR50TrainingAssetRepo.Services
             }
         }
 
+        /// <summary>
+        /// Migrates the QuizAnswers table to:
+        /// 1. Rename IsCorrect column to CorrectAnswer
+        /// 2. Add Extra column (varchar 500, nullable)
+        /// </summary>
+        public async Task<bool> MigrateQuizAnswersTableAsync(string tenantName)
+        {
+            try
+            {
+                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
+                var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
+
+                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+
+                _logger.LogInformation("=== Migrating QuizAnswers table for tenant: {TenantName} ===", tenantName);
+
+                using var connection = new MySqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                // Check if QuizAnswers table exists
+                var checkTableQuery = @"
+                    SELECT COUNT(*)
+                    FROM INFORMATION_SCHEMA.TABLES
+                    WHERE TABLE_SCHEMA = @dbName
+                    AND TABLE_NAME = 'QuizAnswers'";
+
+                using (var checkCmd = new MySqlCommand(checkTableQuery, connection))
+                {
+                    checkCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                    var tableExists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+
+                    if (!tableExists)
+                    {
+                        _logger.LogInformation("QuizAnswers table does not exist, skipping migration");
+                        return true;
+                    }
+                }
+
+                // Step 1: Check if IsCorrect column exists (needs rename to CorrectAnswer)
+                var checkIsCorrectQuery = @"
+                    SELECT COUNT(*)
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = @dbName
+                    AND TABLE_NAME = 'QuizAnswers'
+                    AND COLUMN_NAME = 'IsCorrect'";
+
+                using (var checkCmd = new MySqlCommand(checkIsCorrectQuery, connection))
+                {
+                    checkCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                    var columnExists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+
+                    if (columnExists)
+                    {
+                        _logger.LogInformation("Renaming IsCorrect column to CorrectAnswer...");
+                        var renameQuery = "ALTER TABLE `QuizAnswers` CHANGE COLUMN `IsCorrect` `CorrectAnswer` tinyint(1) NOT NULL DEFAULT 0";
+                        using (var renameCmd = new MySqlCommand(renameQuery, connection))
+                        {
+                            await renameCmd.ExecuteNonQueryAsync();
+                            _logger.LogInformation("Successfully renamed IsCorrect to CorrectAnswer");
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogInformation("IsCorrect column does not exist (may already be renamed to CorrectAnswer)");
+                    }
+                }
+
+                // Step 2: Add Extra column if it doesn't exist
+                var checkExtraQuery = @"
+                    SELECT COUNT(*)
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = @dbName
+                    AND TABLE_NAME = 'QuizAnswers'
+                    AND COLUMN_NAME = 'Extra'";
+
+                using (var checkCmd = new MySqlCommand(checkExtraQuery, connection))
+                {
+                    checkCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                    var columnExists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+
+                    if (!columnExists)
+                    {
+                        _logger.LogInformation("Adding Extra column to QuizAnswers table...");
+                        var addColumnQuery = "ALTER TABLE `QuizAnswers` ADD COLUMN `Extra` varchar(500) DEFAULT NULL";
+                        using (var addCmd = new MySqlCommand(addColumnQuery, connection))
+                        {
+                            await addCmd.ExecuteNonQueryAsync();
+                            _logger.LogInformation("Successfully added Extra column to QuizAnswers");
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogInformation("Extra column already exists in QuizAnswers");
+                    }
+                }
+
+                _logger.LogInformation("=== QuizAnswers table migration completed for tenant: {TenantName} ===", tenantName);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating QuizAnswers table for tenant: {TenantName}", tenantName);
+                return false;
+            }
+        }
+
         private string GetCreateTablesScript()
         {
             return @"
@@ -945,8 +1054,9 @@ CREATE TABLE IF NOT EXISTS `QuizQuestions` (
 CREATE TABLE IF NOT EXISTS `QuizAnswers` (
     `QuizAnswerId` int NOT NULL AUTO_INCREMENT,
     `Text` varchar(1000) NOT NULL,
-    `IsCorrect` tinyint(1) NOT NULL DEFAULT 0,
+    `CorrectAnswer` tinyint(1) NOT NULL DEFAULT 0,
     `DisplayOrder` int DEFAULT NULL,
+    `Extra` varchar(500) DEFAULT NULL,
     `QuizQuestionId` int DEFAULT NULL,
     PRIMARY KEY (`QuizAnswerId`),
     INDEX `idx_quiz_question` (`QuizQuestionId`)
