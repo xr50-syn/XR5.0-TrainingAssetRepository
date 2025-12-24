@@ -1,13 +1,9 @@
 ﻿// Updated Material.cs with all properties
 
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics.Internal;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
-using XR50TrainingAssetRepo.Controllers;
-using XR50TrainingAssetRepo.Models;
 
 namespace XR50TrainingAssetRepo.Models
 {

@@ -225,7 +225,10 @@ private async Task<object?> GetVideoDetails(int materialId)
         videoResolution = video.VideoResolution,
         startTime = video.startTime,
         annotations = video.Annotations,
-        timestamps = timestampsWithRelated,
+        config = new
+        {
+            timestamps = timestampsWithRelated
+        },
         related = related
     };
 }
@@ -419,7 +422,10 @@ private async Task<object?> GetImageDetails(int materialId)
         ImageWidth = image.ImageWidth,
         ImageHeight = image.ImageHeight,
         ImageFormat = image.ImageFormat,
-        Annotations = annotationsWithRelated,
+        Config = new
+        {
+            Annotations = annotationsWithRelated
+        },
         Related = related
     };
 }

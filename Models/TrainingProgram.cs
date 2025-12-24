@@ -1,10 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Mono.TextTemplating;
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Security.Permissions;
 using System.Text.Json.Serialization;
-using XR50TrainingAssetRepo.Models;
 
 namespace XR50TrainingAssetRepo.Models
 {
