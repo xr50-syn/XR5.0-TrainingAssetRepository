@@ -1172,6 +1172,47 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             return material;
         }
 
+        // Helper to get AssetId from a material (returns null if material type doesn't support assets)
+        private int? GetAssetIdFromMaterial(Material material)
+        {
+            return material switch
+            {
+                VideoMaterial video => video.AssetId,
+                ImageMaterial image => image.AssetId,
+                PDFMaterial pdf => pdf.AssetId,
+                UnityMaterial unity => unity.AssetId,
+                DefaultMaterial defaultMat => defaultMat.AssetId,
+                _ => null
+            };
+        }
+
+        // Helper to set AssetId on a material
+        private void SetAssetIdOnMaterial(Material material, int assetId)
+        {
+            switch (material)
+            {
+                case VideoMaterial video:
+                    video.AssetId = assetId;
+                    break;
+                case ImageMaterial image:
+                    image.AssetId = assetId;
+                    break;
+                case PDFMaterial pdf:
+                    pdf.AssetId = assetId;
+                    break;
+                case UnityMaterial unity:
+                    unity.AssetId = assetId;
+                    break;
+                case DefaultMaterial defaultMat:
+                    defaultMat.AssetId = assetId;
+                    break;
+                default:
+                    _logger.LogWarning("Material type {MaterialType} does not support assets, ignoring asset assignment",
+                        material.GetType().Name);
+                    break;
+            }
+        }
+
         // NEW: Helper to extract file type from filename or URL
         private string GetFiletypeFromFilename(string? filenameOrUrl)
         {
@@ -1896,7 +1937,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                             question.QuestionNumber = idProp.GetInt32();
 
                         if (TryGetPropertyCaseInsensitive(questionElement, "type", out var typeProp))
-                            question.QuestionType = typeProp.GetString() ?? "text";
+                            question.QuestionType = NormalizeQuestionType(typeProp.GetString());
 
                         if (TryGetPropertyCaseInsensitive(questionElement, "text", out var textProp))
                             question.Text = textProp.GetString() ?? "";
@@ -2273,13 +2314,61 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         private static readonly string[] KnownQuestionTypes = { "text", "boolean", "choice", "checkboxes", "scale" };
 
         /// <summary>
+        /// Normalizes question type from various display names to internal type names.
+        /// Supports both internal names and human-readable display names from clients.
+        /// </summary>
+        private static string NormalizeQuestionType(string? type)
+        {
+            if (string.IsNullOrEmpty(type))
+                return "text";
+
+            return type.ToLowerInvariant().Trim() switch
+            {
+                // Internal names (already normalized)
+                "text" => "text",
+                "boolean" => "boolean",
+                "choice" => "choice",
+                "checkboxes" => "checkboxes",
+                "scale" => "scale",
+
+                // Human-readable display names from clients
+                "true or false" => "boolean",
+                "true/false" => "boolean",
+                "yes or no" => "boolean",
+                "yes/no" => "boolean",
+
+                "multiple choice" => "choice",
+                "multiplechoice" => "choice",
+                "single choice" => "choice",
+                "radio" => "choice",
+
+                "selection checkboxes" => "checkboxes",
+                "checkbox" => "checkboxes",
+                "multi select" => "checkboxes",
+                "multiselect" => "checkboxes",
+                "multiple select" => "checkboxes",
+
+                "likert" => "scale",
+                "rating" => "scale",
+
+                "open" => "text",
+                "free text" => "text",
+                "freetext" => "text",
+                "open ended" => "text",
+
+                // Unknown types - return as-is (lenient)
+                _ => type.ToLowerInvariant().Trim()
+            };
+        }
+
+        /// <summary>
         /// Validates a quiz question based on its type.
         /// Returns (isValid, errorMessage) tuple.
         /// Lenient validation: unknown types are allowed, only known types have specific rules.
         /// </summary>
         private (bool isValid, string? error) ValidateQuestionByType(QuizQuestion question)
         {
-            var type = question.QuestionType?.ToLowerInvariant() ?? "text";
+            var type = NormalizeQuestionType(question.QuestionType);
 
             switch (type)
             {
@@ -2449,7 +2538,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                             }
 
                             if (TryGetPropertyCaseInsensitive(questionElement, "type", out var typeProp))
-                                question.QuestionType = typeProp.GetString() ?? "text";
+                                question.QuestionType = NormalizeQuestionType(typeProp.GetString());
 
                             if (TryGetPropertyCaseInsensitive(questionElement, "text", out var textProp))
                                 question.Text = textProp.GetString() ?? "";
@@ -2779,6 +2868,9 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         // JSON-based PUT endpoint that accepts the same format as GET responses
         // Supports updating material properties and managing relationships via 'related' array
         [HttpPut("{id}")]
+        // PUT: api/{tenantName}/materials/{id} - Update material
+        // Accepts both JSON (application/json) and multipart/form-data for updates with optional file uploads
+        // Form-data parameters: material (JSON string, required), file (binary, optional), assetData (JSON string, optional)
         public async Task<IActionResult> PutMaterial(string tenantName, string id)
         {
             try
@@ -2789,10 +2881,68 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     return BadRequest($"Invalid material ID format: {id}");
                 }
 
-                // Read the raw JSON body
-                using var reader = new StreamReader(Request.Body);
-                var body = await reader.ReadToEndAsync();
-                var jsonElement = JsonSerializer.Deserialize<JsonElement>(body);
+                JsonElement jsonElement;
+                IFormFile? file = null;
+                JsonElement? assetData = null;
+
+                var contentType = Request.ContentType?.ToLower() ?? "";
+
+                _logger.LogInformation("Received material update request with Content-Type: {ContentType}", contentType);
+
+                // Handle different content types
+                if (contentType.Contains("multipart/form-data"))
+                {
+                    // Form data request with optional file upload
+                    var form = await Request.ReadFormAsync();
+
+                    if (!form.ContainsKey("material"))
+                    {
+                        return BadRequest("material is required in form-data requests");
+                    }
+
+                    var materialDataString = form["material"].ToString();
+                    try
+                    {
+                        jsonElement = JsonSerializer.Deserialize<JsonElement>(materialDataString);
+                    }
+                    catch (JsonException ex)
+                    {
+                        _logger.LogError(ex, "Invalid JSON in material parameter");
+                        return BadRequest("Invalid JSON format in material");
+                    }
+
+                    // Extract optional file
+                    file = form.Files.GetFile("file");
+
+                    // Extract optional assetData
+                    if (form.ContainsKey("assetData") && !string.IsNullOrEmpty(form["assetData"]))
+                    {
+                        try
+                        {
+                            assetData = JsonSerializer.Deserialize<JsonElement>(form["assetData"]);
+                        }
+                        catch (JsonException ex)
+                        {
+                            _logger.LogError(ex, "Invalid JSON in assetData parameter");
+                            return BadRequest("Invalid JSON format in assetData");
+                        }
+                    }
+
+                    _logger.LogInformation("Parsed form-data update request (file: {HasFile})", file != null);
+                }
+                else if (contentType.Contains("application/json"))
+                {
+                    // JSON request - material only (no file)
+                    using var reader = new StreamReader(Request.Body);
+                    var body = await reader.ReadToEndAsync();
+                    jsonElement = JsonSerializer.Deserialize<JsonElement>(body);
+                    _logger.LogInformation("Parsed JSON update request body");
+                }
+                else
+                {
+                    _logger.LogWarning("Unsupported Content-Type for PUT: {ContentType}", contentType);
+                    return StatusCode(415, $"Unsupported Media Type. Please use 'application/json' or 'multipart/form-data'. Received: {contentType}");
+                }
 
                 // Verify ID in body matches route parameter
                 if (TryGetPropertyCaseInsensitive(jsonElement, "id", out var idProp))
@@ -2825,6 +2975,38 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 // Ensure the ID is set correctly
                 material.id = materialId;
+
+                // Handle file upload if provided
+                if (file != null)
+                {
+                    _logger.LogInformation("Processing file upload for material update: {FileName}", file.FileName);
+
+                    // Check if material already has an asset
+                    int? existingAssetId = GetAssetIdFromMaterial(existingMaterial);
+
+                    if (existingAssetId.HasValue)
+                    {
+                        // Delete existing asset and create new one (replace)
+                        _logger.LogInformation("Replacing existing asset {AssetId} with new file", existingAssetId.Value);
+                        try
+                        {
+                            await _assetService.DeleteAssetAsync(tenantName, existingAssetId.Value);
+                            _logger.LogInformation("Deleted old asset {AssetId}", existingAssetId.Value);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to delete old asset {AssetId}, continuing with new asset creation", existingAssetId.Value);
+                        }
+                    }
+
+                    // Create new asset
+                    _logger.LogInformation("Creating new asset for material {MaterialId}", materialId);
+                    var createdAsset = await CreateAssetFromFile(tenantName, file, assetData);
+                    _logger.LogInformation("Created new asset {AssetId} for material {MaterialId}", createdAsset.Id, materialId);
+
+                    // Set the AssetId on the material
+                    SetAssetIdOnMaterial(material, createdAsset.Id);
+                }
 
                 // Update the material and get the updated instance with populated child IDs
                 var updatedMaterial = await _materialService.UpdateMaterialAsync(material);
