@@ -2759,12 +2759,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 // Ensure the ID is set correctly
                 material.id = materialId;
 
-                // Update the material
-                await _materialService.UpdateMaterialAsync(material);
+                // Update the material and get the updated instance with populated child IDs
+                var updatedMaterial = await _materialService.UpdateMaterialAsync(material);
                 _logger.LogInformation("Updated material {Id} for tenant: {TenantName}", materialId, tenantName);
 
                 // Process related materials for subcomponents based on material type
-                await ProcessSubcomponentRelatedMaterialsForUpdateAsync(material, jsonElement);
+                // Use updatedMaterial which has the correct database-generated IDs for entries/steps/etc.
+                await ProcessSubcomponentRelatedMaterialsForUpdateAsync(updatedMaterial, jsonElement);
 
                 // Handle 'related' array if provided
                 if (TryGetPropertyCaseInsensitive(jsonElement, "related", out var relatedElement) &&
@@ -2839,7 +2840,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     }
                 }
 
-                return Ok(new { status = "success", message = $"Material '{material.Name}' with ID {materialId} updated successfully" });
+                return Ok(new { status = "success", message = $"Material '{updatedMaterial.Name}' with ID {materialId} updated successfully" });
             }
             catch (KeyNotFoundException)
             {
