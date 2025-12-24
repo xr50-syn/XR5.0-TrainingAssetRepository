@@ -2719,49 +2719,49 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     }
                     
                     // Video-specific properties
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "assetId", out var videoAssetId))
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "assetId", out var videoAssetId) && videoAssetId.ValueKind == JsonValueKind.Number)
                         video.AssetId = videoAssetId.GetInt32();
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "videoPath", out var videoPath))
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "videoPath", out var videoPath) && videoPath.ValueKind == JsonValueKind.String)
                         video.VideoPath = videoPath.GetString();
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "videoDuration", out var duration))
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "videoDuration", out var duration) && duration.ValueKind == JsonValueKind.Number)
                         video.VideoDuration = duration.GetInt32();
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "videoResolution", out var resolution))
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "videoResolution", out var resolution) && resolution.ValueKind == JsonValueKind.String)
                         video.VideoResolution = resolution.GetString();
                     break;
 
                 case MQTT_TemplateMaterial mqtt:
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "message_type", out var msgType))
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "message_type", out var msgType) && msgType.ValueKind == JsonValueKind.String)
                         mqtt.message_type = msgType.GetString();
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "message_text", out var msgText))
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "message_text", out var msgText) && msgText.ValueKind == JsonValueKind.String)
                         mqtt.message_text = msgText.GetString();
                     break;
 
                 case UnityMaterial unity:
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "assetId", out var unityAssetId))
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "assetId", out var unityAssetId) && unityAssetId.ValueKind == JsonValueKind.Number)
                         unity.AssetId = unityAssetId.GetInt32();
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "unityVersion", out var version))
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "unityVersion", out var version) && version.ValueKind == JsonValueKind.String)
                         unity.UnityVersion = version.GetString();
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "unityBuildTarget", out var buildTarget))
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "unityBuildTarget", out var buildTarget) && buildTarget.ValueKind == JsonValueKind.String)
                         unity.UnityBuildTarget = buildTarget.GetString();
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "unitySceneName", out var sceneName))
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "unitySceneName", out var sceneName) && sceneName.ValueKind == JsonValueKind.String)
                         unity.UnitySceneName = sceneName.GetString();
                     break;
 
                 case DefaultMaterial defaultMat:
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "assetId", out var defaultAssetId))
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "assetId", out var defaultAssetId) && defaultAssetId.ValueKind == JsonValueKind.Number)
                         defaultMat.AssetId = defaultAssetId.GetInt32();
                     break;
 
                 case ImageMaterial image:
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "assetId", out var imageAssetId))
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "assetId", out var imageAssetId) && imageAssetId.ValueKind == JsonValueKind.Number)
                         image.AssetId = imageAssetId.GetInt32();
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "imagePath", out var imagePath))
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "imagePath", out var imagePath) && imagePath.ValueKind == JsonValueKind.String)
                         image.ImagePath = imagePath.GetString();
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "imageWidth", out var width))
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "imageWidth", out var width) && width.ValueKind == JsonValueKind.Number)
                         image.ImageWidth = width.GetInt32();
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "imageHeight", out var height))
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "imageHeight", out var height) && height.ValueKind == JsonValueKind.Number)
                         image.ImageHeight = height.GetInt32();
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "imageFormat", out var format))
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "imageFormat", out var format) && format.ValueKind == JsonValueKind.String)
                         image.ImageFormat = format.GetString();
                     // Parse annotations array
                     if (TryGetPropertyCaseInsensitive(jsonElement, "annotations", out var annotationsElement) &&
