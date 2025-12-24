@@ -6,7 +6,7 @@
 
 There are different request body structures depending on endpoint and content type:
 
-### Structure 1: JSON Body (PUT and POST without file)
+### Structure 1: JSON Body - Direct (Preferred)
 
 Send the material object **directly** in the body:
 
@@ -22,7 +22,28 @@ Content-Type: application/json
 }
 ```
 
-### Structure 2: Multipart Form Data (POST with file upload)
+### Structure 2: JSON Body - Wrapped (Also Supported)
+
+Material wrapped in a `material` property (for compatibility):
+
+```
+Content-Type: application/json
+
+{
+  "material": {
+    "id": "13",
+    "name": "Image Name",
+    "description": "Description",
+    "type": "image",
+    ...
+  },
+  "file": "http://example.com/image.png"
+}
+```
+
+The API will automatically unwrap and use the inner `material` object.
+
+### Structure 3: Multipart Form Data (File upload)
 
 Send as **form fields**, not JSON:
 
@@ -37,33 +58,14 @@ Form Fields:
 
 **Important**: The `material` field value is a **JSON string**, not a nested object.
 
-### WARNING
-
-**DO NOT send `{"material": {...}}` as JSON to PUT or POST!**
-
-If you wrap the material in a JSON object like this:
-```json
-{
-  "material": {
-    "id": "3",
-    "name": "Material Name"
-  }
-}
-```
-
-The API will not find any properties at the root level. This causes:
-- All fields to be parsed as `null`
-- The material gets updated with null/empty values
-- **Data loss!**
-
 ### Summary Table
 
-| Endpoint | Content-Type | Structure |
-|----------|--------------|-----------|
-| `PUT /materials/{id}` (no file) | `application/json` | Material object directly in body |
-| `PUT /materials/{id}` (with file) | `multipart/form-data` | Form fields: `material`, `file`, `assetData` |
-| `POST /materials` (no file) | `application/json` | Material object directly in body |
-| `POST /materials` (with file) | `multipart/form-data` | Form fields: `material`, `file`, `assetData` |
+| Endpoint | Content-Type | Structures Supported |
+|----------|--------------|----------------------|
+| `PUT /materials/{id}` | `application/json` | Direct OR Wrapped `{"material": {...}}` |
+| `PUT /materials/{id}` | `multipart/form-data` | Form fields: `material`, `file`, `assetData` |
+| `POST /materials` | `application/json` | Direct only |
+| `POST /materials` | `multipart/form-data` | Form fields: `material`, `file`, `assetData` |
 
 ### File Upload Behavior on PUT
 
@@ -298,25 +300,35 @@ ID mismatch: route=3, body=5
 
 ### Question Types
 
-| Type | Description | Validation |
-|------|-------------|------------|
-| text | Free text response | None |
-| boolean | True/False question | Must have exactly 2 answers |
-| choice | Single selection | Must have at least 2 answers |
-| checkboxes | Multiple selection | Must have at least 2 answers |
-| scale | Likert/rating scale | Must have scaleConfig |
+| Internal Type | Display Name (GET response) | Validation |
+|---------------|----------------------------|------------|
+| text | Open | None |
+| boolean | True or False | Must have exactly 2 answers |
+| choice | Multiple choice | Must have at least 2 answers |
+| checkboxes | Selection checkboxes | Must have at least 2 answers |
+| scale | Scale | Must have scaleConfig |
 
-### Question Type Aliases
+### Question Type Input/Output
 
-The API normalizes these display names to internal types:
+**On INPUT (POST/PUT)**: The API accepts both display names and internal types:
 
-| Display Name | Internal Type |
-|--------------|---------------|
-| True or False, True/False, Yes or No, Yes/No | boolean |
-| Multiple choice, Single choice, Radio | choice |
-| Selection checkboxes, Checkbox, Multi select | checkboxes |
-| Likert, Rating | scale |
-| Open, Free text, Open ended | text |
+| Accepted Values | Stored As |
+|-----------------|-----------|
+| True or False, True/False, Yes or No, Yes/No, boolean | boolean |
+| Multiple choice, Single choice, Radio, choice | choice |
+| Selection checkboxes, Checkbox, Multi select, checkboxes | checkboxes |
+| Scale, Likert, Rating, scale | scale |
+| Open, Free text, Open ended, text | text |
+
+**On OUTPUT (GET)**: The API returns display names:
+
+| Stored Value | Returned As |
+|--------------|-------------|
+| text | Open |
+| boolean | True or False |
+| choice | Multiple choice |
+| checkboxes | Selection checkboxes |
+| scale | Scale |
 
 ### Question Properties
 

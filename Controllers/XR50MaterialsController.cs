@@ -337,7 +337,7 @@ private async Task<object?> GetQuizDetails(int materialId)
             {
                 Id = q.QuizQuestionId,
                 QuestionNumber = q.QuestionNumber,
-                QuestionType = q.QuestionType,
+                QuestionType = DenormalizeQuestionType(q.QuestionType),
                 Text = q.Text,
                 Description = q.Description,
                 Score = q.Score,
@@ -2362,6 +2362,26 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         }
 
         /// <summary>
+        /// Converts internal question type to display name for frontend.
+        /// </summary>
+        private static string DenormalizeQuestionType(string? type)
+        {
+            if (string.IsNullOrEmpty(type))
+                return "Open";
+
+            return type.ToLowerInvariant().Trim() switch
+            {
+                "text" => "Open",
+                "boolean" => "True or False",
+                "choice" => "Multiple choice",
+                "checkboxes" => "Selection checkboxes",
+                "scale" => "Scale",
+                // Unknown types - return as-is with first letter capitalized
+                _ => char.ToUpper(type[0]) + type.Substring(1).ToLower()
+            };
+        }
+
+        /// <summary>
         /// Validates a quiz question based on its type.
         /// Returns (isValid, errorMessage) tuple.
         /// Lenient validation: unknown types are allowed, only known types have specific rules.
@@ -2932,11 +2952,34 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 }
                 else if (contentType.Contains("application/json"))
                 {
-                    // JSON request - material only (no file)
+                    // JSON request
                     using var reader = new StreamReader(Request.Body);
                     var body = await reader.ReadToEndAsync();
-                    jsonElement = JsonSerializer.Deserialize<JsonElement>(body);
-                    _logger.LogInformation("Parsed JSON update request body");
+                    var parsedBody = JsonSerializer.Deserialize<JsonElement>(body);
+
+                    // Check if body is wrapped in {"material": {...}, "file": "..."}
+                    if (TryGetPropertyCaseInsensitive(parsedBody, "material", out var materialProp) &&
+                        materialProp.ValueKind == JsonValueKind.Object)
+                    {
+                        // Unwrap the material object
+                        jsonElement = materialProp;
+                        _logger.LogInformation("Parsed JSON update request with material wrapper");
+
+                        // Check for file URL reference (not a real file upload, but a URL)
+                        if (TryGetPropertyCaseInsensitive(parsedBody, "file", out var fileProp) &&
+                            fileProp.ValueKind == JsonValueKind.String)
+                        {
+                            var fileUrl = fileProp.GetString();
+                            _logger.LogInformation("Found file URL in wrapped JSON: {FileUrl}", fileUrl);
+                            // Note: URL-based file references are handled via assetData, not file upload
+                        }
+                    }
+                    else
+                    {
+                        // Direct material object (no wrapper)
+                        jsonElement = parsedBody;
+                        _logger.LogInformation("Parsed JSON update request body (direct)");
+                    }
                 }
                 else
                 {
