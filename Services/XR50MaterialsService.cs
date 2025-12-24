@@ -1785,24 +1785,14 @@ namespace XR50TrainingAssetRepo.Services
             {
                 foreach (var question in initialQuestions)
                 {
-                    // Set the foreign key directly
+                    // Set the foreign key for the question
                     question.QuizMaterialId = quiz.id;
+
+                    // EF Core will cascade-add the Answers collection when we add the question
+                    // So we just need to ensure the navigation property is set up correctly
+                    // Do NOT explicitly add answers to context - they're already tracked via navigation property
                     context.QuizQuestions.Add(question);
-                    await context.SaveChangesAsync(); // Save to get question ID
-
-                    // Add answers for this question
-                    if (question.Answers?.Any() == true)
-                    {
-                        foreach (var answer in question.Answers)
-                        {
-                            // Set the foreign key directly
-                            answer.QuizQuestionId = question.QuizQuestionId;
-                            context.QuizAnswers.Add(answer);
-                        }
-
-                        // Save answers immediately after adding them for this question
-                        await context.SaveChangesAsync();
-                    }
+                    await context.SaveChangesAsync(); // This saves both question and its answers
                 }
 
                 _logger.LogInformation("Added {QuestionCount} initial questions to quiz {QuizId}",

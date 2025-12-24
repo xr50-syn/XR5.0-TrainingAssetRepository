@@ -1926,9 +1926,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         if (TryGetPropertyCaseInsensitive(questionElement, "scaleConfig", out var scaleProp))
                             question.ScaleConfig = scaleProp.GetString();
 
-                        // Handle answers (checking for both "answers" and "anwsers" typo)
-                        if (TryGetPropertyCaseInsensitive(questionElement, "answers", out var answersElement) ||
-                            TryGetPropertyCaseInsensitive(questionElement, "anwsers", out answersElement))
+                        // Handle answers
+                        if (TryGetPropertyCaseInsensitive(questionElement, "answers", out var answersElement))
                         {
                             if (answersElement.ValueKind == JsonValueKind.Array)
                             {
@@ -2485,9 +2484,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                             if (TryGetPropertyCaseInsensitive(questionElement, "scaleConfig", out var scaleProp))
                                 question.ScaleConfig = scaleProp.GetString();
 
-                            // Handle answers (checking for both "answers" and "anwsers" typo)
-                            if (TryGetPropertyCaseInsensitive(questionElement, "answers", out var answersElement) ||
-                                TryGetPropertyCaseInsensitive(questionElement, "anwsers", out answersElement))
+                            // Handle answers
+                            if (TryGetPropertyCaseInsensitive(questionElement, "answers", out var answersElement))
                             {
                                 if (answersElement.ValueKind == JsonValueKind.Array)
                                 {
