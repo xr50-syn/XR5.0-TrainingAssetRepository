@@ -322,6 +322,12 @@ namespace XR50TrainingAssetRepo.Services
                 // Update asset with storage URL
                 asset.URL = uploadUrl;
 
+                // Set Src if not already provided (for consistency with UploadAssetAsync)
+                if (string.IsNullOrEmpty(asset.Src))
+                {
+                    asset.Src = uploadUrl;
+                }
+
                 // Save to database
                 context.Assets.Add(asset);
                 await context.SaveChangesAsync();
