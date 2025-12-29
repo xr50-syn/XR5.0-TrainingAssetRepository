@@ -75,7 +75,7 @@ namespace XR50TrainingAssetRepo.Services
         Task<MQTT_TemplateMaterial> UpdateMQTTTemplateAsync(int templateId, string messageType, string messageText);
         
         // Unity Demo Material Specific
-        Task<UnityMaterial> UpdateUnityConfigAsync(int unityId, string? version = null, string? buildTarget = null, string? sceneName = null, int? assetId = null);
+        Task<UnityMaterial> UpdateUnityConfigAsync(int unityId, string? version = null, string? buildTarget = null, string? sceneName = null, int? assetId = null, string? unityJson = null);
         
         // Complex Material Creation (One-shot creation with child entities)
         Task<WorkflowMaterial> CreateWorkflowWithStepsAsync(WorkflowMaterial workflow, IEnumerable<WorkflowStep>? initialSteps = null);
@@ -1124,7 +1124,8 @@ namespace XR50TrainingAssetRepo.Services
                     UnityVersion = EF.Property<string>(m, "UnityVersion"),
                     UnityBuildTarget = EF.Property<string>(m, "UnityBuildTarget"),
                     UnitySceneName = EF.Property<string>(m, "UnitySceneName"),
-                    
+                    UnityJson = EF.Property<string>(m, "UnityJson"),
+
                     MaterialRelationships = m.MaterialRelationships.Select(mr => new
                     {
                         mr.Id,
@@ -1705,7 +1706,7 @@ namespace XR50TrainingAssetRepo.Services
             return template;
         }
 
-        public async Task<UnityMaterial> UpdateUnityConfigAsync(int unityId, string? version = null, string? buildTarget = null, string? sceneName = null, int? assetId = null)
+        public async Task<UnityMaterial> UpdateUnityConfigAsync(int unityId, string? version = null, string? buildTarget = null, string? sceneName = null, int? assetId = null, string? unityJson = null)
         {
             using var context = _dbContextFactory.CreateDbContext();
 
@@ -1722,6 +1723,7 @@ namespace XR50TrainingAssetRepo.Services
             if (buildTarget != null) unity.UnityBuildTarget = buildTarget;
             if (sceneName != null) unity.UnitySceneName = sceneName;
             if (assetId != null) unity.AssetId = assetId;
+            if (unityJson != null) unity.UnityJson = unityJson;
             unity.Updated_at = DateTime.UtcNow;
 
             await context.SaveChangesAsync();

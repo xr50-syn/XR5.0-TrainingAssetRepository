@@ -331,6 +331,7 @@ namespace XR50TrainingAssetRepo.Services
             `UnityVersion` varchar(50) DEFAULT NULL,
             `UnityBuildTarget` varchar(50) DEFAULT NULL,
             `UnitySceneName` varchar(255) DEFAULT NULL,
+            `UnityJson` text DEFAULT NULL,
 
             PRIMARY KEY (`id`),
             INDEX `idx_discriminator` (`Discriminator`),

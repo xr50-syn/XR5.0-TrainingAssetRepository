@@ -152,6 +152,7 @@ namespace XR50TrainingAssetRepo.Models
         public string? UnityVersion { get; set; }
         public string? UnityBuildTarget { get; set; }
         public string? UnitySceneName { get; set; }
+        public string? UnityJson { get; set; }
 
         public UnityMaterial()
         {

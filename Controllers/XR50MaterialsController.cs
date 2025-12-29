@@ -356,7 +356,7 @@ private async Task<object?> GetQuizDetails(int materialId)
             {
                 Id = q.QuizQuestionId,
                 QuestionNumber = q.QuestionNumber,
-                QuestionType = DenormalizeQuestionType(q.QuestionType),
+                QuestionType = q.QuestionType,
                 Text = q.Text,
                 Description = q.Description,
                 Score = q.Score,
@@ -537,6 +537,7 @@ private async Task<object?> GetUnityDetails(int materialId)
         UnityVersion = unity.UnityVersion,
         UnityBuildTarget = unity.UnityBuildTarget,
         UnitySceneName = unity.UnitySceneName,
+        UnityJson = unity.UnityJson,
         Related = related
     };
 }
@@ -1979,7 +1980,10 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         if (TryGetPropertyCaseInsensitive(questionElement, "id", out var idProp))
                             question.QuestionNumber = idProp.GetInt32();
 
-                        if (TryGetPropertyCaseInsensitive(questionElement, "type", out var typeProp))
+                        // Accept both "type" and "questionType" for flexibility
+                        if (TryGetPropertyCaseInsensitive(questionElement, "questionType", out var questionTypeProp))
+                            question.QuestionType = NormalizeQuestionType(questionTypeProp.GetString());
+                        else if (TryGetPropertyCaseInsensitive(questionElement, "type", out var typeProp))
                             question.QuestionType = NormalizeQuestionType(typeProp.GetString());
 
                         if (TryGetPropertyCaseInsensitive(questionElement, "text", out var textProp))
@@ -2629,7 +2633,10 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                                     question.QuestionNumber = idProp.GetInt32();
                             }
 
-                            if (TryGetPropertyCaseInsensitive(questionElement, "type", out var typeProp))
+                            // Accept both "type" and "questionType" for flexibility
+                            if (TryGetPropertyCaseInsensitive(questionElement, "questionType", out var questionTypeProp))
+                                question.QuestionType = NormalizeQuestionType(questionTypeProp.GetString());
+                            else if (TryGetPropertyCaseInsensitive(questionElement, "type", out var typeProp))
                                 question.QuestionType = NormalizeQuestionType(typeProp.GetString());
 
                             if (TryGetPropertyCaseInsensitive(questionElement, "text", out var textProp))
@@ -2817,6 +2824,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         unity.UnityBuildTarget = buildTarget.GetString();
                     if (TryGetPropertyCaseInsensitive(jsonElement, "unitySceneName", out var sceneName) && sceneName.ValueKind == JsonValueKind.String)
                         unity.UnitySceneName = sceneName.GetString();
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "unityJson", out var unityJson))
+                        unity.UnityJson = unityJson.ValueKind == JsonValueKind.String ? unityJson.GetString() : unityJson.GetRawText();
                     break;
 
                 case DefaultMaterial defaultMat:
@@ -3392,7 +3401,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
         }
 
-        // POST: api/{tenantName}/materials/video-complete  
+        // POST: api/{tenantName}/materials/video-complete
         [HttpPost("video-complete")]
         public async Task<ActionResult<VideoMaterial>> CreateCompleteVideo(
             string tenantName,
@@ -3406,6 +3415,17 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var createdMaterial = await _materialService.CreateVideoWithTimestampsAsync(
                     request.Video,
                     request.Timestamps);
+
+                // Process related materials for timestamps if provided
+                if (request.TimestampRelatedMaterials != null && request.TimestampRelatedMaterials.Any() && request.Timestamps != null)
+                {
+                    _logger.LogInformation("Processing related materials for {Count} timestamps", request.TimestampRelatedMaterials.Count);
+                    await ProcessSubcomponentRelatedMaterialsAsync(
+                        "VideoTimestamp",
+                        request.Timestamps,
+                        request.TimestampRelatedMaterials,
+                        t => t.id);
+                }
 
                 return CreatedAtAction(nameof(GetMaterial),
                     new { tenantName, id = createdMaterial.id },
@@ -4788,6 +4808,12 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         {
             public VideoMaterial Video { get; set; } = new();
             public List<VideoTimestamp>? Timestamps { get; set; }
+            /// <summary>
+            /// Dictionary mapping timestamp index to list of related material IDs.
+            /// Example: { 0: [1, 2], 2: [3] } means timestamp at index 0 has related materials 1 and 2,
+            /// and timestamp at index 2 has related material 3.
+            /// </summary>
+            public Dictionary<int, List<int>>? TimestampRelatedMaterials { get; set; }
         }
 
         public class CompleteChecklistRequest
