@@ -999,7 +999,10 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     _logger.LogInformation("Created material {MaterialId} ({Name}) with asset {AssetId}",
                         createdMaterial.id, createdMaterial.Name, createdAsset.Id);
 
-                    // Process related materials if provided
+                    // Process related materials for subcomponents (timestamps, steps, entries, etc.)
+                    await ProcessSubcomponentRelatedMaterialsForUpdateAsync(createdMaterial, materialData);
+
+                    // Process related materials for the parent material if provided
                     await ProcessRelatedMaterialsAsync(createdMaterial.id, materialData);
 
                     var response = new CreateMaterialResponse
@@ -1628,6 +1631,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                         // Parse related materials for this timestamp
                         var relatedIds = ParseRelatedMaterialIds(timestampElement);
+                        _logger.LogInformation("Timestamp {Index} '{Title}': found {Count} related material IDs: [{Ids}]",
+                            timestampIndex, timestamp.Title, relatedIds.Count, string.Join(", ", relatedIds));
                         if (relatedIds.Any())
                         {
                             timestampRelatedMaterials[timestampIndex] = relatedIds;
@@ -4469,6 +4474,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         /// <summary>
         /// Parses related material IDs from a JSON element's 'related' array.
+        /// Accepts both array of objects with 'id' property: [{"id": 1}, {"id": 2}]
+        /// and array of plain IDs: [1, 2] or ["1", "2"]
         /// </summary>
         private List<int> ParseRelatedMaterialIds(JsonElement element)
         {
@@ -4482,10 +4489,30 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             foreach (var relatedItem in relatedElement.EnumerateArray())
             {
+                int materialId;
+
+                // Handle plain number: [1, 2, 3]
+                if (relatedItem.ValueKind == JsonValueKind.Number)
+                {
+                    result.Add(relatedItem.GetInt32());
+                    continue;
+                }
+
+                // Handle plain string: ["1", "2", "3"]
+                if (relatedItem.ValueKind == JsonValueKind.String)
+                {
+                    if (int.TryParse(relatedItem.GetString(), out materialId))
+                        result.Add(materialId);
+                    continue;
+                }
+
+                // Handle object with id: [{"id": 1}, {"id": 2}]
+                if (relatedItem.ValueKind != JsonValueKind.Object)
+                    continue;
+
                 if (!TryGetPropertyCaseInsensitive(relatedItem, "id", out var idProp))
                     continue;
 
-                int materialId;
                 if (idProp.ValueKind == JsonValueKind.String)
                 {
                     if (!int.TryParse(idProp.GetString(), out materialId))
