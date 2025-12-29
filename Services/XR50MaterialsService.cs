@@ -2607,7 +2607,8 @@ namespace XR50TrainingAssetRepo.Services
             "WorkflowStep",
             "QuestionnaireEntry",
             "VideoTimestamp",
-            "QuizQuestion"
+            "QuizQuestion",
+            "QuizAnswer"
         };
 
         public async Task<int> AssignMaterialToSubcomponentAsync(
@@ -2679,6 +2680,7 @@ namespace XR50TrainingAssetRepo.Services
                 "QuestionnaireEntry" => await context.QuestionnaireEntries.AnyAsync(q => q.QuestionnaireEntryId == subcomponentId),
                 "VideoTimestamp" => await context.Timestamps.AnyAsync(v => v.id == subcomponentId),
                 "QuizQuestion" => await context.QuizQuestions.AnyAsync(q => q.QuizQuestionId == subcomponentId),
+                "QuizAnswer" => await context.QuizAnswers.AnyAsync(a => a.QuizAnswerId == subcomponentId),
                 "ImageAnnotation" => await context.ImageAnnotations.AnyAsync(a => a.ImageAnnotationId == subcomponentId),
                 _ => false
             };

@@ -484,3 +484,6 @@ public class NullableIntToStringConverter : System.Text.Json.Serialization.JsonC
             writer.WriteNullValue();
     }
 }
+
+// Make Program accessible to test project
+public partial class Program { }

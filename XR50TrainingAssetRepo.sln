@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.10.34928.147
@@ -7,7 +7,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XR50TrainingAssetRepo", "XR
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{F19B336B-394D-4881-844F-B10E150287B4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XR50TrainingAssetRepo.Tests", "tests\XR50TrainingAssetRepo.Tests\XR50TrainingAssetRepo.Tests.csproj", "{FF163540-8783-4181-BCEA-2E15930495D1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XR50TrainingAssetRepo.Tests", "tests\XR50TrainingAssetRepo.Tests\XR50TrainingAssetRepo.Tests.csproj", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -19,10 +19,10 @@ Global
 		{C138A44D-61C8-4FBB-8CED-18C779EFD420}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C138A44D-61C8-4FBB-8CED-18C779EFD420}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C138A44D-61C8-4FBB-8CED-18C779EFD420}.Release|Any CPU.Build.0 = Release|Any CPU
-		{FF163540-8783-4181-BCEA-2E15930495D1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{FF163540-8783-4181-BCEA-2E15930495D1}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{FF163540-8783-4181-BCEA-2E15930495D1}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{FF163540-8783-4181-BCEA-2E15930495D1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -31,6 +31,6 @@ Global
 		SolutionGuid = {F9CA617A-0517-4DE1-8F8B-431F8D4DB382}
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{FF163540-8783-4181-BCEA-2E15930495D1} = {F19B336B-394D-4881-844F-B10E150287B4}
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890} = {F19B336B-394D-4881-844F-B10E150287B4}
 	EndGlobalSection
 EndGlobal

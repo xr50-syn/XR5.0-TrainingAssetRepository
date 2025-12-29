@@ -325,6 +325,50 @@ private async Task<object?> GetQuizDetails(int materialId)
 
     var related = await GetRelatedMaterialsAsync(materialId);
 
+    // Build questions with their related materials
+    var questionsWithRelated = new List<object>();
+    if (quiz.Questions != null)
+    {
+        foreach (var q in quiz.Questions)
+        {
+            var questionRelated = await GetSubcomponentRelatedMaterialsAsync(q.QuizQuestionId, "QuizQuestion");
+
+            // Build answers with their related materials
+            var answersWithRelated = new List<object>();
+            if (q.Answers != null)
+            {
+                foreach (var a in q.Answers)
+                {
+                    var answerRelated = await GetSubcomponentRelatedMaterialsAsync(a.QuizAnswerId, "QuizAnswer");
+                    answersWithRelated.Add(new
+                    {
+                        id = a.QuizAnswerId,
+                        text = a.Text,
+                        correctAnswer = a.CorrectAnswer,
+                        displayOrder = a.DisplayOrder,
+                        extra = a.Extra,
+                        related = answerRelated
+                    });
+                }
+            }
+
+            questionsWithRelated.Add(new
+            {
+                Id = q.QuizQuestionId,
+                QuestionNumber = q.QuestionNumber,
+                QuestionType = DenormalizeQuestionType(q.QuestionType),
+                Text = q.Text,
+                Description = q.Description,
+                Score = q.Score,
+                HelpText = q.HelpText,
+                AllowMultiple = q.AllowMultiple,
+                ScaleConfig = q.ScaleConfig,
+                Answers = answersWithRelated,
+                related = questionRelated
+            });
+        }
+    }
+
     return new
     {
         id = quiz.id.ToString(),
@@ -336,26 +380,7 @@ private async Task<object?> GetQuizDetails(int materialId)
         Updated_at = quiz.Updated_at,
         Config = new
         {
-            Questions = quiz.Questions?.Select(q => new
-            {
-                Id = q.QuizQuestionId,
-                QuestionNumber = q.QuestionNumber,
-                QuestionType = DenormalizeQuestionType(q.QuestionType),
-                Text = q.Text,
-                Description = q.Description,
-                Score = q.Score,
-                HelpText = q.HelpText,
-                AllowMultiple = q.AllowMultiple,
-                ScaleConfig = q.ScaleConfig,
-                Answers = q.Answers?.Select(a => new
-                {
-                    id = a.QuizAnswerId,
-                    text = a.Text,
-                    correctAnswer = a.CorrectAnswer,
-                    displayOrder = a.DisplayOrder,
-                    extra = a.Extra
-                }) ?? Enumerable.Empty<object>()
-            }) ?? Enumerable.Empty<object>()
+            Questions = questionsWithRelated
         },
         Related = related
     };
@@ -1611,7 +1636,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     }
                 }
 
-                _logger.LogInformation("🎬 Parsed video: {Name} with {TimestampCount} timestamps", video.Name, timestamps.Count);
+                _logger.LogInformation("🎬 Parsed video: {Name} with {TimestampCount} timestamps, {RelatedCount} timestamps have related materials",
+                    video.Name, timestamps.Count, timestampRelatedMaterials.Count);
 
                 // Use the service method directly instead of the controller method
                 var createdMaterial = await _materialService.CreateVideoWithTimestampsAsync(video, timestamps);
@@ -1619,7 +1645,14 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 _logger.LogInformation("Created video material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
 
+                // Log timestamp IDs after creation
+                foreach (var ts in timestamps)
+                {
+                    _logger.LogInformation("Timestamp '{Title}' has id: {Id}", ts.Title, ts.id);
+                }
+
                 // Process related materials for timestamps
+                _logger.LogInformation("Processing related materials for {Count} timestamps", timestampRelatedMaterials.Count);
                 await ProcessSubcomponentRelatedMaterialsAsync(
                     "VideoTimestamp",
                     timestamps,
@@ -1910,6 +1943,9 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 // Parse the questions - try to get from "config" object first, then direct "questions" array
                 var questions = new List<QuizQuestion>();
+                var questionRelatedMaterials = new Dictionary<int, List<int>>();
+                // Track answer related materials: key is (questionIndex, answerIndex), value is list of material IDs
+                var answerRelatedMaterials = new Dictionary<(int questionIndex, int answerIndex), List<int>>();
 
                 JsonElement questionsElement = default;
                 bool hasQuestions = false;
@@ -1935,6 +1971,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 {
                     _logger.LogInformation("Questions array has {Count} elements", questionsElement.GetArrayLength());
 
+                    int questionIndex = 0;
                     foreach (var questionElement in questionsElement.EnumerateArray())
                     {
                         var question = new QuizQuestion();
@@ -1979,6 +2016,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                             if (answersElement.ValueKind == JsonValueKind.Array)
                             {
                                 var answers = new List<QuizAnswer>();
+                                int answerIndex = 0;
                                 foreach (var answerElement in answersElement.EnumerateArray())
                                 {
                                     var answer = new QuizAnswer();
@@ -2005,6 +2043,15 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                                         answer.Extra = extraProp.GetString();
 
                                     answers.Add(answer);
+
+                                    // Parse related materials for this answer
+                                    var answerRelatedIds = ParseRelatedMaterialIds(answerElement);
+                                    if (answerRelatedIds.Any())
+                                    {
+                                        answerRelatedMaterials[(questionIndex, answerIndex)] = answerRelatedIds;
+                                    }
+
+                                    answerIndex++;
                                 }
                                 question.Answers = answers;
                                 _logger.LogInformation("Added {Count} answers to question", answers.Count);
@@ -2012,6 +2059,15 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         }
 
                         questions.Add(question);
+
+                        // Parse related materials for this question
+                        var relatedIds = ParseRelatedMaterialIds(questionElement);
+                        if (relatedIds.Any())
+                        {
+                            questionRelatedMaterials[questionIndex] = relatedIds;
+                        }
+
+                        questionIndex++;
                     }
                 }
 
@@ -2033,6 +2089,16 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 _logger.LogInformation("Created quiz material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
+
+                // Process related materials for questions
+                await ProcessSubcomponentRelatedMaterialsAsync(
+                    "QuizQuestion",
+                    questions,
+                    questionRelatedMaterials,
+                    q => q.QuizQuestionId);
+
+                // Process related materials for answers
+                await ProcessQuizAnswerRelatedMaterialsAsync(questions, answerRelatedMaterials);
 
                 // Process related materials if provided
                 await ProcessRelatedMaterialsAsync(createdMaterial.id, jsonElement);
@@ -4030,6 +4096,63 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         }
 
         /// <summary>
+        /// Processes related materials for quiz answers after the quiz has been created.
+        /// </summary>
+        /// <param name="questions">List of created questions with their answers (IDs populated after save)</param>
+        /// <param name="answerRelatedMaterials">Dictionary mapping (questionIndex, answerIndex) to list of related material IDs</param>
+        private async Task ProcessQuizAnswerRelatedMaterialsAsync(
+            List<QuizQuestion> questions,
+            Dictionary<(int questionIndex, int answerIndex), List<int>> answerRelatedMaterials)
+        {
+            if (answerRelatedMaterials == null || !answerRelatedMaterials.Any())
+                return;
+
+            _logger.LogInformation("Processing related materials for {Count} quiz answers",
+                answerRelatedMaterials.Count);
+
+            foreach (var kvp in answerRelatedMaterials)
+            {
+                var (questionIndex, answerIndex) = kvp.Key;
+                var relatedMaterialIds = kvp.Value;
+
+                if (questionIndex >= questions.Count)
+                {
+                    _logger.LogWarning("Question index {Index} out of range, skipping answer related materials", questionIndex);
+                    continue;
+                }
+
+                var question = questions[questionIndex];
+                if (question.Answers == null || answerIndex >= question.Answers.Count)
+                {
+                    _logger.LogWarning("Answer index {AnswerIndex} out of range for question {QuestionIndex}, skipping", answerIndex, questionIndex);
+                    continue;
+                }
+
+                var answer = question.Answers[answerIndex];
+                int displayOrder = 1;
+
+                foreach (var relatedMaterialId in relatedMaterialIds)
+                {
+                    try
+                    {
+                        await _materialService.AssignMaterialToSubcomponentAsync(
+                            answer.QuizAnswerId, "QuizAnswer", relatedMaterialId, "related", displayOrder);
+
+                        _logger.LogInformation("Assigned material {MaterialId} to QuizAnswer {AnswerId}",
+                            relatedMaterialId, answer.QuizAnswerId);
+
+                        displayOrder++;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to assign material {MaterialId} to QuizAnswer {AnswerId}",
+                            relatedMaterialId, answer.QuizAnswerId);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
         /// Processes related materials for all subcomponent types after a material update.
         /// </summary>
         private async Task ProcessSubcomponentRelatedMaterialsForUpdateAsync(Material material, JsonElement jsonElement)
@@ -4055,6 +4178,55 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 case ImageMaterial image when image.ImageAnnotations?.Any() == true:
                     await ProcessImageAnnotationRelatedMaterialsAsync(jsonElement, image.ImageAnnotations.ToList());
                     break;
+
+                case QuizMaterial quiz when quiz.Questions?.Any() == true:
+                    await ProcessQuizQuestionRelatedMaterialsAsync(jsonElement, quiz.Questions.ToList());
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Processes related materials for quiz questions and their answers after update.
+        /// </summary>
+        private async Task ProcessQuizQuestionRelatedMaterialsAsync(JsonElement jsonElement, List<QuizQuestion> savedQuestions)
+        {
+            var questionsElement = GetEntriesElementFromJson(jsonElement, "questions");
+            if (!questionsElement.HasValue) return;
+
+            int questionIndex = 0;
+            foreach (var questionElement in questionsElement.Value.EnumerateArray())
+            {
+                // Process related materials for the question itself
+                var questionRelatedIds = ParseRelatedMaterialIds(questionElement);
+                if (questionRelatedIds.Any() && questionIndex < savedQuestions.Count)
+                {
+                    var question = savedQuestions[questionIndex];
+                    await AssignRelatedMaterialsToSubcomponentAsync(question.QuizQuestionId, "QuizQuestion", questionRelatedIds);
+                }
+
+                // Process related materials for answers within this question
+                if (questionIndex < savedQuestions.Count &&
+                    TryGetPropertyCaseInsensitive(questionElement, "answers", out var answersElement) &&
+                    answersElement.ValueKind == JsonValueKind.Array)
+                {
+                    var question = savedQuestions[questionIndex];
+                    if (question.Answers != null)
+                    {
+                        int answerIndex = 0;
+                        foreach (var answerElement in answersElement.EnumerateArray())
+                        {
+                            var answerRelatedIds = ParseRelatedMaterialIds(answerElement);
+                            if (answerRelatedIds.Any() && answerIndex < question.Answers.Count)
+                            {
+                                var answer = question.Answers[answerIndex];
+                                await AssignRelatedMaterialsToSubcomponentAsync(answer.QuizAnswerId, "QuizAnswer", answerRelatedIds);
+                            }
+                            answerIndex++;
+                        }
+                    }
+                }
+
+                questionIndex++;
             }
         }
 
