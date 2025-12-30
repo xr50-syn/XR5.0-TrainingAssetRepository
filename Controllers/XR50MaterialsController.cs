@@ -9,6 +9,7 @@ using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Services;
+using XR50TrainingAssetRepo.Services.Materials;
 using MaterialType = XR50TrainingAssetRepo.Models.Type;
 
 namespace XR50TrainingAssetRepo.Controllers
@@ -26,17 +27,20 @@ namespace XR50TrainingAssetRepo.Controllers
         private readonly IMaterialService _materialService;
         private readonly IAssetService _assetService;
         private readonly ILearningPathService _learningPathService;
+        private readonly IVoiceMaterialService _voiceMaterialService;
         private readonly ILogger<materialsController> _logger;
 
         public materialsController(
             IMaterialService materialService,
             IAssetService assetService,
             ILearningPathService learningPathService,
+            IVoiceMaterialService voiceMaterialService,
             ILogger<materialsController> logger)
         {
             _materialService = materialService;
             _assetService = assetService;
             _learningPathService = learningPathService;
+            _voiceMaterialService = voiceMaterialService;
             _logger = logger;
         }
 
@@ -102,6 +106,7 @@ public async Task<ActionResult<object>> GetCompleteMaterialDetails(string tenant
             MaterialType.Unity => await GetUnityDetails(id),
             MaterialType.Chatbot => await GetChatbotDetails(id),
             MaterialType.MQTT_Template => await GetMQTTTemplateDetails(id),
+            MaterialType.Voice => await GetVoiceDetails(id),
             _ => await GetBasicMaterialDetails(id)
         };
 
@@ -583,6 +588,52 @@ private async Task<object?> GetMQTTTemplateDetails(int materialId)
         Updated_at = mqtt.Updated_at,
         MessageType = mqtt.message_type,
         MessageText = mqtt.message_text,
+        Related = related
+    };
+}
+
+private async Task<object?> GetVoiceDetails(int materialId)
+{
+    var voice = await _voiceMaterialService.GetByIdAsync(materialId);
+    if (voice == null) return null;
+
+    // Get all assets for this voice material
+    var assetIds = voice.GetAssetIdsList();
+    var assets = new List<object>();
+
+    foreach (var assetId in assetIds)
+    {
+        var assetEntity = await _assetService.GetAssetAsync(assetId);
+        if (assetEntity != null)
+        {
+            assets.Add(new
+            {
+                Id = assetEntity.Id,
+                Filename = assetEntity.Filename,
+                Description = assetEntity.Description,
+                Filetype = assetEntity.Filetype,
+                Src = assetEntity.Src,
+                URL = assetEntity.URL,
+                AiAvailable = assetEntity.AiAvailable,
+                JobId = assetEntity.JobId
+            });
+        }
+    }
+
+    var related = await GetRelatedMaterialsAsync(materialId);
+
+    return new
+    {
+        id = voice.id.ToString(),
+        Name = voice.Name,
+        Description = voice.Description,
+        Type = GetLowercaseType(voice.Type),
+        Unique_id = voice.Unique_id,
+        Created_at = voice.Created_at,
+        Updated_at = voice.Updated_at,
+        ServiceJobId = voice.ServiceJobId,
+        VoiceStatus = voice.VoiceStatus,
+        Assets = assets,
         Related = related
     };
 }
@@ -1359,6 +1410,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     "checklist" => await CreateChecklistFromJson(tenantName, materialData),
                     "questionnaire" => await CreateQuestionnaireFromJson(tenantName, materialData),
                     "quiz" => await CreateQuizFromJson(tenantName, materialData),
+                    "voice" => await CreateVoiceFromJson(tenantName, materialData),
                     _ => await CreateBasicMaterialFromJson(tenantName, materialData)
                 };
             }
@@ -2131,6 +2183,95 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             catch (Exception ex)
             {
                 _logger.LogError(ex, "📝 Error creating quiz from JSON");
+                throw;
+            }
+        }
+
+        private async Task<ActionResult<CreateMaterialResponse>> CreateVoiceFromJson(string tenantName, JsonElement jsonElement)
+        {
+            try
+            {
+                _logger.LogInformation("Creating voice material from JSON");
+
+                var voice = new VoiceMaterial();
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "name", out var nameProp))
+                    voice.Name = nameProp.GetString();
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "description", out var descProp))
+                    voice.Description = descProp.GetString();
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "unique_id", out var uniqueIdProp) && uniqueIdProp.ValueKind == JsonValueKind.Number)
+                    voice.Unique_id = uniqueIdProp.GetInt32();
+
+                // Parse asset IDs from JSON
+                var assetIds = new List<int>();
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "assetIds", out var assetIdsProp))
+                {
+                    if (assetIdsProp.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var assetIdElement in assetIdsProp.EnumerateArray())
+                        {
+                            if (assetIdElement.ValueKind == JsonValueKind.Number)
+                            {
+                                assetIds.Add(assetIdElement.GetInt32());
+                            }
+                        }
+                    }
+                }
+
+                // Alternative property names
+                if (!assetIds.Any() && TryGetPropertyCaseInsensitive(jsonElement, "asset_ids", out var altAssetIdsProp))
+                {
+                    if (altAssetIdsProp.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var assetIdElement in altAssetIdsProp.EnumerateArray())
+                        {
+                            if (assetIdElement.ValueKind == JsonValueKind.Number)
+                            {
+                                assetIds.Add(assetIdElement.GetInt32());
+                            }
+                        }
+                    }
+                }
+
+                // Create the voice material
+                VoiceMaterial createdMaterial;
+                if (assetIds.Any())
+                {
+                    createdMaterial = await _voiceMaterialService.CreateWithAssetsAsync(voice, assetIds);
+                }
+                else
+                {
+                    createdMaterial = await _voiceMaterialService.CreateAsync(voice);
+                }
+
+                _logger.LogInformation("Created voice material {Name} with ID {Id} and {AssetCount} assets",
+                    createdMaterial.Name, createdMaterial.id, assetIds.Count);
+
+                // Process related materials if provided
+                await ProcessRelatedMaterialsAsync(createdMaterial.id, jsonElement);
+
+                var response = new CreateMaterialResponse
+                {
+                    Status = "success",
+                    Message = "Voice material created successfully",
+                    id = createdMaterial.id,
+                    Name = createdMaterial.Name,
+                    Description = createdMaterial.Description,
+                    Type = GetLowercaseType(createdMaterial.Type),
+                    Unique_id = createdMaterial.Unique_id,
+                    Created_at = createdMaterial.Created_at
+                };
+
+                return CreatedAtAction(nameof(GetMaterial),
+                    new { tenantName, id = createdMaterial.id },
+                    response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating voice material from JSON");
                 throw;
             }
         }
@@ -4802,9 +4943,177 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 MaterialType.Unity => typeof(UnityMaterial),
                 MaterialType.Chatbot => typeof(ChatbotMaterial),
                 MaterialType.MQTT_Template => typeof(MQTT_TemplateMaterial),
+                MaterialType.Voice => typeof(VoiceMaterial),
                 _ => typeof(Material)
             };
         }
+
+        #region Voice Material Endpoints
+
+        /// <summary>
+        /// Get all voice materials
+        /// </summary>
+        [HttpGet("voice")]
+        public async Task<ActionResult<IEnumerable<object>>> GetVoiceMaterials(string tenantName)
+        {
+            _logger.LogInformation("Getting voice materials for tenant: {TenantName}", tenantName);
+
+            try
+            {
+                var voiceMaterials = await _voiceMaterialService.GetAllAsync();
+                var result = new List<object>();
+
+                foreach (var voice in voiceMaterials)
+                {
+                    result.Add(new
+                    {
+                        id = voice.id,
+                        Name = voice.Name,
+                        Description = voice.Description,
+                        Type = GetLowercaseType(voice.Type),
+                        VoiceStatus = voice.VoiceStatus,
+                        AssetIds = voice.GetAssetIdsList(),
+                        Created_at = voice.Created_at,
+                        Updated_at = voice.Updated_at
+                    });
+                }
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting voice materials");
+                return StatusCode(500, new { Error = "Failed to get voice materials", Details = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Submit a voice material for AI processing
+        /// </summary>
+        [HttpPost("{id}/voice/submit")]
+        public async Task<ActionResult<object>> SubmitVoiceForProcessing(string tenantName, int id)
+        {
+            _logger.LogInformation("Submitting voice material {Id} for AI processing in tenant {TenantName}", id, tenantName);
+
+            try
+            {
+                var voice = await _voiceMaterialService.SubmitForProcessingAsync(id);
+
+                return Ok(new
+                {
+                    Status = "success",
+                    Message = "Voice material submitted for AI processing",
+                    MaterialId = voice.id,
+                    VoiceStatus = voice.VoiceStatus,
+                    AssetIds = voice.GetAssetIdsList()
+                });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { Error = $"Voice material {id} not found" });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { Error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error submitting voice material {Id} for AI processing", id);
+                return StatusCode(500, new { Error = "Failed to submit voice material for AI processing", Details = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Refresh the status of a voice material based on its assets
+        /// </summary>
+        [HttpPost("{id}/voice/refresh-status")]
+        public async Task<ActionResult<object>> RefreshVoiceStatus(string tenantName, int id)
+        {
+            _logger.LogInformation("Refreshing voice material {Id} status in tenant {TenantName}", id, tenantName);
+
+            try
+            {
+                var voice = await _voiceMaterialService.UpdateStatusFromAssetsAsync(id);
+
+                return Ok(new
+                {
+                    Status = "success",
+                    MaterialId = voice.id,
+                    VoiceStatus = voice.VoiceStatus
+                });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { Error = $"Voice material {id} not found" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error refreshing voice material {Id} status", id);
+                return StatusCode(500, new { Error = "Failed to refresh voice material status", Details = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Add an asset to a voice material
+        /// </summary>
+        [HttpPost("{id}/voice/assets/{assetId}")]
+        public async Task<ActionResult<object>> AddAssetToVoice(string tenantName, int id, int assetId)
+        {
+            _logger.LogInformation("Adding asset {AssetId} to voice material {Id} in tenant {TenantName}", assetId, id, tenantName);
+
+            try
+            {
+                var result = await _voiceMaterialService.AddAssetAsync(id, assetId);
+
+                if (!result)
+                {
+                    return NotFound(new { Error = $"Voice material {id} not found" });
+                }
+
+                return Ok(new
+                {
+                    Status = "success",
+                    Message = $"Asset {assetId} added to voice material {id}"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding asset {AssetId} to voice material {Id}", assetId, id);
+                return StatusCode(500, new { Error = "Failed to add asset to voice material", Details = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Remove an asset from a voice material
+        /// </summary>
+        [HttpDelete("{id}/voice/assets/{assetId}")]
+        public async Task<ActionResult<object>> RemoveAssetFromVoice(string tenantName, int id, int assetId)
+        {
+            _logger.LogInformation("Removing asset {AssetId} from voice material {Id} in tenant {TenantName}", assetId, id, tenantName);
+
+            try
+            {
+                var result = await _voiceMaterialService.RemoveAssetAsync(id, assetId);
+
+                if (!result)
+                {
+                    return NotFound(new { Error = $"Voice material {id} not found or asset not in list" });
+                }
+
+                return Ok(new
+                {
+                    Status = "success",
+                    Message = $"Asset {assetId} removed from voice material {id}"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error removing asset {AssetId} from voice material {Id}", assetId, id);
+                return StatusCode(500, new { Error = "Failed to remove asset from voice material", Details = ex.Message });
+            }
+        }
+
+        #endregion
     }
 
         // Supporting DTOs

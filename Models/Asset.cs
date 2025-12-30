@@ -57,5 +57,16 @@ namespace XR50TrainingAssetRepo.Models
         public string? URL { get; set; }
 	    [Key]
         public int Id { get; set; }
+
+        /// <summary>
+        /// AI processing availability status: "ready", "process", "notready"
+        /// Used for Siemens AI document processing
+        /// </summary>
+        public string AiAvailable { get; set; } = "notready";
+
+        /// <summary>
+        /// Siemens API job ID for tracking AI processing status
+        /// </summary>
+        public string? JobId { get; set; }
     }
 }

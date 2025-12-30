@@ -39,6 +39,12 @@ namespace XR50TrainingAssetRepo.Services
         Task<IEnumerable<Share>> GetAssetSharesAsync(string tenantName, string assetId);
         Task<IEnumerable<Share>> GetTenantSharesAsync(string tenantName);
         Task<string> GetAssetShareUrlAsync(string tenantName, string assetId);
+
+        // AI Processing Operations
+        Task<Asset> SubmitAssetForAiProcessingAsync(int assetId);
+        Task<int> SyncAssetAiStatusesAsync();
+        Task<IEnumerable<Asset>> GetAssetsWithAiStatusAsync(string status);
+        Task<IEnumerable<Asset>> GetAssetsPendingAiProcessingAsync();
     }
 
     public class AssetService : IAssetService
@@ -48,6 +54,7 @@ namespace XR50TrainingAssetRepo.Services
         private readonly IMaterialService _materialService;
         private readonly IXR50TenantManagementService _tenantManagementService;
         private readonly IStorageService _storageService; // Unified storage interface
+        private readonly ISiemensApiService _siemensApiService;
         private readonly ILogger<AssetService> _logger;
 
         public AssetService(
@@ -56,6 +63,7 @@ namespace XR50TrainingAssetRepo.Services
             IMaterialService materialService,
             IXR50TenantManagementService tenantManagementService,
             IStorageService storageService,
+            ISiemensApiService siemensApiService,
             ILogger<AssetService> logger)
         {
             _configuration = configuration;
@@ -63,6 +71,7 @@ namespace XR50TrainingAssetRepo.Services
             _materialService = materialService;
             _tenantManagementService = tenantManagementService;
             _storageService = storageService;
+            _siemensApiService = siemensApiService;
             _logger = logger;
         }
 
@@ -836,7 +845,128 @@ namespace XR50TrainingAssetRepo.Services
             // For now, return a default tenant name
             // TODO: Implement proper tenant resolution
             return "default-tenant";
-        }    
+        }
+
+        #region AI Processing Operations
+
+        public async Task<Asset> SubmitAssetForAiProcessingAsync(int assetId)
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+
+            var asset = await context.Assets.FindAsync(assetId);
+            if (asset == null)
+            {
+                throw new KeyNotFoundException($"Asset {assetId} not found");
+            }
+
+            if (string.IsNullOrEmpty(asset.URL))
+            {
+                throw new InvalidOperationException($"Asset {assetId} has no URL for processing");
+            }
+
+            if (asset.AiAvailable == "process")
+            {
+                _logger.LogInformation("Asset {AssetId} is already being processed", assetId);
+                return asset;
+            }
+
+            if (asset.AiAvailable == "ready")
+            {
+                _logger.LogInformation("Asset {AssetId} is already processed", assetId);
+                return asset;
+            }
+
+            try
+            {
+                var jobId = await _siemensApiService.SubmitDocumentAsync(assetId, asset.URL);
+                asset.JobId = jobId;
+                asset.AiAvailable = "process";
+
+                await context.SaveChangesAsync();
+
+                _logger.LogInformation("Submitted asset {AssetId} for AI processing. Job ID: {JobId}", assetId, jobId);
+
+                return asset;
+            }
+            catch (SiemensApiException ex)
+            {
+                _logger.LogError(ex, "Failed to submit asset {AssetId} for AI processing", assetId);
+                throw;
+            }
+        }
+
+        public async Task<int> SyncAssetAiStatusesAsync()
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+
+            var processingAssets = await context.Assets
+                .Where(a => a.AiAvailable == "process" && !string.IsNullOrEmpty(a.JobId))
+                .ToListAsync();
+
+            if (!processingAssets.Any())
+            {
+                _logger.LogDebug("No assets currently processing");
+                return 0;
+            }
+
+            var updatedCount = 0;
+
+            foreach (var asset in processingAssets)
+            {
+                try
+                {
+                    var status = await _siemensApiService.GetJobStatusAsync(asset.JobId!);
+
+                    if (status.Status == "success")
+                    {
+                        asset.AiAvailable = "ready";
+                        updatedCount++;
+                        _logger.LogInformation("Asset {AssetId} AI processing completed", asset.Id);
+                    }
+                    else if (status.Status == "failed")
+                    {
+                        asset.AiAvailable = "notready";
+                        asset.JobId = null;
+                        updatedCount++;
+                        _logger.LogWarning("Asset {AssetId} AI processing failed: {Error}", asset.Id, status.Error);
+                    }
+                    // If still processing, leave as is
+                }
+                catch (SiemensApiException ex)
+                {
+                    _logger.LogWarning(ex, "Failed to check status for asset {AssetId}", asset.Id);
+                }
+            }
+
+            if (updatedCount > 0)
+            {
+                await context.SaveChangesAsync();
+            }
+
+            return updatedCount;
+        }
+
+        public async Task<IEnumerable<Asset>> GetAssetsWithAiStatusAsync(string status)
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+
+            return await context.Assets
+                .Where(a => a.AiAvailable == status)
+                .OrderBy(a => a.Filename)
+                .ToListAsync();
+        }
+
+        public async Task<IEnumerable<Asset>> GetAssetsPendingAiProcessingAsync()
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+
+            return await context.Assets
+                .Where(a => a.AiAvailable == "process" && !string.IsNullOrEmpty(a.JobId))
+                .OrderBy(a => a.Filename)
+                .ToListAsync();
+        }
+
+        #endregion
     }
 
 

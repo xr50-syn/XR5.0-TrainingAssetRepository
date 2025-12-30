@@ -134,7 +134,8 @@ namespace XR50TrainingAssetRepo.Data
                 .HasValue<ChatbotMaterial>("ChatbotMaterial")
                 .HasValue<QuestionnaireMaterial>("QuestionnaireMaterial")
                 .HasValue<MQTT_TemplateMaterial>("MQTT_TemplateMaterial")
-                .HasValue<DefaultMaterial>("DefaultMaterial");
+                .HasValue<DefaultMaterial>("DefaultMaterial")
+                .HasValue<VoiceMaterial>("VoiceMaterial");
 
             // Configure specific properties for MQTT_TemplateMaterial
             modelBuilder.Entity<MQTT_TemplateMaterial>()

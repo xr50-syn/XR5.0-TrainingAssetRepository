@@ -55,7 +55,9 @@ namespace XR50TrainingAssetRepo.Models
         [EnumMember(Value = "quiz")]
         Quiz,
         [EnumMember(Value = "default")]
-        Default
+        Default,
+        [EnumMember(Value = "voice")]
+        Voice
     }
 
     public class ChecklistMaterial : Material
@@ -196,6 +198,60 @@ namespace XR50TrainingAssetRepo.Models
         public DefaultMaterial()
         {
             Type = Type.Default;
+        }
+    }
+
+    /// <summary>
+    /// Voice material for AI-processed voice/document extraction.
+    /// Supports multiple assets and tracks processing status via Siemens API.
+    /// </summary>
+    public class VoiceMaterial : Material
+    {
+        /// <summary>
+        /// Siemens service job ID for tracking the overall processing job
+        /// </summary>
+        public string? ServiceJobId { get; set; }
+
+        /// <summary>
+        /// Processing status: "ready", "process", "notready"
+        /// </summary>
+        public string VoiceStatus { get; set; } = "notready";
+
+        /// <summary>
+        /// JSON array of asset IDs associated with this voice material.
+        /// Example: "[1, 3, 5]"
+        /// </summary>
+        public string? VoiceAssetIds { get; set; }
+
+        public VoiceMaterial()
+        {
+            Type = Type.Voice;
+        }
+
+        /// <summary>
+        /// Helper to get asset IDs as a list
+        /// </summary>
+        public List<int> GetAssetIdsList()
+        {
+            if (string.IsNullOrEmpty(VoiceAssetIds))
+                return new List<int>();
+
+            try
+            {
+                return System.Text.Json.JsonSerializer.Deserialize<List<int>>(VoiceAssetIds) ?? new List<int>();
+            }
+            catch
+            {
+                return new List<int>();
+            }
+        }
+
+        /// <summary>
+        /// Helper to set asset IDs from a list
+        /// </summary>
+        public void SetAssetIdsList(List<int> assetIds)
+        {
+            VoiceAssetIds = System.Text.Json.JsonSerializer.Serialize(assetIds);
         }
     }
 
