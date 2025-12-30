@@ -275,6 +275,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 .ToListAsync();
 
             var hasSubmissions = false;
+
             foreach (var asset in assets)
             {
                 if (asset.AiAvailable == "notready" && !string.IsNullOrEmpty(asset.URL))

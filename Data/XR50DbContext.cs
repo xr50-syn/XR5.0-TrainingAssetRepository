@@ -51,6 +51,8 @@ namespace XR50TrainingAssetRepo.Data
         public DbSet<MaterialRelationship> MaterialRelationships { get; set; } = null!;
         public DbSet<SubcomponentMaterialRelationship> SubcomponentMaterialRelationships { get; set; } = null!;
         public DbSet<ImageAnnotation> ImageAnnotations { get; set; } = null!;
+        public DbSet<UserMaterialData> UserMaterialData { get; set; } = null!;
+        public DbSet<UserMaterialScore> UserMaterialScores { get; set; } = null!;
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured && _tenantService != null && _configuration != null)
@@ -318,12 +320,80 @@ namespace XR50TrainingAssetRepo.Data
 
             modelBuilder.Entity<VideoTimestamp>()
                 .Property<int?>("VideoMaterialId");
-            
+
             modelBuilder.Entity<ChecklistEntry>()
                 .Property<int?>("ChecklistMaterialId");
-            
+
             modelBuilder.Entity<WorkflowStep>()
                 .Property<int?>("WorkflowMaterialId");
+
+            // UserMaterialData configuration
+            modelBuilder.Entity<UserMaterialData>()
+                .HasKey(umd => umd.Id);
+
+            modelBuilder.Entity<UserMaterialData>()
+                .HasIndex(umd => new { umd.UserId, umd.MaterialId })
+                .IsUnique();
+
+            modelBuilder.Entity<UserMaterialData>()
+                .HasIndex(umd => umd.UserId);
+
+            modelBuilder.Entity<UserMaterialData>()
+                .HasIndex(umd => umd.ProgramId);
+
+            modelBuilder.Entity<UserMaterialData>()
+                .Property(umd => umd.Data)
+                .HasColumnType("json");
+
+            modelBuilder.Entity<UserMaterialData>()
+                .HasOne(umd => umd.User)
+                .WithMany()
+                .HasForeignKey(umd => umd.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<UserMaterialData>()
+                .HasOne(umd => umd.Program)
+                .WithMany()
+                .HasForeignKey(umd => umd.ProgramId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<UserMaterialData>()
+                .HasOne(umd => umd.Material)
+                .WithMany()
+                .HasForeignKey(umd => umd.MaterialId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // UserMaterialScore configuration - composite key
+            modelBuilder.Entity<UserMaterialScore>()
+                .HasKey(ums => new { ums.UserId, ums.MaterialId });
+
+            modelBuilder.Entity<UserMaterialScore>()
+                .HasIndex(ums => ums.UserId);
+
+            modelBuilder.Entity<UserMaterialScore>()
+                .HasIndex(ums => ums.ProgramId);
+
+            modelBuilder.Entity<UserMaterialScore>()
+                .Property(ums => ums.Score)
+                .HasColumnType("decimal(10,2)");
+
+            modelBuilder.Entity<UserMaterialScore>()
+                .HasOne(ums => ums.User)
+                .WithMany()
+                .HasForeignKey(ums => ums.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<UserMaterialScore>()
+                .HasOne(ums => ums.Program)
+                .WithMany()
+                .HasForeignKey(ums => ums.ProgramId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<UserMaterialScore>()
+                .HasOne(ums => ums.Material)
+                .WithMany()
+                .HasForeignKey(ums => ums.MaterialId)
+                .OnDelete(DeleteBehavior.Cascade);
 }
 
         

@@ -369,11 +369,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IImageMaterialService, XR50TrainingAssetRepo.Services.Materials.ImageMaterialService>();
         services.AddScoped<XR50TrainingAssetRepo.Services.Materials.ISimpleMaterialService, XR50TrainingAssetRepo.Services.Materials.SimpleMaterialService>();
         services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IVoiceMaterialService, XR50TrainingAssetRepo.Services.Materials.VoiceMaterialService>();
+        services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IUserMaterialService, XR50TrainingAssetRepo.Services.Materials.UserMaterialService>();
 
         // Siemens API Service (HttpClient-based)
         services.AddHttpClient<ISiemensApiService, SiemensApiService>();
 
-        // Background service for AI status synchronization
+        // Background service for AI status synchronization (database-driven, adaptive polling)
         services.AddHostedService<AiStatusSyncService>();
 
         // Keep the original DbContext registration for admin operations
