@@ -853,6 +853,12 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 _logger.LogInformation("Created material {Name} with ID {Id} for tenant: {TenantName}",
                     createdMaterial.Name, createdMaterial.id, tenantName);
 
+                // Process related materials for subcomponents (annotations, timestamps, steps, entries, etc.)
+                await ProcessSubcomponentRelatedMaterialsForUpdateAsync(createdMaterial, materialData);
+
+                // Process related materials for the parent material if provided
+                await ProcessRelatedMaterialsAsync(createdMaterial.id, materialData);
+
                 var response = new CreateMaterialResponse
                 {
                     Status = "success",
@@ -2296,7 +2302,10 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 _logger.LogInformation("Created basic material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
 
-                // Process related materials if provided
+                // Process related materials for subcomponents (annotations, timestamps, steps, entries, etc.)
+                await ProcessSubcomponentRelatedMaterialsForUpdateAsync(createdMaterial, jsonElement);
+
+                // Process related materials for the parent material if provided
                 await ProcessRelatedMaterialsAsync(createdMaterial.id, jsonElement);
 
                 var response = new CreateMaterialResponse
@@ -4342,7 +4351,12 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     break;
 
                 case ImageMaterial image when image.ImageAnnotations?.Any() == true:
-                    await ProcessImageAnnotationRelatedMaterialsAsync(jsonElement, image.ImageAnnotations.ToList());
+                    // Re-fetch the image with annotations to ensure we have the database-assigned annotation IDs
+                    var freshImage = await _materialService.GetImageMaterialAsync(image.id);
+                    if (freshImage?.ImageAnnotations?.Any() == true)
+                    {
+                        await ProcessImageAnnotationRelatedMaterialsAsync(jsonElement, freshImage.ImageAnnotations.ToList());
+                    }
                     break;
 
                 case QuizMaterial quiz when quiz.Questions?.Any() == true:
