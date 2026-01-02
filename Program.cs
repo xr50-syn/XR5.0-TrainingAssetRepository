@@ -102,6 +102,35 @@ builder.Services.AddAuthorization(options =>
     // Policy for system administrators (can manage all tenants)
     options.AddPolicy("SystemAdmin", policy =>
         policy.RequireClaim("role", "systemadmin", "superadmin"));
+
+    // Policy for authenticated user - allows development bypass when configured
+    options.AddPolicy("RequireAuthenticatedUser", policy =>
+    {
+        policy.RequireAssertion(context =>
+        {
+            // Check if user is authenticated
+            if (context.User.Identity?.IsAuthenticated == true)
+            {
+                return true;
+            }
+
+            // In development mode, allow bypass if configured
+            var httpContext = context.Resource as HttpContext;
+            if (httpContext != null)
+            {
+                var env = httpContext.RequestServices.GetService<IWebHostEnvironment>();
+                var config = httpContext.RequestServices.GetService<IConfiguration>();
+
+                if (env?.IsDevelopment() == true)
+                {
+                    var allowAnonymous = config?.GetValue<bool>("IAM:AllowAnonymousInDevelopment", false) ?? false;
+                    return allowAnonymous;
+                }
+            }
+
+            return false;
+        });
+    });
 });
 
 builder.Services.AddXR50MultitenancyWithDynamicDb(builder.Configuration);
@@ -246,7 +275,7 @@ builder.Services.AddSwaggerGen(c =>
     {
          if (docName == "all") return true;
         var controllerName = apiDesc.ActionDescriptor.RouteValues["controller"];
-        
+
         return docName switch
         {
             "tenants" => controllerName.Contains("Tenants"),
@@ -258,6 +287,76 @@ builder.Services.AddSwaggerGen(c =>
             "test" => controllerName.Contains("test"),
             _ => false
         };
+    });
+
+    // Add OAuth2/JWT Bearer authentication to Swagger
+    var keycloakAuthority = builder.Configuration["IAM:Authority"] ?? "http://localhost:8180/realms/xr50";
+
+    c.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
+    {
+        Type = SecuritySchemeType.OAuth2,
+        Flows = new OpenApiOAuthFlows
+        {
+            // Password flow for direct testing
+            Password = new OpenApiOAuthFlow
+            {
+                TokenUrl = new Uri($"{keycloakAuthority}/protocol/openid-connect/token"),
+                Scopes = new Dictionary<string, string>
+                {
+                    { "openid", "OpenID Connect" },
+                    { "profile", "User profile" },
+                    { "email", "User email" }
+                }
+            },
+            // Authorization code flow for production
+            AuthorizationCode = new OpenApiOAuthFlow
+            {
+                AuthorizationUrl = new Uri($"{keycloakAuthority}/protocol/openid-connect/auth"),
+                TokenUrl = new Uri($"{keycloakAuthority}/protocol/openid-connect/token"),
+                Scopes = new Dictionary<string, string>
+                {
+                    { "openid", "OpenID Connect" },
+                    { "profile", "User profile" },
+                    { "email", "User email" }
+                }
+            }
+        }
+    });
+
+    // Also add Bearer token option for manual token entry
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token.",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "oauth2"
+                }
+            },
+            new[] { "openid", "profile", "email" }
+        },
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
     });
 });
 
@@ -295,6 +394,11 @@ if (app.Environment.IsDevelopment())
           c.SwaggerEndpoint("/swagger/assets/swagger.json", "5. Asset Management");
           c.SwaggerEndpoint("/swagger/users/swagger.json", "6. User Management");
           c.SwaggerEndpoint("/swagger/v1/swagger.json", "Default");
+
+          // OAuth2 configuration for Swagger UI
+          c.OAuthClientId("xr50-swagger");
+          c.OAuthAppName("XR50 Training API - Swagger");
+          c.OAuthUsePkce();
       });
 }
 

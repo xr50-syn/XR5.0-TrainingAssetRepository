@@ -16,6 +16,9 @@ volumes:
   # LocalStack volume (for sandbox S3 testing)
   localstack_data:
     driver: local
+  # Keycloak volume (for auth testing)
+  keycloak_data:
+    driver: local
 
 services:
   mariadb:
@@ -92,7 +95,15 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_DEFAULT_REGION: ${AWS_REGION:-eu-west-1}
-      
+
+      # IAM/Keycloak Configuration
+      IAM__Authority: ${KEYCLOAK_AUTHORITY:-http://keycloak:8080/realms/xr50}
+      IAM__MetadataEndpoint: ${KEYCLOAK_METADATA:-http://keycloak:8080/realms/xr50/.well-known/openid-configuration}
+      IAM__Issuer: ${KEYCLOAK_ISSUER:-http://localhost:8180/realms/xr50}
+      IAM__Audience: ${KEYCLOAK_AUDIENCE:-xr50-training-api}
+      IAM__RequireHttpsMetadata: ${KEYCLOAK_REQUIRE_HTTPS:-false}
+      IAM__AllowAnonymousInDevelopment: ${IAM_ALLOW_ANONYMOUS:-false}
+
     ports:
       - "5286:5286"
       - "7069:7069"
@@ -246,3 +257,33 @@ services:
       start_period: 30s
     profiles:
       - localstack  # Use --profile localstack to start (not included in sandbox)
+
+  # Keycloak for authentication testing
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0
+    container_name: keycloak
+    ports:
+      - "8180:8080"  # Keycloak web UI and API
+    environment:
+      # Admin credentials
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      # Development mode settings
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+    command:
+      - start-dev
+      - --import-realm
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+      - ./keycloak-config:/opt/keycloak/data/import
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080;echo -e 'GET /health/ready HTTP/1.1\r\nhost: localhost\r\nConnection: close\r\n\r\n' >&3;if [ $? -eq 0 ]; then echo 'Healthcheck Successful';exit 0;else echo 'Healthcheck Failed';exit 1;fi;"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    profiles:
+      - auth       # Start with --profile auth
+      - lab        # Include in lab environment
+      - default    # Include by default for testing

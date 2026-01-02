@@ -31,6 +31,8 @@ namespace XR50TrainingAssetRepo.Controllers
         private readonly ILearningPathService _learningPathService;
         private readonly IVoiceMaterialService _voiceMaterialService;
         private readonly IUserMaterialService _userMaterialService;
+        private readonly IConfiguration _configuration;
+        private readonly IWebHostEnvironment _environment;
         private readonly ILogger<materialsController> _logger;
 
         public materialsController(
@@ -39,6 +41,8 @@ namespace XR50TrainingAssetRepo.Controllers
             ILearningPathService learningPathService,
             IVoiceMaterialService voiceMaterialService,
             IUserMaterialService userMaterialService,
+            IConfiguration configuration,
+            IWebHostEnvironment environment,
             ILogger<materialsController> logger)
         {
             _materialService = materialService;
@@ -46,6 +50,8 @@ namespace XR50TrainingAssetRepo.Controllers
             _learningPathService = learningPathService;
             _voiceMaterialService = voiceMaterialService;
             _userMaterialService = userMaterialService;
+            _configuration = configuration;
+            _environment = environment;
             _logger = logger;
         }
 
@@ -83,9 +89,11 @@ namespace XR50TrainingAssetRepo.Controllers
         /// <summary>
         /// Submit quiz answers for evaluation
         /// POST /api/{tenantName}/materials/{materialId}/submit
+        /// Requires authentication - user ID is extracted from JWT token claims
+        /// In development mode with AllowAnonymousInDevelopment=true, uses DevelopmentUserId fallback
         /// </summary>
         [HttpPost("{materialId}/submit")]
-        [AllowAnonymous] // TODO: Change back to [Authorize] for production
+        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<SubmitQuizAnswersResponse>> SubmitAnswers(
             string tenantName,
             int materialId,
@@ -93,16 +101,31 @@ namespace XR50TrainingAssetRepo.Controllers
         {
             try
             {
+                // Extract user ID from JWT token claims
+                // Common claim types: "sub" (subject), NameIdentifier, "preferred_username", "email"
                 var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                     ?? User.FindFirst("sub")?.Value
-                    ?? User.FindFirst(ClaimTypes.Name)?.Value
-                    ?? "anonymous-test-user"; // Default for development testing
+                    ?? User.FindFirst("preferred_username")?.Value
+                    ?? User.FindFirst(ClaimTypes.Email)?.Value
+                    ?? User.FindFirst(ClaimTypes.Name)?.Value;
 
-                // Note: In production, uncomment this check:
-                // if (string.IsNullOrEmpty(userId))
-                // {
-                //     return Unauthorized(new { error = "User not authenticated" });
-                // }
+                // Development fallback: allow configured test user when AllowAnonymousInDevelopment is true
+                if (string.IsNullOrEmpty(userId) && _environment.IsDevelopment())
+                {
+                    var allowAnonymous = _configuration.GetValue<bool>("IAM:AllowAnonymousInDevelopment", false);
+                    if (allowAnonymous)
+                    {
+                        userId = _configuration.GetValue<string>("IAM:DevelopmentUserId") ?? "dev-test-user";
+                        _logger.LogWarning("Using development fallback user ID: {UserId}", userId);
+                    }
+                }
+
+                if (string.IsNullOrEmpty(userId))
+                {
+                    _logger.LogWarning("No user identifier found in token claims. Available claims: {Claims}",
+                        string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}")));
+                    return Unauthorized(new { error = "User identifier not found in token" });
+                }
 
                 _logger.LogInformation(
                     "User {UserId} submitting answers for material {MaterialId} in tenant {TenantName}",
