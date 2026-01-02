@@ -509,7 +509,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
        
         /// Get the share URL for an asset
-        
+
         [HttpGet("{assetId}/share-url")]
         public async Task<ActionResult<object>> GetAssetShareUrl(string tenantName, string assetId)
         {
@@ -518,9 +518,9 @@ namespace XR50TrainingAssetRepo.Controllers
             try
             {
                 var shareUrl = await _assetService.GetAssetShareUrlAsync(tenantName, assetId);
-                
-                return Ok(new { 
-                    AssetId = assetId, 
+
+                return Ok(new {
+                    AssetId = assetId,
                     ShareUrl = shareUrl,
                     HasShare = !string.IsNullOrEmpty(shareUrl)
                 });
@@ -532,6 +532,120 @@ namespace XR50TrainingAssetRepo.Controllers
             }
         }
 
+        #region AI Processing Endpoints
+
+        /// <summary>
+        /// Submit an asset for AI processing via Chatbot API
+        /// </summary>
+        [HttpPost("{id}/submit")]
+        public async Task<ActionResult<object>> SubmitAssetForAiProcessing(string tenantName, int id)
+        {
+            _logger.LogInformation("Submitting asset {AssetId} for AI processing in tenant {TenantName}", id, tenantName);
+
+            try
+            {
+                var asset = await _assetService.SubmitAssetForAiProcessingAsync(id);
+
+                return Ok(new
+                {
+                    Status = "success",
+                    Message = "Asset submitted for AI processing",
+                    AssetId = asset.Id,
+                    AiAvailable = asset.AiAvailable,
+                    JobId = asset.JobId
+                });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { Error = $"Asset {id} not found" });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { Error = ex.Message });
+            }
+            catch (ChatbotApiException ex)
+            {
+                _logger.LogError(ex, "Chatbot API error submitting asset {AssetId}", id);
+                return StatusCode(502, new { Error = "Failed to communicate with AI service", Details = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error submitting asset {AssetId} for AI processing", id);
+                return StatusCode(500, new { Error = "Failed to submit asset for AI processing", Details = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Get assets filtered by AI availability status
+        /// </summary>
+        [HttpGet("ai-status/{status}")]
+        public async Task<ActionResult<IEnumerable<Asset>>> GetAssetsByAiStatus(string tenantName, string status)
+        {
+            _logger.LogInformation("Getting assets with AI status {Status} for tenant {TenantName}", status, tenantName);
+
+            if (status != "ready" && status != "process" && status != "notready")
+            {
+                return BadRequest(new { Error = "Invalid status. Must be 'ready', 'process', or 'notready'" });
+            }
+
+            try
+            {
+                var assets = await _assetService.GetAssetsWithAiStatusAsync(status);
+                return Ok(assets);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting assets by AI status");
+                return StatusCode(500, new { Error = "Failed to get assets", Details = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Get all assets currently pending AI processing
+        /// </summary>
+        [HttpGet("ai-pending")]
+        public async Task<ActionResult<IEnumerable<Asset>>> GetAssetsPendingAiProcessing(string tenantName)
+        {
+            _logger.LogInformation("Getting assets pending AI processing for tenant {TenantName}", tenantName);
+
+            try
+            {
+                var assets = await _assetService.GetAssetsPendingAiProcessingAsync();
+                return Ok(assets);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting pending assets");
+                return StatusCode(500, new { Error = "Failed to get pending assets", Details = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Manually trigger AI status sync for all processing assets
+        /// </summary>
+        [HttpPost("ai-sync")]
+        public async Task<ActionResult<object>> SyncAiStatuses(string tenantName)
+        {
+            _logger.LogInformation("Manually syncing AI statuses for tenant {TenantName}", tenantName);
+
+            try
+            {
+                var updatedCount = await _assetService.SyncAssetAiStatusesAsync();
+
+                return Ok(new
+                {
+                    Status = "success",
+                    Message = $"Synced AI statuses, {updatedCount} assets updated"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error syncing AI statuses");
+                return StatusCode(500, new { Error = "Failed to sync AI statuses", Details = ex.Message });
+            }
+        }
+
+        #endregion
 
     }
 }
