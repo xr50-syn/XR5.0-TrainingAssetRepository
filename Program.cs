@@ -318,9 +318,12 @@ builder.Services.AddSwaggerGen(c =>
     });
 
     // Add OAuth2/JWT Bearer authentication to Swagger
-    // IMPORTANT: Use the external Issuer URL for Swagger OAuth (browser needs to reach it)
-    // NOT the internal Authority URL (which is for server-to-server communication)
-    var keycloakAuthority = builder.Configuration["IAM:Issuer"] ?? "http://localhost:8180/realms/xr50";
+    // IMPORTANT: Use SwaggerIssuer for browser-facing OAuth URLs
+    // This allows different URLs for internal (server-side) vs external (browser) access
+    // Set IAM:SwaggerIssuer to your server's external hostname/IP when accessing remotely
+    var keycloakAuthority = builder.Configuration["IAM:SwaggerIssuer"]
+        ?? builder.Configuration["IAM:Issuer"]
+        ?? "http://localhost:8180/realms/xr50";
 
     c.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
     {
