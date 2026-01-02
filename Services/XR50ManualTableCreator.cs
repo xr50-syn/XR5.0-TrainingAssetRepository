@@ -20,6 +20,7 @@ namespace XR50TrainingAssetRepo.Services
         Task<bool> MigrateSubcomponentMaterialRelationshipsTableAsync(string tenantName);
         Task<bool> MigrateProgramAssignmentRanksAsync(string tenantName);
         Task<bool> MigrateQuizAnswersTableAsync(string tenantName);
+        Task<bool> MigrateUserMaterialTablesAsync(string tenantName);
     }
 
     public class XR50ManualTableCreator : IXR50ManualTableCreator
@@ -257,7 +258,10 @@ namespace XR50TrainingAssetRepo.Services
                     `Filetype` varchar(100) DEFAULT NULL,
                     `Type` int NOT NULL DEFAULT 0 COMMENT 'AssetType enum: 0=Image, 1=PDF, 2=Video, 3=Unity',
                     `Filename` varchar(255) NOT NULL,
-                    PRIMARY KEY (`Id`)
+                    `AiAvailable` varchar(20) DEFAULT 'notready' COMMENT 'AI processing status: ready, process, notready',
+                    `JobId` varchar(255) DEFAULT NULL COMMENT 'Chatbot API job ID for AI processing',
+                    PRIMARY KEY (`Id`),
+                    INDEX `idx_ai_available` (`AiAvailable`)
                 )",
 
                 @"CREATE TABLE IF NOT EXISTS `TrainingPrograms` (
@@ -332,6 +336,11 @@ namespace XR50TrainingAssetRepo.Services
             `UnityBuildTarget` varchar(50) DEFAULT NULL,
             `UnitySceneName` varchar(255) DEFAULT NULL,
             `UnityJson` text DEFAULT NULL,
+
+            -- Voice Material specific columns
+            `ServiceJobId` varchar(255) DEFAULT NULL,
+            `VoiceStatus` varchar(20) DEFAULT 'notready',
+            `VoiceAssetIds` text DEFAULT NULL,
 
             PRIMARY KEY (`id`),
             INDEX `idx_discriminator` (`Discriminator`),
@@ -520,6 +529,35 @@ namespace XR50TrainingAssetRepo.Services
                     INDEX `idx_material` (`RelatedMaterialId`),
                     UNIQUE INDEX `idx_unique_relationship` (`SubcomponentId`, `SubcomponentType`, `RelatedMaterialId`),
                     CONSTRAINT `fk_subcomponent_material` FOREIGN KEY (`RelatedMaterialId`) REFERENCES `Materials` (`id`) ON DELETE CASCADE
+                )",
+
+                // User Material Data - stores raw answer submissions (historical data)
+                @"CREATE TABLE IF NOT EXISTS `UserMaterialData` (
+                    `Id` int NOT NULL AUTO_INCREMENT,
+                    `UserId` varchar(255) NOT NULL,
+                    `ProgramId` int DEFAULT NULL,
+                    `MaterialId` int NOT NULL,
+                    `Data` json DEFAULT NULL,
+                    `CreatedAt` datetime NOT NULL,
+                    `UpdatedAt` datetime NOT NULL,
+                    PRIMARY KEY (`Id`),
+                    INDEX `idx_user_id` (`UserId`),
+                    INDEX `idx_material_id` (`MaterialId`),
+                    INDEX `idx_program_id` (`ProgramId`),
+                    UNIQUE INDEX `idx_user_material` (`UserId`, `MaterialId`)
+                )",
+
+                // User Material Scores - cached scores for quick lookups
+                @"CREATE TABLE IF NOT EXISTS `UserMaterialScores` (
+                    `UserId` varchar(255) NOT NULL,
+                    `ProgramId` int DEFAULT NULL,
+                    `MaterialId` int NOT NULL,
+                    `Score` decimal(10,2) NOT NULL DEFAULT 0,
+                    `Progress` int NOT NULL DEFAULT 0,
+                    `UpdatedAt` datetime NOT NULL,
+                    PRIMARY KEY (`UserId`, `MaterialId`),
+                    INDEX `idx_program_id` (`ProgramId`),
+                    INDEX `idx_material_id` (`MaterialId`)
                 )"
             };
         }
@@ -954,6 +992,192 @@ namespace XR50TrainingAssetRepo.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error migrating QuizAnswers table for tenant: {TenantName}", tenantName);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Migrates existing databases to add Voice Material and Asset AI processing columns.
+        /// </summary>
+        public async Task<bool> MigrateVoiceAndAiColumnsAsync(string tenantName)
+        {
+            try
+            {
+                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
+                var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
+
+                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+
+                _logger.LogInformation("=== Starting Voice/AI columns migration for tenant: {TenantName} ===", tenantName);
+
+                using var connection = new MySqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                // Add Voice Material columns to Materials table
+                var voiceColumns = new Dictionary<string, string>
+                {
+                    { "ServiceJobId", "ALTER TABLE `Materials` ADD COLUMN `ServiceJobId` varchar(255) DEFAULT NULL" },
+                    { "VoiceStatus", "ALTER TABLE `Materials` ADD COLUMN `VoiceStatus` varchar(20) DEFAULT 'notready'" },
+                    { "VoiceAssetIds", "ALTER TABLE `Materials` ADD COLUMN `VoiceAssetIds` text DEFAULT NULL" }
+                };
+
+                foreach (var column in voiceColumns)
+                {
+                    var checkQuery = @"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_SCHEMA = @dbName
+                        AND TABLE_NAME = 'Materials'
+                        AND COLUMN_NAME = @columnName";
+
+                    using (var checkCmd = new MySqlCommand(checkQuery, connection))
+                    {
+                        checkCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                        checkCmd.Parameters.AddWithValue("@columnName", column.Key);
+                        var exists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+
+                        if (!exists)
+                        {
+                            _logger.LogInformation("Adding {Column} column to Materials table...", column.Key);
+                            using (var addCmd = new MySqlCommand(column.Value, connection))
+                            {
+                                await addCmd.ExecuteNonQueryAsync();
+                                _logger.LogInformation("Successfully added {Column} column to Materials", column.Key);
+                            }
+                        }
+                    }
+                }
+
+                // Add AI columns to Assets table
+                var assetColumns = new Dictionary<string, string>
+                {
+                    { "AiAvailable", "ALTER TABLE `Assets` ADD COLUMN `AiAvailable` varchar(20) DEFAULT 'notready'" },
+                    { "JobId", "ALTER TABLE `Assets` ADD COLUMN `JobId` varchar(255) DEFAULT NULL" }
+                };
+
+                foreach (var column in assetColumns)
+                {
+                    var checkQuery = @"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_SCHEMA = @dbName
+                        AND TABLE_NAME = 'Assets'
+                        AND COLUMN_NAME = @columnName";
+
+                    using (var checkCmd = new MySqlCommand(checkQuery, connection))
+                    {
+                        checkCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                        checkCmd.Parameters.AddWithValue("@columnName", column.Key);
+                        var exists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+
+                        if (!exists)
+                        {
+                            _logger.LogInformation("Adding {Column} column to Assets table...", column.Key);
+                            using (var addCmd = new MySqlCommand(column.Value, connection))
+                            {
+                                await addCmd.ExecuteNonQueryAsync();
+                                _logger.LogInformation("Successfully added {Column} column to Assets", column.Key);
+                            }
+                        }
+                    }
+                }
+
+                // Add index on AiAvailable for faster lookups
+                var indexCheckQuery = @"SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                    WHERE TABLE_SCHEMA = @dbName
+                    AND TABLE_NAME = 'Assets'
+                    AND INDEX_NAME = 'idx_ai_available'";
+
+                using (var checkCmd = new MySqlCommand(indexCheckQuery, connection))
+                {
+                    checkCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                    var indexExists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+
+                    if (!indexExists)
+                    {
+                        _logger.LogInformation("Adding idx_ai_available index to Assets table...");
+                        using (var addCmd = new MySqlCommand("CREATE INDEX `idx_ai_available` ON `Assets` (`AiAvailable`)", connection))
+                        {
+                            await addCmd.ExecuteNonQueryAsync();
+                            _logger.LogInformation("Successfully added idx_ai_available index to Assets");
+                        }
+                    }
+                }
+
+                _logger.LogInformation("=== Voice/AI columns migration completed for tenant: {TenantName} ===", tenantName);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating Voice/AI columns for tenant: {TenantName}", tenantName);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Migrates existing databases to add UserMaterialData and UserMaterialScores tables.
+        /// </summary>
+        public async Task<bool> MigrateUserMaterialTablesAsync(string tenantName)
+        {
+            try
+            {
+                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
+                var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
+
+                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+
+                _logger.LogInformation("=== Migrating User Material tables for tenant: {TenantName} ===", tenantName);
+
+                using var connection = new MySqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                // Create UserMaterialData table if not exists
+                var createUserMaterialDataQuery = @"
+                    CREATE TABLE IF NOT EXISTS `UserMaterialData` (
+                        `Id` int NOT NULL AUTO_INCREMENT,
+                        `UserId` varchar(255) NOT NULL,
+                        `ProgramId` int DEFAULT NULL,
+                        `MaterialId` int NOT NULL,
+                        `Data` json DEFAULT NULL,
+                        `CreatedAt` datetime NOT NULL,
+                        `UpdatedAt` datetime NOT NULL,
+                        PRIMARY KEY (`Id`),
+                        INDEX `idx_user_id` (`UserId`),
+                        INDEX `idx_material_id` (`MaterialId`),
+                        INDEX `idx_program_id` (`ProgramId`),
+                        UNIQUE INDEX `idx_user_material` (`UserId`, `MaterialId`)
+                    )";
+
+                using (var createCmd = new MySqlCommand(createUserMaterialDataQuery, connection))
+                {
+                    await createCmd.ExecuteNonQueryAsync();
+                    _logger.LogInformation("Created/verified UserMaterialData table for tenant: {TenantName}", tenantName);
+                }
+
+                // Create UserMaterialScores table if not exists
+                var createUserMaterialScoresQuery = @"
+                    CREATE TABLE IF NOT EXISTS `UserMaterialScores` (
+                        `UserId` varchar(255) NOT NULL,
+                        `ProgramId` int DEFAULT NULL,
+                        `MaterialId` int NOT NULL,
+                        `Score` decimal(10,2) NOT NULL DEFAULT 0,
+                        `Progress` int NOT NULL DEFAULT 0,
+                        `UpdatedAt` datetime NOT NULL,
+                        PRIMARY KEY (`UserId`, `MaterialId`),
+                        INDEX `idx_program_id` (`ProgramId`),
+                        INDEX `idx_material_id` (`MaterialId`)
+                    )";
+
+                using (var createCmd = new MySqlCommand(createUserMaterialScoresQuery, connection))
+                {
+                    await createCmd.ExecuteNonQueryAsync();
+                    _logger.LogInformation("Created/verified UserMaterialScores table for tenant: {TenantName}", tenantName);
+                }
+
+                _logger.LogInformation("=== User Material tables migration completed for tenant: {TenantName} ===", tenantName);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating User Material tables for tenant: {TenantName}", tenantName);
                 return false;
             }
         }

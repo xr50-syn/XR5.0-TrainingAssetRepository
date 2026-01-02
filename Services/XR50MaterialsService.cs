@@ -277,6 +277,13 @@ namespace XR50TrainingAssetRepo.Services
                             video.Timestamps?.Count ?? 0);
                         break;
 
+                    case ImageMaterial image:
+                        // Annotations are automatically saved via EF Core navigation property
+                        // when context.Materials.Add(material) is called above
+                        _logger.LogInformation("🖼️ Image material has {Count} annotations (saved via navigation property)",
+                            image.ImageAnnotations?.Count ?? 0);
+                        break;
+
                     case QuestionnaireMaterial questionnaire:
                         _logger.LogInformation("❓ Processing questionnaire material with {Count} entries", questionnaire.QuestionnaireEntries?.Count ?? 0);
 
@@ -2610,7 +2617,8 @@ namespace XR50TrainingAssetRepo.Services
             "QuestionnaireEntry",
             "VideoTimestamp",
             "QuizQuestion",
-            "QuizAnswer"
+            "QuizAnswer",
+            "ImageAnnotation"
         };
 
         public async Task<int> AssignMaterialToSubcomponentAsync(

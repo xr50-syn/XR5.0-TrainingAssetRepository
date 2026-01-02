@@ -16,6 +16,7 @@ using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
 using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Services;
+using XR50TrainingAssetRepo.Services.Materials;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http.Json;
 using Amazon;
@@ -277,16 +278,16 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 app.UseCors();
 app.UseHttpsRedirection();
+app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
+
 if (app.Environment.IsDevelopment())
 {
-
     app.UseSwagger();
     app.UseSwaggerUI(c =>
       {
           // Add endpoints in desired order
-
           c.SwaggerEndpoint("/swagger/tenants/swagger.json", "1. Tenant Management");
           c.SwaggerEndpoint("/swagger/programs/swagger.json", "2. Training Program Management");
           c.SwaggerEndpoint("/swagger/paths/swagger.json", "3. Learning Path Management");
@@ -297,7 +298,6 @@ if (app.Environment.IsDevelopment())
       });
 }
 
-app.UseRouting(); 
 app.MapControllers();
  
 
@@ -356,6 +356,26 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ILearningPathService, LearningPathService>();
         services.AddScoped<IMaterialService, MaterialService>();
         services.AddScoped<IAssetService, AssetService>();
+
+        // New specialized material services
+        services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IMaterialServiceBase, XR50TrainingAssetRepo.Services.Materials.MaterialServiceBase>();
+        services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IMaterialRelationshipService, XR50TrainingAssetRepo.Services.Materials.MaterialRelationshipService>();
+        services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IVideoMaterialService, XR50TrainingAssetRepo.Services.Materials.VideoMaterialService>();
+        services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IQuizMaterialService, XR50TrainingAssetRepo.Services.Materials.QuizMaterialService>();
+        services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IChecklistMaterialService, XR50TrainingAssetRepo.Services.Materials.ChecklistMaterialService>();
+        services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IWorkflowMaterialService, XR50TrainingAssetRepo.Services.Materials.WorkflowMaterialService>();
+        services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IQuestionnaireMaterialService, XR50TrainingAssetRepo.Services.Materials.QuestionnaireMaterialService>();
+        services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IImageMaterialService, XR50TrainingAssetRepo.Services.Materials.ImageMaterialService>();
+        services.AddScoped<XR50TrainingAssetRepo.Services.Materials.ISimpleMaterialService, XR50TrainingAssetRepo.Services.Materials.SimpleMaterialService>();
+        services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IVoiceMaterialService, XR50TrainingAssetRepo.Services.Materials.VoiceMaterialService>();
+        services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IUserMaterialService, XR50TrainingAssetRepo.Services.Materials.UserMaterialService>();
+
+        // Chatbot API Service (HttpClient-based)
+        services.AddHttpClient<IChatbotApiService, ChatbotApiService>();
+
+        // Background service for AI status synchronization (database-driven, adaptive polling)
+        services.AddHostedService<AiStatusSyncService>();
+
         // Keep the original DbContext registration for admin operations
         
         services.AddDbContext<XR50TrainingContext>((serviceProvider, options) =>
