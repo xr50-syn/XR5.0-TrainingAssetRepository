@@ -113,10 +113,21 @@ namespace XR50TrainingAssetRepo.Controllers
 
         private string? GetUserIdFromAuth()
         {
-            // Get user ID from JWT claims
-            return User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                ?? User.FindFirst("sub")?.Value
-                ?? User.FindFirst(ClaimTypes.Name)?.Value;
+            // Log all claims for debugging
+            _logger.LogInformation("Token claims: {Claims}",
+                string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}")));
+
+            // Get user ID from JWT claims - prefer preferred_username over sub (UUID)
+            var userId = User.FindFirst("preferred_username")?.Value
+                ?? User.FindFirst(ClaimTypes.Name)?.Value
+                ?? User.FindFirst("name")?.Value
+                ?? User.FindFirst(ClaimTypes.Email)?.Value
+                ?? User.FindFirst("email")?.Value
+                ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? User.FindFirst("sub")?.Value;
+
+            _logger.LogInformation("Extracted userId: {UserId}", userId);
+            return userId;
         }
     }
 }

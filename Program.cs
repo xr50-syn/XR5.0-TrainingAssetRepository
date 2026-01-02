@@ -24,6 +24,10 @@ using Amazon.S3;
 using Amazon.S3.Model;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Ensure environment variables override appsettings.json (important for Docker)
+builder.Configuration.AddEnvironmentVariables();
+
 var  MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
 // Add services to the container.
 
@@ -44,31 +48,45 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     {
         var configuration = builder.Configuration;
 
-        // Token validation parameters
+        // For IAM token integration with external identity provider
+        var authority = configuration["IAM:Authority"];
+        var metadataAddress = configuration["IAM:MetadataEndpoint"];
+        var issuer = configuration["IAM:Issuer"];
+        var audience = configuration["IAM:Audience"];
+
+        Console.WriteLine($"JWT Config - Authority: {authority}");
+        Console.WriteLine($"JWT Config - MetadataAddress: {metadataAddress}");
+        Console.WriteLine($"JWT Config - Issuer: {issuer}");
+        Console.WriteLine($"JWT Config - Audience: {audience}");
+
+        if (!string.IsNullOrEmpty(authority))
+        {
+            options.Authority = authority;
+            options.RequireHttpsMetadata = configuration.GetValue<bool>("IAM:RequireHttpsMetadata", false);
+
+            if (!string.IsNullOrEmpty(metadataAddress))
+            {
+                options.MetadataAddress = metadataAddress;
+            }
+        }
+
+        // Token validation parameters - let OIDC discovery provide the signing keys
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = configuration["IAM:Issuer"],
-            ValidAudience = configuration["IAM:Audience"],
+            ValidIssuer = issuer,
+            ValidAudience = audience,
             ClockSkew = TimeSpan.FromMinutes(5)
         };
 
-        // For IAM token integration with external identity provider
-        var authority = configuration["IAM:Authority"];
-        if (!string.IsNullOrEmpty(authority))
+        // Configure backchannel for internal Docker networking
+        options.BackchannelHttpHandler = new HttpClientHandler
         {
-            options.Authority = authority;
-            options.RequireHttpsMetadata = configuration.GetValue<bool>("IAM:RequireHttpsMetadata", true);
-
-            var metadataAddress = configuration["IAM:MetadataEndpoint"];
-            if (!string.IsNullOrEmpty(metadataAddress))
-            {
-                options.MetadataAddress = metadataAddress;
-            }
-        }
+            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+        };
 
         // Optional: Configure events for logging
         options.Events = new JwtBearerEvents
@@ -77,12 +95,22 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             {
                 var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
                 logger.LogWarning("JWT Authentication failed: {Exception}", context.Exception.Message);
+                if (context.Exception.InnerException != null)
+                {
+                    logger.LogWarning("Inner exception: {InnerException}", context.Exception.InnerException.Message);
+                }
                 return Task.CompletedTask;
             },
             OnTokenValidated = context =>
             {
                 var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
                 logger.LogInformation("JWT token validated for user: {User}", context.Principal?.Identity?.Name ?? "Unknown");
+                return Task.CompletedTask;
+            },
+            OnMessageReceived = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogDebug("JWT token received");
                 return Task.CompletedTask;
             }
         };
@@ -290,35 +318,27 @@ builder.Services.AddSwaggerGen(c =>
     });
 
     // Add OAuth2/JWT Bearer authentication to Swagger
-    var keycloakAuthority = builder.Configuration["IAM:Authority"] ?? "http://localhost:8180/realms/xr50";
+    // IMPORTANT: Use the external Issuer URL for Swagger OAuth (browser needs to reach it)
+    // NOT the internal Authority URL (which is for server-to-server communication)
+    var keycloakAuthority = builder.Configuration["IAM:Issuer"] ?? "http://localhost:8180/realms/xr50";
 
     c.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
     {
         Type = SecuritySchemeType.OAuth2,
         Flows = new OpenApiOAuthFlows
         {
-            // Password flow for direct testing
+            // Password flow for direct testing (no scopes needed - Keycloak uses default client scopes)
             Password = new OpenApiOAuthFlow
             {
                 TokenUrl = new Uri($"{keycloakAuthority}/protocol/openid-connect/token"),
-                Scopes = new Dictionary<string, string>
-                {
-                    { "openid", "OpenID Connect" },
-                    { "profile", "User profile" },
-                    { "email", "User email" }
-                }
+                Scopes = new Dictionary<string, string>()
             },
             // Authorization code flow for production
             AuthorizationCode = new OpenApiOAuthFlow
             {
                 AuthorizationUrl = new Uri($"{keycloakAuthority}/protocol/openid-connect/auth"),
                 TokenUrl = new Uri($"{keycloakAuthority}/protocol/openid-connect/token"),
-                Scopes = new Dictionary<string, string>
-                {
-                    { "openid", "OpenID Connect" },
-                    { "profile", "User profile" },
-                    { "email", "User email" }
-                }
+                Scopes = new Dictionary<string, string>()
             }
         }
     });
@@ -344,7 +364,7 @@ builder.Services.AddSwaggerGen(c =>
                     Id = "oauth2"
                 }
             },
-            new[] { "openid", "profile", "email" }
+            Array.Empty<string>()
         },
         {
             new OpenApiSecurityScheme
@@ -361,7 +381,10 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 
-builder.Configuration.AddJsonFile("appsettings.json");
+// Environment variables should already be loaded by WebApplicationBuilder and override appsettings.json
+// Re-add environment variables to ensure they take precedence
+builder.Configuration.AddEnvironmentVariables();
+
 builder.Services.AddCors(options =>{
             options.AddDefaultPolicy(
                 builder =>
@@ -398,7 +421,10 @@ if (app.Environment.IsDevelopment())
           // OAuth2 configuration for Swagger UI
           c.OAuthClientId("xr50-swagger");
           c.OAuthAppName("XR50 Training API - Swagger");
+          // Only use PKCE for authorization code flow, not password flow
           c.OAuthUsePkce();
+          // Additional settings for OAuth2
+          c.OAuthScopeSeparator(" ");
       });
 }
 

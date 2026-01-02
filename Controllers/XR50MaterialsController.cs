@@ -101,13 +101,20 @@ namespace XR50TrainingAssetRepo.Controllers
         {
             try
             {
+                // Log all claims for debugging
+                _logger.LogInformation("Token claims: {Claims}",
+                    string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}")));
+
                 // Extract user ID from JWT token claims
-                // Common claim types: "sub" (subject), NameIdentifier, "preferred_username", "email"
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                    ?? User.FindFirst("sub")?.Value
-                    ?? User.FindFirst("preferred_username")?.Value
+                // For Keycloak: prefer "preferred_username" over "sub" (which is a UUID)
+                // Fallback order: preferred_username -> name -> email -> sub (UUID)
+                var userId = User.FindFirst("preferred_username")?.Value
+                    ?? User.FindFirst(ClaimTypes.Name)?.Value
+                    ?? User.FindFirst("name")?.Value
                     ?? User.FindFirst(ClaimTypes.Email)?.Value
-                    ?? User.FindFirst(ClaimTypes.Name)?.Value;
+                    ?? User.FindFirst("email")?.Value
+                    ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                    ?? User.FindFirst("sub")?.Value;
 
                 // Development fallback: allow configured test user when AllowAnonymousInDevelopment is true
                 if (string.IsNullOrEmpty(userId) && _environment.IsDevelopment())
