@@ -602,8 +602,8 @@ dotnet test --filter "ClassName=UnitTest1"
 ### Current Research Prototype Constraints
 
 #### **Security**
-- **Authentication**: System-level auth disabled (commented out)
-- **Authorization**: No role-based access control implementation
+- **Authentication**: JWT Bearer authentication implemented with Keycloak (see [Authentication Guide](guides/authentication.md))
+- **Authorization**: Basic auth on quiz submission endpoints; full RBAC not yet implemented
 - **Input Validation**: Basic validation, needs comprehensive security review
 - **SSL/TLS**: Development certificates only
 
@@ -650,7 +650,7 @@ dotnet test --filter "ClassName=UnitTest1"
 
 #### **Phase 1: Production Hardening**
 - **Security Implementation**
-  - JWT-based authentication system
+  - ~~JWT-based authentication system~~ (Implemented - Keycloak integration)
   - Role-based authorization (admin, tenant-admin, user)
   - Input validation and sanitization
   - Security headers and CORS configuration
@@ -767,4 +767,4 @@ This is a research prototype developed for the XR5.0 EU project. Contributions s
 
 **Project**: Horizon Europe XR5.0 (Grant Agreement No. 101135209)  
 **Contact**: Emmanouil Mavrogiorgis (emaurog@synelixis.com)  
-**Last Updated**: September 2024
+**Last Updated**: January 2026
