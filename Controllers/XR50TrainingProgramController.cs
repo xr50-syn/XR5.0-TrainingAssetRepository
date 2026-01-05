@@ -393,7 +393,7 @@ namespace XR50TrainingAssetRepo.Controllers
             int trainingProgramId,
             [FromQuery] bool includeOrder = true)
         {
-            _logger.LogInformation("📚 Getting materials for training program {TrainingProgramId} for tenant: {TenantName}",
+            _logger.LogInformation(" Getting materials for training program {TrainingProgramId} for tenant: {TenantName}",
                 trainingProgramId, tenantName);
 
             // Verify training program exists
@@ -419,7 +419,7 @@ namespace XR50TrainingAssetRepo.Controllers
             [FromQuery] string relationshipType = "assigned",
             [FromQuery] int? displayOrder = null)
         {
-            _logger.LogInformation("🔗 Assigning material {MaterialId} to training program {TrainingProgramId} for tenant: {TenantName}",
+            _logger.LogInformation("Assigning material {MaterialId} to training program {TrainingProgramId} for tenant: {TenantName}",
                 materialId, trainingProgramId, tenantName);
 
             try

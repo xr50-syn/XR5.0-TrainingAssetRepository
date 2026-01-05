@@ -2071,7 +2071,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         {
             try
             {
-                _logger.LogInformation("📝 Creating quiz material from JSON");
+                _logger.LogInformation("Creating quiz material from JSON");
 
                 // Parse the quiz material properties
                 var quiz = new QuizMaterial();
@@ -2268,7 +2268,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "📝 Error creating quiz from JSON");
+                _logger.LogError(ex, "Error creating quiz from JSON");
                 throw;
             }
         }
@@ -4708,14 +4708,14 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                                 await _materialService.AssignMaterialToSubcomponentAsync(
                                     matchedAnnotation.ImageAnnotationId, "ImageAnnotation", relatedMaterialId, "related", displayOrder);
 
-                                _logger.LogInformation("✅ Assigned material {MaterialId} to ImageAnnotation {AnnotationId}",
+                                _logger.LogInformation("Assigned material {MaterialId} to ImageAnnotation {AnnotationId}",
                                     relatedMaterialId, matchedAnnotation.ImageAnnotationId);
 
                                 displayOrder++;
                             }
                             catch (Exception ex)
                             {
-                                _logger.LogWarning("❌ Failed to assign material {MaterialId} to ImageAnnotation {AnnotationId}: {Error}",
+                                _logger.LogWarning("Failed to assign material {MaterialId} to ImageAnnotation {AnnotationId}: {Error}",
                                     relatedMaterialId, matchedAnnotation.ImageAnnotationId, ex.Message);
                             }
                         }

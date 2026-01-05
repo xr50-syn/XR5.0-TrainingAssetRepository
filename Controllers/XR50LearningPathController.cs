@@ -195,7 +195,7 @@ namespace XR50TrainingAssetRepo.Controllers
             [FromQuery] bool includeOrder = true,
             [FromQuery] string? relationshipType = null)
         {
-            _logger.LogInformation("📚 Getting materials for learning path {LearningPathId} for tenant: {TenantName}",
+            _logger.LogInformation(" Getting materials for learning path {LearningPathId} for tenant: {TenantName}",
                 learningPathId, tenantName);
 
             // Verify learning path exists

@@ -446,7 +446,7 @@ curl -f "$BASE_URL/health" || (echo "Health check failed" && exit 1)
 echo "Health check passed"
 
 # Test 2: Basic Material Operations
-echo "📚 Testing material operations..."
+echo " Testing material operations..."
 
 # Create material
 MATERIAL_RESPONSE=$(curl -s -X POST "$BASE_URL/api/$TENANT/materials" \
