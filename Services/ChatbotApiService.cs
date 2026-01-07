@@ -45,13 +45,21 @@ namespace XR50TrainingAssetRepo.Services
             {
                 _logger.LogInformation("Submitting asset {AssetId} to Chatbot API for processing", assetId);
 
-                var request = new ChatbotSubmitRequest
-                {
-                    AssetId = assetId,
-                    DocumentUrl = assetUrl
-                };
+                // Download the file from the asset URL
+                using var downloadClient = new HttpClient();
+                var fileBytes = await downloadClient.GetByteArrayAsync(assetUrl);
+                var fileName = GetFileNameFromUrl(assetUrl);
 
-                var response = await _httpClient.PostAsJsonAsync("document", request);
+                // Create multipart form-data content with the file
+                using var content = new MultipartFormDataContent();
+                var fileContent = new ByteArrayContent(fileBytes);
+                fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(GetContentType(fileName));
+                content.Add(fileContent, "file", fileName);
+
+                // Optionally include asset_id as form field
+                content.Add(new StringContent(assetId.ToString()), "asset_id");
+
+                var response = await _httpClient.PostAsync("document", content);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -168,6 +176,30 @@ namespace XR50TrainingAssetRepo.Services
                 "failed" => "failed",
                 "error" => "failed",
                 _ => "pending"
+            };
+        }
+
+        private static string GetFileNameFromUrl(string url)
+        {
+            var uri = new Uri(url);
+            var fileName = Path.GetFileName(uri.LocalPath);
+            return string.IsNullOrEmpty(fileName) ? "document.pdf" : fileName;
+        }
+
+        private static string GetContentType(string fileName)
+        {
+            var extension = Path.GetExtension(fileName).ToLowerInvariant();
+            return extension switch
+            {
+                ".pdf" => "application/pdf",
+                ".doc" => "application/msword",
+                ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ".txt" => "text/plain",
+                ".html" => "text/html",
+                ".htm" => "text/html",
+                ".json" => "application/json",
+                ".xml" => "application/xml",
+                _ => "application/octet-stream"
             };
         }
     }
