@@ -39,7 +39,7 @@ namespace XR50TrainingAssetRepo.Services
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
         }
 
-        public async Task<string> SubmitDocumentAsync(int assetId, string assetUrl)
+        public async Task<string> SubmitDocumentAsync(int assetId, string assetUrl, string filetype)
         {
             try
             {
@@ -48,12 +48,15 @@ namespace XR50TrainingAssetRepo.Services
                 // Download the file from the asset URL
                 using var downloadClient = new HttpClient();
                 var fileBytes = await downloadClient.GetByteArrayAsync(assetUrl);
-                var fileName = GetFileNameFromUrl(assetUrl);
+
+                // Use filetype to determine content type and ensure filename has correct extension
+                var contentType = GetContentTypeFromFiletype(filetype);
+                var fileName = GetFileNameWithExtension(assetUrl, filetype);
 
                 // Create multipart form-data content with the file
                 using var content = new MultipartFormDataContent();
                 var fileContent = new ByteArrayContent(fileBytes);
-                fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(GetContentType(fileName));
+                fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
                 content.Add(fileContent, "file", fileName);
 
                 // Optionally include asset_id as form field
@@ -179,26 +182,43 @@ namespace XR50TrainingAssetRepo.Services
             };
         }
 
-        private static string GetFileNameFromUrl(string url)
+        private static string GetFileNameWithExtension(string url, string filetype)
         {
             var uri = new Uri(url);
             var fileName = Path.GetFileName(uri.LocalPath);
-            return string.IsNullOrEmpty(fileName) ? "document.pdf" : fileName;
+
+            if (string.IsNullOrEmpty(fileName))
+            {
+                fileName = "document";
+            }
+
+            // Ensure filename has the correct extension based on filetype
+            var currentExtension = Path.GetExtension(fileName).TrimStart('.').ToLowerInvariant();
+            var expectedExtension = filetype.TrimStart('.').ToLowerInvariant();
+
+            if (currentExtension != expectedExtension)
+            {
+                // Add or replace extension
+                var nameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
+                fileName = $"{nameWithoutExt}.{expectedExtension}";
+            }
+
+            return fileName;
         }
 
-        private static string GetContentType(string fileName)
+        private static string GetContentTypeFromFiletype(string filetype)
         {
-            var extension = Path.GetExtension(fileName).ToLowerInvariant();
-            return extension switch
+            var ext = filetype.TrimStart('.').ToLowerInvariant();
+            return ext switch
             {
-                ".pdf" => "application/pdf",
-                ".doc" => "application/msword",
-                ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                ".txt" => "text/plain",
-                ".html" => "text/html",
-                ".htm" => "text/html",
-                ".json" => "application/json",
-                ".xml" => "application/xml",
+                "pdf" => "application/pdf",
+                "doc" => "application/msword",
+                "docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "txt" => "text/plain",
+                "html" => "text/html",
+                "htm" => "text/html",
+                "json" => "application/json",
+                "xml" => "application/xml",
                 _ => "application/octet-stream"
             };
         }
