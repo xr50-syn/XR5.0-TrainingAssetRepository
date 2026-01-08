@@ -99,9 +99,15 @@ namespace XR50TrainingAssetRepo.Services
         {
             try
             {
-                _logger.LogDebug("Checking status for Chatbot job {JobId}", jobId);
+                var statusUrl = $"document/jobs/{jobId}";
+                _logger.LogInformation("Checking status for job {JobId} at {BaseAddress}{Url}",
+                    jobId, _httpClient.BaseAddress, statusUrl);
 
-                var response = await _httpClient.GetAsync($"document/jobs/{jobId}");
+                var response = await _httpClient.GetAsync(statusUrl);
+                var rawContent = await response.Content.ReadAsStringAsync();
+
+                _logger.LogInformation("Job {JobId} status response: {StatusCode} - {RawContent}",
+                    jobId, response.StatusCode, rawContent);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -116,23 +122,27 @@ namespace XR50TrainingAssetRepo.Services
                         };
                     }
 
-                    var errorContent = await response.Content.ReadAsStringAsync();
                     _logger.LogError("Failed to get status for job {JobId}: {StatusCode} - {Error}",
-                        jobId, response.StatusCode, errorContent);
+                        jobId, response.StatusCode, rawContent);
                     throw new ChatbotApiException($"Failed to get job status: {response.StatusCode}");
                 }
 
-                var result = await response.Content.ReadFromJsonAsync<ChatbotStatusResponse>();
+                var result = JsonSerializer.Deserialize<ChatbotStatusResponse>(rawContent);
 
                 if (result == null)
                 {
+                    _logger.LogError("Failed to deserialize job status response for {JobId}: {RawContent}", jobId, rawContent);
                     throw new ChatbotApiException("Invalid response from Chatbot API: null status");
                 }
+
+                var mappedStatus = MapChatbotStatus(result.Status);
+                _logger.LogInformation("Job {JobId} raw status: '{RawStatus}' mapped to: '{MappedStatus}'",
+                    jobId, result.Status, mappedStatus);
 
                 return new ChatbotJobStatus
                 {
                     JobId = result.JobId ?? jobId,
-                    Status = MapChatbotStatus(result.Status),
+                    Status = mappedStatus,
                     Error = result.Error,
                     Progress = result.Progress,
                     CreatedAt = result.CreatedAt,
