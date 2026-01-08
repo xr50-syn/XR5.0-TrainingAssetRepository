@@ -1,0 +1,27 @@
+{
+  "name": "xr50-functional-tests",
+  "version": "1.0.0",
+  "description": "Functional verification tests for XR5.0 Training Asset Repository",
+  "scripts": {
+    "test": "jest --runInBand",
+    "test:health": "jest suites/01-health.test.js",
+    "test:auth": "jest suites/02-auth.test.js",
+    "test:tenant": "jest suites/03-tenant.test.js",
+    "test:storage": "jest suites/04-storage.test.js",
+    "test:materials": "jest suites/05-materials.test.js",
+    "test:hierarchy": "jest suites/06-hierarchy.test.js",
+    "test:programs": "jest suites/07-programs.test.js",
+    "test:users": "jest suites/08-users.test.js",
+    "test:verbose": "jest --runInBand --verbose"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "form-data": "^4.0.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
