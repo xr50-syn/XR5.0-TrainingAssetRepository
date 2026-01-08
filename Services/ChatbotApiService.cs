@@ -165,12 +165,16 @@ namespace XR50TrainingAssetRepo.Services
         {
             try
             {
+                _logger.LogInformation("Checking Chatbot API availability at: {BaseAddress}health", _httpClient.BaseAddress);
                 var response = await _httpClient.GetAsync("health");
+                var content = await response.Content.ReadAsStringAsync();
+                _logger.LogInformation("Chatbot API health check response: {StatusCode} - {Content}",
+                    response.StatusCode, content);
                 return response.IsSuccessStatusCode;
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Chatbot API health check failed");
+                _logger.LogWarning(ex, "Chatbot API health check failed - API may be unavailable");
                 return false;
             }
         }
