@@ -259,7 +259,15 @@ namespace XR50TrainingAssetRepo.Services
             var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
             var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
             var tenantDbName = GetTenantSchema(tenantName);
-            var tenantConnectionString = baseConnectionString?.Replace($"Database={baseDatabaseName}", $"Database={tenantDbName}");
+            // Use case-insensitive replacement for connection string (database= vs Database=)
+            var tenantConnectionString = Regex.Replace(
+                baseConnectionString ?? "",
+                $"database={Regex.Escape(baseDatabaseName)}",
+                $"database={tenantDbName}",
+                RegexOptions.IgnoreCase);
+
+            _logger.LogDebug("Created tenant connection for {Tenant}: base={Base}, tenant={TenantDb}",
+                tenantName, baseDatabaseName, tenantDbName);
 
             var optionsBuilder = new DbContextOptionsBuilder<XR50TrainingContext>();
             optionsBuilder.UseMySql(tenantConnectionString!, ServerVersion.AutoDetect(tenantConnectionString!));
