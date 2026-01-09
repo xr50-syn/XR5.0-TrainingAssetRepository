@@ -289,6 +289,7 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("materials", new OpenApiInfo { Title = "4. Material Management", Version = "v1" });
     c.SwaggerDoc("assets", new OpenApiInfo { Title = "5. Asset Management", Version = "v1" });
     c.SwaggerDoc("users", new OpenApiInfo   { Title = "6. User Management", Version = "v1" });
+    c.SwaggerDoc("chat", new OpenApiInfo { Title = "7. Chat API", Version = "v1", Description = "Chatbot conversation endpoints" });
 
     c.SwaggerDoc("all", new OpenApiInfo { 
         Title = "Complete XR50 Training Asset Repository API", 
@@ -312,6 +313,7 @@ builder.Services.AddSwaggerGen(c =>
             "materials" => controllerName.Contains("materials"),
             "assets" => controllerName.Contains("Assets"),
             "users" => controllerName.Contains("Users"),
+            "chat" => controllerName.Equals("Chat", StringComparison.OrdinalIgnoreCase),
             "test" => controllerName.Contains("test"),
             _ => false
         };
@@ -507,6 +509,9 @@ public static class ServiceCollectionExtensions
 
         // Chatbot API Service (HttpClient-based)
         services.AddHttpClient<IChatbotApiService, ChatbotApiService>();
+
+        // Chat Service for chatbot conversations
+        services.AddHttpClient<IChatService, ChatService>();
 
         // Background service for AI status synchronization (database-driven, adaptive polling)
         services.AddHostedService<AiStatusSyncService>();
