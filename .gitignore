@@ -373,3 +373,4 @@ app/
 .env
 .codegpt
 .claude/
+TODO.md
