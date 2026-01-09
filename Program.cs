@@ -506,6 +506,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<XR50TrainingAssetRepo.Services.Materials.ISimpleMaterialService, XR50TrainingAssetRepo.Services.Materials.SimpleMaterialService>();
         services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IVoiceMaterialService, XR50TrainingAssetRepo.Services.Materials.VoiceMaterialService>();
         services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IUserMaterialService, XR50TrainingAssetRepo.Services.Materials.UserMaterialService>();
+        services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IQuizProgressService, XR50TrainingAssetRepo.Services.Materials.QuizProgressService>();
 
         // Chatbot API Service (HttpClient-based)
         services.AddHttpClient<IChatbotApiService, ChatbotApiService>();
