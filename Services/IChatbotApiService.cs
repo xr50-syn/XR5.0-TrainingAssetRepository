@@ -10,8 +10,9 @@ namespace XR50TrainingAssetRepo.Services
         /// </summary>
         /// <param name="assetId">The asset ID to submit</param>
         /// <param name="assetUrl">The URL where the asset can be accessed</param>
+        /// <param name="filetype">The file type/extension (e.g., "pdf", "docx")</param>
         /// <returns>The job ID from Chatbot API</returns>
-        Task<string> SubmitDocumentAsync(int assetId, string assetUrl);
+        Task<string> SubmitDocumentAsync(int assetId, string assetUrl, string filetype);
 
         /// <summary>
         /// Gets the status of a submitted job.

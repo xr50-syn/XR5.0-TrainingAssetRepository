@@ -282,7 +282,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 {
                     try
                     {
-                        var jobId = await _chatbotApiService.SubmitDocumentAsync(asset.Id, asset.URL);
+                        var jobId = await _chatbotApiService.SubmitDocumentAsync(asset.Id, asset.URL, asset.Filetype ?? "pdf");
                         asset.JobId = jobId;
                         asset.AiAvailable = "process";
                         hasSubmissions = true;

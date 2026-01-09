@@ -39,19 +39,30 @@ namespace XR50TrainingAssetRepo.Services
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
         }
 
-        public async Task<string> SubmitDocumentAsync(int assetId, string assetUrl)
+        public async Task<string> SubmitDocumentAsync(int assetId, string assetUrl, string filetype)
         {
             try
             {
                 _logger.LogInformation("Submitting asset {AssetId} to Chatbot API for processing", assetId);
 
-                var request = new ChatbotSubmitRequest
-                {
-                    AssetId = assetId,
-                    DocumentUrl = assetUrl
-                };
+                // Download the file from the asset URL
+                using var downloadClient = new HttpClient();
+                var fileBytes = await downloadClient.GetByteArrayAsync(assetUrl);
 
-                var response = await _httpClient.PostAsJsonAsync("document", request);
+                // Use filetype to determine content type and ensure filename has correct extension
+                var contentType = GetContentTypeFromFiletype(filetype);
+                var fileName = GetFileNameWithExtension(assetUrl, filetype);
+
+                // Create multipart form-data content with the file
+                using var content = new MultipartFormDataContent();
+                var fileContent = new ByteArrayContent(fileBytes);
+                fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+                content.Add(fileContent, "file", fileName);
+
+                // Optionally include asset_id as form field
+                content.Add(new StringContent(assetId.ToString()), "asset_id");
+
+                var response = await _httpClient.PostAsync("document", content);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -88,9 +99,15 @@ namespace XR50TrainingAssetRepo.Services
         {
             try
             {
-                _logger.LogDebug("Checking status for Chatbot job {JobId}", jobId);
+                var statusUrl = $"document/jobs/{jobId}";
+                _logger.LogInformation("Checking status for job {JobId} at {BaseAddress}{Url}",
+                    jobId, _httpClient.BaseAddress, statusUrl);
 
-                var response = await _httpClient.GetAsync($"document/jobs/{jobId}");
+                var response = await _httpClient.GetAsync(statusUrl);
+                var rawContent = await response.Content.ReadAsStringAsync();
+
+                _logger.LogInformation("Job {JobId} status response: {StatusCode} - {RawContent}",
+                    jobId, response.StatusCode, rawContent);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -105,23 +122,27 @@ namespace XR50TrainingAssetRepo.Services
                         };
                     }
 
-                    var errorContent = await response.Content.ReadAsStringAsync();
                     _logger.LogError("Failed to get status for job {JobId}: {StatusCode} - {Error}",
-                        jobId, response.StatusCode, errorContent);
+                        jobId, response.StatusCode, rawContent);
                     throw new ChatbotApiException($"Failed to get job status: {response.StatusCode}");
                 }
 
-                var result = await response.Content.ReadFromJsonAsync<ChatbotStatusResponse>();
+                var result = JsonSerializer.Deserialize<ChatbotStatusResponse>(rawContent);
 
                 if (result == null)
                 {
+                    _logger.LogError("Failed to deserialize job status response for {JobId}: {RawContent}", jobId, rawContent);
                     throw new ChatbotApiException("Invalid response from Chatbot API: null status");
                 }
+
+                var mappedStatus = MapChatbotStatus(result.Status);
+                _logger.LogInformation("Job {JobId} raw status: '{RawStatus}' mapped to: '{MappedStatus}'",
+                    jobId, result.Status, mappedStatus);
 
                 return new ChatbotJobStatus
                 {
                     JobId = result.JobId ?? jobId,
-                    Status = MapChatbotStatus(result.Status),
+                    Status = mappedStatus,
                     Error = result.Error,
                     Progress = result.Progress,
                     CreatedAt = result.CreatedAt,
@@ -144,12 +165,16 @@ namespace XR50TrainingAssetRepo.Services
         {
             try
             {
+                _logger.LogInformation("Checking Chatbot API availability at: {BaseAddress}health", _httpClient.BaseAddress);
                 var response = await _httpClient.GetAsync("health");
+                var content = await response.Content.ReadAsStringAsync();
+                _logger.LogInformation("Chatbot API health check response: {StatusCode} - {Content}",
+                    response.StatusCode, content);
                 return response.IsSuccessStatusCode;
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Chatbot API health check failed");
+                _logger.LogWarning(ex, "Chatbot API health check failed - API may be unavailable");
                 return false;
             }
         }
@@ -168,6 +193,47 @@ namespace XR50TrainingAssetRepo.Services
                 "failed" => "failed",
                 "error" => "failed",
                 _ => "pending"
+            };
+        }
+
+        private static string GetFileNameWithExtension(string url, string filetype)
+        {
+            var uri = new Uri(url);
+            var fileName = Path.GetFileName(uri.LocalPath);
+
+            if (string.IsNullOrEmpty(fileName))
+            {
+                fileName = "document";
+            }
+
+            // Ensure filename has the correct extension based on filetype
+            var currentExtension = Path.GetExtension(fileName).TrimStart('.').ToLowerInvariant();
+            var expectedExtension = filetype.TrimStart('.').ToLowerInvariant();
+
+            if (currentExtension != expectedExtension)
+            {
+                // Add or replace extension
+                var nameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
+                fileName = $"{nameWithoutExt}.{expectedExtension}";
+            }
+
+            return fileName;
+        }
+
+        private static string GetContentTypeFromFiletype(string filetype)
+        {
+            var ext = filetype.TrimStart('.').ToLowerInvariant();
+            return ext switch
+            {
+                "pdf" => "application/pdf",
+                "doc" => "application/msword",
+                "docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "txt" => "text/plain",
+                "html" => "text/html",
+                "htm" => "text/html",
+                "json" => "application/json",
+                "xml" => "application/xml",
+                _ => "application/octet-stream"
             };
         }
     }

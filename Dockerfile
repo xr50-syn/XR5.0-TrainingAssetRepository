@@ -42,5 +42,9 @@ COPY run-migrations.sh .
 RUN chmod +x run-migrations.sh
 RUN apt-get update && apt-get install -y default-mysql-client jq
 
+# Health check for Docker
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:5286/health || exit 1
+
 # ENTRYPOINT ["dotnet", "XR50TrainingAssetRepo.dll"]
 ENTRYPOINT ["./run-migrations.sh"]

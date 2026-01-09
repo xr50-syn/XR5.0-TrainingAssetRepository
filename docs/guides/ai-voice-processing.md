@@ -30,8 +30,8 @@
 POST /api/materials
 
 ### Backend Flow
-1. Call Chatbot API  
-   POST {ChatbotApi}/api/document
+1. Call Chatbot API
+   POST {ChatbotApi}/document
 2. Change assets status to `process`
 3. Create Voice Material with status `process`
 
@@ -57,8 +57,8 @@ GET /api/assets
 
 ### Backend Logic
 1. For each asset with `ai_available = 'process'`
-2. Call Chatbot API  
-   GET {ChatbotApi}/api/document/jobs/{job_id}
+2. Call Chatbot API
+   GET {ChatbotApi}/document/jobs/{job_id}
 3. If job status is `success`:
    - Update asset `ai_available` to `ready`
 
@@ -103,5 +103,5 @@ POST /asset/{id}/submit
 ```
 
 ### Backend Flow
-1. POST {ChatbotApi}/api/document
+1. POST {ChatbotApi}/document
 2. Update asset status to `process`

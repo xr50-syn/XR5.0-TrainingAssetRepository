@@ -432,7 +432,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapControllers();
- 
+
+// Simple health endpoint for Docker health checks
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));
 
 app.Run();
 

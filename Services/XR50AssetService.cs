@@ -878,7 +878,7 @@ namespace XR50TrainingAssetRepo.Services
 
             try
             {
-                var jobId = await _chatbotApiService.SubmitDocumentAsync(assetId, asset.URL);
+                var jobId = await _chatbotApiService.SubmitDocumentAsync(assetId, asset.URL, asset.Filetype ?? "pdf");
                 asset.JobId = jobId;
                 asset.AiAvailable = "process";
 
@@ -903,9 +903,12 @@ namespace XR50TrainingAssetRepo.Services
                 .Where(a => a.AiAvailable == "process" && !string.IsNullOrEmpty(a.JobId))
                 .ToListAsync();
 
+            _logger.LogInformation("Found {Count} assets with AiAvailable='process' and JobId set",
+                processingAssets.Count);
+
             if (!processingAssets.Any())
             {
-                _logger.LogDebug("No assets currently processing");
+                _logger.LogInformation("No assets currently processing");
                 return 0;
             }
 
@@ -913,15 +916,21 @@ namespace XR50TrainingAssetRepo.Services
 
             foreach (var asset in processingAssets)
             {
+                _logger.LogInformation("Checking status for Asset {AssetId} with JobId: {JobId}",
+                    asset.Id, asset.JobId);
+
                 try
                 {
                     var status = await _chatbotApiService.GetJobStatusAsync(asset.JobId!);
+
+                    _logger.LogInformation("Asset {AssetId} status check returned: Status='{Status}'",
+                        asset.Id, status.Status);
 
                     if (status.Status == "success")
                     {
                         asset.AiAvailable = "ready";
                         updatedCount++;
-                        _logger.LogInformation("Asset {AssetId} AI processing completed", asset.Id);
+                        _logger.LogInformation("Asset {AssetId} AI processing completed - updating to 'ready'", asset.Id);
                     }
                     else if (status.Status == "failed")
                     {
@@ -930,11 +939,20 @@ namespace XR50TrainingAssetRepo.Services
                         updatedCount++;
                         _logger.LogWarning("Asset {AssetId} AI processing failed: {Error}", asset.Id, status.Error);
                     }
-                    // If still processing, leave as is
+                    else
+                    {
+                        _logger.LogInformation("Asset {AssetId} still processing (status: {Status})",
+                            asset.Id, status.Status);
+                    }
                 }
                 catch (ChatbotApiException ex)
                 {
-                    _logger.LogWarning(ex, "Failed to check status for asset {AssetId}", asset.Id);
+                    _logger.LogWarning(ex, "Failed to check status for asset {AssetId}: {Message}",
+                        asset.Id, ex.Message);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Unexpected error checking status for asset {AssetId}", asset.Id);
                 }
             }
 

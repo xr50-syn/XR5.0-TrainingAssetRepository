@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using MySqlConnector;
 using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Models;
+using System.Text.RegularExpressions;
 
 namespace XR50TrainingAssetRepo.Services
 {
@@ -107,11 +109,8 @@ namespace XR50TrainingAssetRepo.Services
 
                 try
                 {
-                    using var tenantScope = _serviceProvider.CreateScope();
-                    var dbContextFactory = tenantScope.ServiceProvider.GetRequiredService<IXR50TenantDbContextFactory>();
-
                     var processingCount = await SyncTenantAssetsAsync(
-                        dbContextFactory, chatbotApiService, tenant.TenantName);
+                        chatbotApiService, tenant.TenantName);
 
                     totalProcessingJobs += processingCount;
                 }
@@ -128,11 +127,11 @@ namespace XR50TrainingAssetRepo.Services
         /// Sync assets for a single tenant. Returns count of jobs still processing.
         /// </summary>
         private async Task<int> SyncTenantAssetsAsync(
-            IXR50TenantDbContextFactory dbContextFactory,
             IChatbotApiService chatbotApiService,
             string tenantName)
         {
-            using var context = dbContextFactory.CreateDbContext();
+            // Create context directly with fixed tenant (background service has no HttpContext)
+            using var context = CreateTenantContext(tenantName);
 
             // Query database for processing assets
             var processingAssets = await context.Assets
@@ -250,6 +249,60 @@ namespace XR50TrainingAssetRepo.Services
             }
 
             await context.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Creates a DbContext for a specific tenant (used in background service without HttpContext)
+        /// </summary>
+        private XR50TrainingContext CreateTenantContext(string tenantName)
+        {
+            var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
+            var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
+            var tenantDbName = GetTenantSchema(tenantName);
+            // Use case-insensitive replacement for connection string (database= vs Database=)
+            var tenantConnectionString = Regex.Replace(
+                baseConnectionString ?? "",
+                $"database={Regex.Escape(baseDatabaseName)}",
+                $"database={tenantDbName}",
+                RegexOptions.IgnoreCase);
+
+            _logger.LogDebug("Created tenant connection for {Tenant}: base={Base}, tenant={TenantDb}",
+                tenantName, baseDatabaseName, tenantDbName);
+
+            var optionsBuilder = new DbContextOptionsBuilder<XR50TrainingContext>();
+            optionsBuilder.UseMySql(tenantConnectionString!, ServerVersion.AutoDetect(tenantConnectionString!));
+
+            var tenantService = new DirectTenantService(tenantName);
+            return new XR50TrainingContext(optionsBuilder.Options, tenantService, _configuration);
+        }
+
+        private static string GetTenantSchema(string tenantName)
+        {
+            var sanitized = Regex.Replace(tenantName, @"[^a-zA-Z0-9_]", "_");
+            return $"xr50_tenant_{sanitized}";
+        }
+
+        /// <summary>
+        /// Helper class for direct tenant service (no HttpContext required)
+        /// </summary>
+        private class DirectTenantService : IXR50TenantService
+        {
+            private readonly string _tenantName;
+
+            public DirectTenantService(string tenantName)
+            {
+                _tenantName = tenantName;
+            }
+
+            public string GetCurrentTenant() => _tenantName;
+            public Task<bool> ValidateTenantAsync(string tenantId) => Task.FromResult(true);
+            public Task<bool> TenantExistsAsync(string tenantName) => Task.FromResult(true);
+            public Task<XR50Tenant> CreateTenantAsync(XR50Tenant tenant) => Task.FromResult(tenant);
+            public string GetTenantSchema(string tenantName)
+            {
+                var sanitized = Regex.Replace(tenantName, @"[^a-zA-Z0-9_]", "_");
+                return $"xr50_tenant_{sanitized}";
+            }
         }
     }
 }
