@@ -422,7 +422,7 @@ if (app.Environment.IsDevelopment())
           c.SwaggerEndpoint("/swagger/assets/swagger.json", "5. Asset Management");
           c.SwaggerEndpoint("/swagger/users/swagger.json", "6. User Management");
           c.SwaggerEndpoint("/swagger/v1/swagger.json", "Default");
-
+          c.SwaggerEndpoint("/swagger/chat/swagger.json", "7. Chat API");
           // OAuth2 configuration for Swagger UI
           c.OAuthClientId("xr50-swagger");
           c.OAuthAppName("XR50 Training API - Swagger");
