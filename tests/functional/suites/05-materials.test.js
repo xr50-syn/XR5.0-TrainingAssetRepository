@@ -92,6 +92,18 @@ describe('Material Operations', () => {
         global.__TEST_CONFIG__?.createdResources?.materials?.push(response.data.id);
       }
     });
+
+    test('can create chatbot material', async () => {
+      const material = testData.createChatbotMaterial();
+      const response = await apiClient.createMaterial(material);
+
+      expect([200, 201, 401, 403]).toContain(response.status);
+
+      if (response.status === 200 || response.status === 201) {
+        expect(response.data).toHaveProperty('type', 'Chatbot');
+        global.__TEST_CONFIG__?.createdResources?.materials?.push(response.data.id);
+      }
+    });
   });
 
   describe('Read Materials', () => {

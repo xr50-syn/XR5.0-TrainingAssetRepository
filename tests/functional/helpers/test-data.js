@@ -189,6 +189,20 @@ function createCompositeMaterial(suffix = '') {
 }
 
 /**
+ * Generate a chatbot material
+ */
+function createChatbotMaterial(suffix = '', endpoint = 'https://test.xr50.work') {
+  return {
+    name: `Test Chatbot ${suffix || timestamp}`,
+    description: 'A test chatbot material for AI conversations',
+    type: 'Chatbot',
+    chatbotConfig: endpoint,
+    chatbotModel: 'default',
+    chatbotPrompt: 'You are a helpful assistant for testing purposes.'
+  };
+}
+
+/**
  * Generate a training program
  */
 function createTrainingProgram(suffix = '') {
@@ -353,6 +367,7 @@ module.exports = {
   createChecklistMaterial,
   createWorkflowMaterial,
   createCompositeMaterial,
+  createChatbotMaterial,
   createTrainingProgram,
   createProgramWithPaths,
   createTestUser,

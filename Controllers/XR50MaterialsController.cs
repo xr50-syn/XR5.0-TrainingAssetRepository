@@ -22,6 +22,28 @@ namespace XR50TrainingAssetRepo.Controllers
             public string? assetData { get; set; }
             public IFormFile? File { get; set; }
         }
+
+    /// <summary>
+    /// Form data model for creating materials with optional file upload.
+    /// Used by the unified POST /materials endpoint.
+    /// </summary>
+    public class MaterialCreateFormData
+    {
+        /// <summary>
+        /// JSON string containing the material data (name, description, type, etc.)
+        /// </summary>
+        public string material { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Optional JSON string containing asset metadata
+        /// </summary>
+        public string? assetData { get; set; }
+
+        /// <summary>
+        /// Optional file to upload as an asset
+        /// </summary>
+        public IFormFile? file { get; set; }
+    }
     [Route("api/{tenantName}/[controller]")]
     [ApiController]
     public class materialsController : ControllerBase
@@ -1401,76 +1423,70 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             var extension = Path.GetExtension(filename)?.ToLowerInvariant();
             return extension?.TrimStart('.') ?? "unknown";
         }
+        /// <summary>
+        /// Create a new material with optional file upload.
+        /// </summary>
+        /// <remarks>
+        /// The 'material' field should contain a JSON string with the material data:
+        /// ```json
+        /// {
+        ///   "name": "My Material",
+        ///   "description": "Description here",
+        ///   "type": "Chatbot",
+        ///   "chatbotConfig": "https://api.example.com",
+        ///   "chatbotModel": "default",
+        ///   "chatbotPrompt": "You are a helpful assistant."
+        /// }
+        /// ```
+        /// </remarks>
+        /// <param name="tenantName">The tenant name</param>
+        /// <param name="formData">Form data containing material JSON, optional asset data, and optional file</param>
+        /// <returns>The created material</returns>
         [HttpPost]
-        // POST: api/{tenantName}/materials - Unified material creation endpoint
-        // Accepts both JSON (application/json) for material-only and multipart/form-data for material with optional file uploads
-        // Form-data parameters: material (JSON string, required), file (binary, optional), assetData (JSON string, optional)
-        public async Task<ActionResult<CreateMaterialResponse>> PostMaterialDetailed(string tenantName)
+        [Consumes("multipart/form-data")]
+        public async Task<ActionResult<CreateMaterialResponse>> PostMaterialDetailed(
+            string tenantName,
+            [FromForm] MaterialCreateFormData formData)
         {
             try
             {
                 JsonElement materialData;
-                IFormFile? file = null;
+                IFormFile? file = formData.file;
                 JsonElement? assetData = null;
 
-                var contentType = Request.ContentType?.ToLower() ?? "";
+                _logger.LogInformation("Received material creation request via form-data");
 
-                _logger.LogInformation("Received material creation request with Content-Type: {ContentType}", contentType);
-
-                // Handle different content types
-                if (contentType.Contains("multipart/form-data"))
+                // Parse the material JSON
+                if (string.IsNullOrEmpty(formData.material))
                 {
-                    // Form data request with optional file upload
-                    var form = await Request.ReadFormAsync();
+                    return BadRequest("material is required");
+                }
 
-                    if (!form.ContainsKey("material"))
-                    {
-                        return BadRequest("material is required in form-data requests");
-                    }
+                try
+                {
+                    materialData = JsonSerializer.Deserialize<JsonElement>(formData.material);
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogError(ex, "Invalid JSON in material parameter");
+                    return BadRequest("Invalid JSON format in material");
+                }
 
-                    var materialDataString = form["material"].ToString();
+                // Extract optional assetData
+                if (!string.IsNullOrEmpty(formData.assetData))
+                {
                     try
                     {
-                        materialData = JsonSerializer.Deserialize<JsonElement>(materialDataString);
+                        assetData = JsonSerializer.Deserialize<JsonElement>(formData.assetData);
                     }
                     catch (JsonException ex)
                     {
-                        _logger.LogError(ex, "Invalid JSON in material parameter");
-                        return BadRequest("Invalid JSON format in material");
+                        _logger.LogError(ex, "Invalid JSON in assetData parameter");
+                        return BadRequest("Invalid JSON format in assetData");
                     }
-
-                    // Extract optional file
-                    file = form.Files.GetFile("file");
-
-                    // Extract optional assetData
-                    if (form.ContainsKey("assetData") && !string.IsNullOrEmpty(form["assetData"]))
-                    {
-                        try
-                        {
-                            assetData = JsonSerializer.Deserialize<JsonElement>(form["assetData"]);
-                        }
-                        catch (JsonException ex)
-                        {
-                            _logger.LogError(ex, "Invalid JSON in assetData parameter");
-                            return BadRequest("Invalid JSON format in assetData");
-                        }
-                    }
-
-                    _logger.LogInformation("Parsed form-data request (file: {HasFile})", file != null);
                 }
-                else if (contentType.Contains("application/json"))
-                {
-                    // JSON request - material only (no file)
-                    using var reader = new StreamReader(Request.Body);
-                    var body = await reader.ReadToEndAsync();
-                    materialData = JsonSerializer.Deserialize<JsonElement>(body);
-                    _logger.LogInformation("Parsed JSON request body");
-                }
-                else
-                {
-                    _logger.LogWarning("Unsupported Content-Type: {ContentType}", contentType);
-                    return StatusCode(415, $"Unsupported Media Type. Please use 'application/json' or 'multipart/form-data'. Received: {contentType}");
-                }
+
+                _logger.LogInformation("Parsed form-data request (file: {HasFile})", file != null);
 
                 // Parse the incoming JSON to determine material type
                 var materialType = GetMaterialTypeFromJson(materialData);
@@ -1487,6 +1503,63 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         file != null, assetData.HasValue);
                     return await CreateMaterialWithAsset(tenantName, materialData, materialType, file, assetData);
                 }
+
+                // Material-only creation (no asset)
+                return materialType.ToLower() switch
+                {
+                    "workflow" => await CreateWorkflowFromJson(tenantName, materialData),
+                    "video" => await CreateVideoFromJson(tenantName, materialData),
+                    "checklist" => await CreateChecklistFromJson(tenantName, materialData),
+                    "questionnaire" => await CreateQuestionnaireFromJson(tenantName, materialData),
+                    "quiz" => await CreateQuizFromJson(tenantName, materialData),
+                    "voice" => await CreateVoiceFromJson(tenantName, materialData),
+                    _ => await CreateBasicMaterialFromJson(tenantName, materialData)
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating material for tenant: {TenantName}", tenantName);
+                return StatusCode(500, $"Error creating material: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Create a new material using JSON body (no file upload).
+        /// </summary>
+        /// <remarks>
+        /// Use this endpoint for creating materials without file uploads.
+        /// For materials that require file uploads, use the multipart/form-data endpoint instead.
+        ///
+        /// Example request body for a Chatbot material:
+        /// ```json
+        /// {
+        ///   "name": "My Chatbot",
+        ///   "description": "A helpful assistant",
+        ///   "type": "Chatbot",
+        ///   "chatbotConfig": "https://api.example.com",
+        ///   "chatbotModel": "default",
+        ///   "chatbotPrompt": "You are a helpful assistant."
+        /// }
+        /// ```
+        /// </remarks>
+        /// <param name="tenantName">The tenant name</param>
+        /// <param name="materialData">The material data as JSON</param>
+        /// <returns>The created material</returns>
+        [HttpPost("json")]
+        [Consumes("application/json")]
+        public async Task<ActionResult<CreateMaterialResponse>> PostMaterialJson(
+            string tenantName,
+            [FromBody] JsonElement materialData)
+        {
+            try
+            {
+                _logger.LogInformation("Received material creation request via JSON body");
+
+                // Parse the incoming JSON to determine material type
+                var materialType = GetMaterialTypeFromJson(materialData);
+
+                _logger.LogInformation("Creating material of type: {MaterialType} for tenant: {TenantName}",
+                    materialType, tenantName);
 
                 // Material-only creation (no asset)
                 return materialType.ToLower() switch
