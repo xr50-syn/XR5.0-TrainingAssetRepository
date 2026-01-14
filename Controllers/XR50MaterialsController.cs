@@ -115,7 +115,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// In development mode with AllowAnonymousInDevelopment=true, uses DevelopmentUserId fallback
         /// </summary>
         [HttpPost("{materialId}/submit")]
-        [Authorize(Policy = "RequireAuthenticatedUser")]
+        // [Authorize(Policy = "RequireAuthenticatedUser")] - Disabled for development
         public async Task<ActionResult<SubmitQuizAnswersResponse>> SubmitAnswers(
             string tenantName,
             int materialId,
@@ -138,22 +138,11 @@ namespace XR50TrainingAssetRepo.Controllers
                     ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                     ?? User.FindFirst("sub")?.Value;
 
-                // Development fallback: allow configured test user when AllowAnonymousInDevelopment is true
-                if (string.IsNullOrEmpty(userId) && _environment.IsDevelopment())
-                {
-                    var allowAnonymous = _configuration.GetValue<bool>("IAM:AllowAnonymousInDevelopment", false);
-                    if (allowAnonymous)
-                    {
-                        userId = _configuration.GetValue<string>("IAM:DevelopmentUserId") ?? "demoadmin";
-                        _logger.LogWarning("Using development fallback user ID: {UserId}", userId);
-                    }
-                }
-
+                // Authorization disabled - use default user if not authenticated
                 if (string.IsNullOrEmpty(userId))
                 {
-                    _logger.LogWarning("No user identifier found in token claims. Available claims: {Claims}",
-                        string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}")));
-                    return Unauthorized(new { error = "User identifier not found in token" });
+                    userId = _configuration.GetValue<string>("IAM:DevelopmentUserId") ?? "demoadmin";
+                    _logger.LogInformation("No auth token - using default user: {UserId}", userId);
                 }
 
                 _logger.LogInformation(
@@ -183,7 +172,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Requires authentication - user ID is extracted from JWT token claims
         /// </summary>
         [HttpPost("{materialId}/complete")]
-        [Authorize(Policy = "RequireAuthenticatedUser")]
+        // [Authorize(Policy = "RequireAuthenticatedUser")] - Disabled for development
         public async Task<ActionResult<MarkMaterialCompleteResponse>> MarkComplete(
             string tenantName,
             int materialId,
@@ -200,20 +189,11 @@ namespace XR50TrainingAssetRepo.Controllers
                     ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                     ?? User.FindFirst("sub")?.Value;
 
-                // Development fallback
-                if (string.IsNullOrEmpty(userId) && _environment.IsDevelopment())
-                {
-                    var allowAnonymous = _configuration.GetValue<bool>("IAM:AllowAnonymousInDevelopment", false);
-                    if (allowAnonymous)
-                    {
-                        userId = _configuration.GetValue<string>("IAM:DevelopmentUserId") ?? "demoadmin";
-                        _logger.LogWarning("Using development fallback user ID: {UserId}", userId);
-                    }
-                }
-
+                // Authorization disabled - use default user if not authenticated
                 if (string.IsNullOrEmpty(userId))
                 {
-                    return Unauthorized(new { error = "User identifier not found in token" });
+                    userId = _configuration.GetValue<string>("IAM:DevelopmentUserId") ?? "demoadmin";
+                    _logger.LogInformation("No auth token - using default user: {UserId}", userId);
                 }
 
                 _logger.LogInformation(

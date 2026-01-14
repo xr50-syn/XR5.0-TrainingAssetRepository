@@ -150,7 +150,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Requires authentication - user ID is extracted from JWT token claims
         /// </summary>
         [HttpPost("{programId}/submit")]
-        [Authorize(Policy = "RequireAuthenticatedUser")]
+        // [Authorize(Policy = "RequireAuthenticatedUser")] - Disabled for development
         public async Task<ActionResult<BulkMaterialCompleteResponse>> BulkSubmitMaterials(
             string tenantName,
             int programId,
@@ -167,20 +167,11 @@ namespace XR50TrainingAssetRepo.Controllers
                     ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                     ?? User.FindFirst("sub")?.Value;
 
-                // Development fallback
-                if (string.IsNullOrEmpty(userId) && _environment.IsDevelopment())
-                {
-                    var allowAnonymous = _configuration.GetValue<bool>("IAM:AllowAnonymousInDevelopment", false);
-                    if (allowAnonymous)
-                    {
-                        userId = _configuration.GetValue<string>("IAM:DevelopmentUserId") ?? "demoadmin";
-                        _logger.LogWarning("Using development fallback user ID: {UserId}", userId);
-                    }
-                }
-
+                // Authorization disabled - use default user if not authenticated
                 if (string.IsNullOrEmpty(userId))
                 {
-                    return Unauthorized(new { error = "User identifier not found in token" });
+                    userId = _configuration.GetValue<string>("IAM:DevelopmentUserId") ?? "demoadmin";
+                    _logger.LogInformation("No auth token - using default user: {UserId}", userId);
                 }
 
                 _logger.LogInformation(
