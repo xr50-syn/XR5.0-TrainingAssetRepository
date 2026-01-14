@@ -1500,53 +1500,86 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         /// ```
         /// </remarks>
         /// <param name="tenantName">The tenant name</param>
-        /// <param name="formData">Form data containing material JSON, optional asset data, and optional file</param>
+        /// <param name="formData">Form data containing material JSON, optional asset data, and optional file (for multipart/form-data requests)</param>
         /// <returns>The created material</returns>
         [HttpPost]
-        [Consumes("multipart/form-data")]
         public async Task<ActionResult<CreateMaterialResponse>> PostMaterialDetailed(
             string tenantName,
-            [FromForm] MaterialCreateFormData formData)
+            [FromForm] MaterialCreateFormData? formData = null)
         {
             try
             {
                 JsonElement materialData;
-                IFormFile? file = formData.file;
+                IFormFile? file = null;
                 JsonElement? assetData = null;
 
-                _logger.LogInformation("Received material creation request via form-data");
+                var contentType = Request.ContentType?.ToLower() ?? "";
 
-                // Parse the material JSON
-                if (string.IsNullOrEmpty(formData.material))
+                // Handle JSON content type
+                if (contentType.Contains("application/json"))
                 {
-                    return BadRequest("material is required");
-                }
+                    _logger.LogInformation("Received material creation request via JSON body");
 
-                try
-                {
-                    materialData = JsonSerializer.Deserialize<JsonElement>(formData.material);
-                }
-                catch (JsonException ex)
-                {
-                    _logger.LogError(ex, "Invalid JSON in material parameter");
-                    return BadRequest("Invalid JSON format in material");
-                }
+                    using var reader = new StreamReader(Request.Body);
+                    var body = await reader.ReadToEndAsync();
 
-                // Extract optional assetData
-                if (!string.IsNullOrEmpty(formData.assetData))
-                {
+                    if (string.IsNullOrEmpty(body))
+                    {
+                        return BadRequest("Request body is required");
+                    }
+
                     try
                     {
-                        assetData = JsonSerializer.Deserialize<JsonElement>(formData.assetData);
+                        materialData = JsonSerializer.Deserialize<JsonElement>(body);
                     }
                     catch (JsonException ex)
                     {
-                        _logger.LogError(ex, "Invalid JSON in assetData parameter");
-                        return BadRequest("Invalid JSON format in assetData");
+                        _logger.LogError(ex, "Invalid JSON in request body");
+                        return BadRequest("Invalid JSON format in request body");
                     }
                 }
+                // Handle multipart/form-data content type
+                else if (contentType.Contains("multipart/form-data"))
+                {
+                    _logger.LogInformation("Received material creation request via form-data");
 
-                _logger.LogInformation("Parsed form-data request (file: {HasFile})", file != null);
+                    if (formData == null || string.IsNullOrEmpty(formData.material))
+                    {
+                        return BadRequest("material is required");
+                    }
+
+                    file = formData.file;
+
+                    try
+                    {
+                        materialData = JsonSerializer.Deserialize<JsonElement>(formData.material);
+                    }
+                    catch (JsonException ex)
+                    {
+                        _logger.LogError(ex, "Invalid JSON in material parameter");
+                        return BadRequest("Invalid JSON format in material");
+                    }
+
+                    // Extract optional assetData
+                    if (!string.IsNullOrEmpty(formData.assetData))
+                    {
+                        try
+                        {
+                            assetData = JsonSerializer.Deserialize<JsonElement>(formData.assetData);
+                        }
+                        catch (JsonException ex)
+                        {
+                            _logger.LogError(ex, "Invalid JSON in assetData parameter");
+                            return BadRequest("Invalid JSON format in assetData");
+                        }
+                    }
+
+                    _logger.LogInformation("Parsed form-data request (file: {HasFile})", file != null);
+                }
+                else
+                {
+                    return BadRequest($"Unsupported content type: {contentType}. Use application/json or multipart/form-data");
+                }
 
                 // Parse the incoming JSON to determine material type
                 var materialType = GetMaterialTypeFromJson(materialData);
