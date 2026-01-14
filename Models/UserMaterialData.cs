@@ -17,6 +17,8 @@ namespace XR50TrainingAssetRepo.Models
 
         public int? ProgramId { get; set; }
 
+        public int? LearningPathId { get; set; }
+
         [Required]
         public int MaterialId { get; set; }
 
@@ -32,6 +34,7 @@ namespace XR50TrainingAssetRepo.Models
         // Navigation properties
         public virtual User? User { get; set; }
         public virtual TrainingProgram? Program { get; set; }
+        public virtual LearningPath? LearningPath { get; set; }
         public virtual Material? Material { get; set; }
     }
 
@@ -45,6 +48,8 @@ namespace XR50TrainingAssetRepo.Models
         public string UserId { get; set; } = "";
 
         public int? ProgramId { get; set; }
+
+        public int? LearningPathId { get; set; }
 
         [Required]
         public int MaterialId { get; set; }
@@ -61,6 +66,7 @@ namespace XR50TrainingAssetRepo.Models
         // Navigation properties
         public virtual User? User { get; set; }
         public virtual TrainingProgram? Program { get; set; }
+        public virtual LearningPath? LearningPath { get; set; }
         public virtual Material? Material { get; set; }
     }
 }

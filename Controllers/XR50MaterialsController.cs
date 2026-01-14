@@ -177,6 +177,66 @@ namespace XR50TrainingAssetRepo.Controllers
             }
         }
 
+        /// <summary>
+        /// Mark a material as complete within a training program (non-scored progress tracking)
+        /// POST /api/{tenantName}/materials/{materialId}/complete
+        /// Requires authentication - user ID is extracted from JWT token claims
+        /// </summary>
+        [HttpPost("{materialId}/complete")]
+        [Authorize(Policy = "RequireAuthenticatedUser")]
+        public async Task<ActionResult<MarkMaterialCompleteResponse>> MarkComplete(
+            string tenantName,
+            int materialId,
+            [FromBody] MarkMaterialCompleteRequest request)
+        {
+            try
+            {
+                // Extract user ID from JWT token claims (same logic as SubmitAnswers)
+                var userId = User.FindFirst("preferred_username")?.Value
+                    ?? User.FindFirst(ClaimTypes.Name)?.Value
+                    ?? User.FindFirst("name")?.Value
+                    ?? User.FindFirst(ClaimTypes.Email)?.Value
+                    ?? User.FindFirst("email")?.Value
+                    ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                    ?? User.FindFirst("sub")?.Value;
+
+                // Development fallback
+                if (string.IsNullOrEmpty(userId) && _environment.IsDevelopment())
+                {
+                    var allowAnonymous = _configuration.GetValue<bool>("IAM:AllowAnonymousInDevelopment", false);
+                    if (allowAnonymous)
+                    {
+                        userId = _configuration.GetValue<string>("IAM:DevelopmentUserId") ?? "dev-test-user";
+                        _logger.LogWarning("Using development fallback user ID: {UserId}", userId);
+                    }
+                }
+
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new { error = "User identifier not found in token" });
+                }
+
+                _logger.LogInformation(
+                    "User {UserId} marking material {MaterialId} as complete in program {ProgramId}, tenant {TenantName}",
+                    userId, materialId, request.program_id, tenantName);
+
+                var result = await _userMaterialService.MarkMaterialCompleteAsync(
+                    userId, materialId, request);
+
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogWarning(ex, "Validation error marking material complete");
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error marking material {MaterialId} as complete", materialId);
+                return StatusCode(500, new { error = "Failed to mark material complete", details = ex.Message });
+            }
+        }
+
 /// Get complete material details with all type-specific properties and child entities
 /// This replaces the need to call different endpoints for different material types
 

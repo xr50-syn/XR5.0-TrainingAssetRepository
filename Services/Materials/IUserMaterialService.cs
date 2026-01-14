@@ -35,5 +35,29 @@ namespace XR50TrainingAssetRepo.Services.Materials
         /// Calculate progress percentage for a user within a program
         /// </summary>
         Task<int> CalculateProgramProgressAsync(string userId, int programId);
+
+        /// <summary>
+        /// Mark a material as complete within a program (non-scored progress tracking)
+        /// </summary>
+        Task<MarkMaterialCompleteResponse> MarkMaterialCompleteAsync(
+            string userId,
+            int materialId,
+            MarkMaterialCompleteRequest request);
+
+        /// <summary>
+        /// Bulk mark multiple materials as complete within a program
+        /// </summary>
+        Task<BulkMaterialCompleteResponse> BulkMarkMaterialsCompleteAsync(
+            string userId,
+            int programId,
+            BulkMaterialCompleteRequest request);
+
+        /// <summary>
+        /// Get progress for a training program (admins see all users, users see only their own)
+        /// </summary>
+        Task<ProgramProgressResponse> GetProgramProgressAsync(
+            int programId,
+            string? userId,
+            bool isAdmin);
     }
 }

@@ -5,10 +5,13 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services;
+using XR50TrainingAssetRepo.Services.Materials;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
@@ -18,15 +21,24 @@ namespace XR50TrainingAssetRepo.Controllers
     {
         private readonly ITrainingProgramService _trainingProgramService;
         private readonly IMaterialService _materialService;
+        private readonly IUserMaterialService _userMaterialService;
+        private readonly IConfiguration _configuration;
+        private readonly IWebHostEnvironment _environment;
         private readonly ILogger<programsController> _logger;
 
         public programsController(
             ITrainingProgramService trainingProgramService,
             IMaterialService materialService,
+            IUserMaterialService userMaterialService,
+            IConfiguration configuration,
+            IWebHostEnvironment environment,
             ILogger<programsController> logger)
         {
             _trainingProgramService = trainingProgramService;
             _materialService = materialService;
+            _userMaterialService = userMaterialService;
+            _configuration = configuration;
+            _environment = environment;
             _logger = logger;
         }
 
@@ -129,6 +141,66 @@ namespace XR50TrainingAssetRepo.Controllers
             {
                 _logger.LogError(ex, "Error creating training program with materials for tenant: {TenantName}", tenantName);
                 return StatusCode(500, "An error occurred while creating the training program");
+            }
+        }
+
+        /// <summary>
+        /// Bulk mark multiple materials as complete within a training program
+        /// POST /api/{tenantName}/programs/{programId}/submit
+        /// Requires authentication - user ID is extracted from JWT token claims
+        /// </summary>
+        [HttpPost("{programId}/submit")]
+        [Authorize(Policy = "RequireAuthenticatedUser")]
+        public async Task<ActionResult<BulkMaterialCompleteResponse>> BulkSubmitMaterials(
+            string tenantName,
+            int programId,
+            [FromBody] BulkMaterialCompleteRequest request)
+        {
+            try
+            {
+                // Extract user ID from JWT token claims
+                var userId = User.FindFirst("preferred_username")?.Value
+                    ?? User.FindFirst(ClaimTypes.Name)?.Value
+                    ?? User.FindFirst("name")?.Value
+                    ?? User.FindFirst(ClaimTypes.Email)?.Value
+                    ?? User.FindFirst("email")?.Value
+                    ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                    ?? User.FindFirst("sub")?.Value;
+
+                // Development fallback
+                if (string.IsNullOrEmpty(userId) && _environment.IsDevelopment())
+                {
+                    var allowAnonymous = _configuration.GetValue<bool>("IAM:AllowAnonymousInDevelopment", false);
+                    if (allowAnonymous)
+                    {
+                        userId = _configuration.GetValue<string>("IAM:DevelopmentUserId") ?? "dev-test-user";
+                        _logger.LogWarning("Using development fallback user ID: {UserId}", userId);
+                    }
+                }
+
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new { error = "User identifier not found in token" });
+                }
+
+                _logger.LogInformation(
+                    "User {UserId} bulk submitting {Count} materials in program {ProgramId}, tenant {TenantName}",
+                    userId, request.material_ids?.Count ?? 0, programId, tenantName);
+
+                var result = await _userMaterialService.BulkMarkMaterialsCompleteAsync(
+                    userId, programId, request);
+
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogWarning(ex, "Validation error in bulk submit");
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error bulk submitting materials in program {ProgramId}", programId);
+                return StatusCode(500, new { error = "Failed to bulk submit materials", details = ex.Message });
             }
         }
 

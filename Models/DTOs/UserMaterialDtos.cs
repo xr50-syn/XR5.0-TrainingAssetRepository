@@ -51,9 +51,121 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public bool success { get; set; }
         public int material_id { get; set; }
         public int? program_id { get; set; }
+        public int? learning_path_id { get; set; }
         public decimal score { get; set; }
         public int progress { get; set; }
+        public int? learning_path_progress { get; set; }
         public string? message { get; set; }
+    }
+
+    #endregion
+
+    #region Mark Complete DTOs
+
+    /// <summary>
+    /// Request body for POST /api/materials/{material_id}/complete
+    /// </summary>
+    public class MarkMaterialCompleteRequest
+    {
+        [Required]
+        public int program_id { get; set; }
+    }
+
+    /// <summary>
+    /// Response for POST /api/materials/{material_id}/complete
+    /// </summary>
+    public class MarkMaterialCompleteResponse
+    {
+        public bool success { get; set; }
+        public int material_id { get; set; }
+        public int program_id { get; set; }
+        public int? learning_path_id { get; set; }
+        public int progress { get; set; }
+        public int? learning_path_progress { get; set; }
+        public string? message { get; set; }
+    }
+
+    #endregion
+
+    #region Bulk Complete DTOs
+
+    /// <summary>
+    /// Request body for POST /api/programs/{program_id}/submit
+    /// </summary>
+    public class BulkMaterialCompleteRequest
+    {
+        [Required]
+        public List<int> material_ids { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Response for POST /api/programs/{program_id}/submit
+    /// </summary>
+    public class BulkMaterialCompleteResponse
+    {
+        public bool success { get; set; }
+        public int program_id { get; set; }
+        public int program_progress { get; set; }
+        public int materials_completed { get; set; }
+        public List<MaterialCompleteResult> results { get; set; } = new();
+        public List<LearningPathProgressSummary> learning_path_summary { get; set; } = new();
+    }
+
+    public class MaterialCompleteResult
+    {
+        public int material_id { get; set; }
+        public bool success { get; set; }
+        public string? error { get; set; }
+        public int? learning_path_id { get; set; }
+        public int? learning_path_progress { get; set; }
+    }
+
+    public class LearningPathProgressSummary
+    {
+        public int learning_path_id { get; set; }
+        public string? learning_path_name { get; set; }
+        public int progress { get; set; }
+    }
+
+    #endregion
+
+    #region Program Progress Query DTOs
+
+    /// <summary>
+    /// Response for GET /api/program-progress/program/{programId}
+    /// Shows progress for all users (admin) or just the requesting user
+    /// </summary>
+    public class ProgramProgressResponse
+    {
+        public int program_id { get; set; }
+        public string program_name { get; set; } = "";
+        public int total_materials { get; set; }
+        public int total_users { get; set; }
+        public double average_progress { get; set; }
+        public List<UserProgramProgressDetail> user_progress { get; set; } = new();
+        public List<LearningPathProgressSummary> learning_paths { get; set; } = new();
+    }
+
+    public class UserProgramProgressDetail
+    {
+        public string user_id { get; set; } = "";
+        public string user_name { get; set; } = "";
+        public int progress { get; set; }
+        public int materials_completed { get; set; }
+        public int total_materials { get; set; }
+        public DateTime? last_activity { get; set; }
+        public List<MaterialProgressDetail> materials { get; set; } = new();
+    }
+
+    public class MaterialProgressDetail
+    {
+        public int material_id { get; set; }
+        public string material_name { get; set; } = "";
+        public string material_type { get; set; } = "";
+        public bool completed { get; set; }
+        public decimal? score { get; set; }
+        public int? learning_path_id { get; set; }
+        public DateTime? completed_at { get; set; }
     }
 
     #endregion
