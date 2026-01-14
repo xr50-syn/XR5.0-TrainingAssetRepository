@@ -536,6 +536,7 @@ namespace XR50TrainingAssetRepo.Services
                     `Id` int NOT NULL AUTO_INCREMENT,
                     `UserId` varchar(255) NOT NULL,
                     `ProgramId` int DEFAULT NULL,
+                    `LearningPathId` int DEFAULT NULL,
                     `MaterialId` int NOT NULL,
                     `Data` json DEFAULT NULL,
                     `CreatedAt` datetime NOT NULL,
@@ -544,6 +545,7 @@ namespace XR50TrainingAssetRepo.Services
                     INDEX `idx_user_id` (`UserId`),
                     INDEX `idx_material_id` (`MaterialId`),
                     INDEX `idx_program_id` (`ProgramId`),
+                    INDEX `idx_learning_path_id` (`LearningPathId`),
                     UNIQUE INDEX `idx_user_material` (`UserId`, `MaterialId`)
                 )",
 
@@ -551,12 +553,14 @@ namespace XR50TrainingAssetRepo.Services
                 @"CREATE TABLE IF NOT EXISTS `UserMaterialScores` (
                     `UserId` varchar(255) NOT NULL,
                     `ProgramId` int DEFAULT NULL,
+                    `LearningPathId` int DEFAULT NULL,
                     `MaterialId` int NOT NULL,
                     `Score` decimal(10,2) NOT NULL DEFAULT 0,
                     `Progress` int NOT NULL DEFAULT 0,
                     `UpdatedAt` datetime NOT NULL,
                     PRIMARY KEY (`UserId`, `MaterialId`),
                     INDEX `idx_program_id` (`ProgramId`),
+                    INDEX `idx_learning_path_id` (`LearningPathId`),
                     INDEX `idx_material_id` (`MaterialId`)
                 )"
             };
@@ -1135,6 +1139,7 @@ namespace XR50TrainingAssetRepo.Services
                         `Id` int NOT NULL AUTO_INCREMENT,
                         `UserId` varchar(255) NOT NULL,
                         `ProgramId` int DEFAULT NULL,
+                        `LearningPathId` int DEFAULT NULL,
                         `MaterialId` int NOT NULL,
                         `Data` json DEFAULT NULL,
                         `CreatedAt` datetime NOT NULL,
@@ -1143,6 +1148,7 @@ namespace XR50TrainingAssetRepo.Services
                         INDEX `idx_user_id` (`UserId`),
                         INDEX `idx_material_id` (`MaterialId`),
                         INDEX `idx_program_id` (`ProgramId`),
+                        INDEX `idx_learning_path_id` (`LearningPathId`),
                         UNIQUE INDEX `idx_user_material` (`UserId`, `MaterialId`)
                     )";
 
@@ -1152,17 +1158,22 @@ namespace XR50TrainingAssetRepo.Services
                     _logger.LogInformation("Created/verified UserMaterialData table for tenant: {TenantName}", tenantName);
                 }
 
+                // Add LearningPathId column to UserMaterialData if it doesn't exist
+                await AddColumnIfNotExistsAsync(connection, "UserMaterialData", "LearningPathId", "int DEFAULT NULL", "ProgramId");
+
                 // Create UserMaterialScores table if not exists
                 var createUserMaterialScoresQuery = @"
                     CREATE TABLE IF NOT EXISTS `UserMaterialScores` (
                         `UserId` varchar(255) NOT NULL,
                         `ProgramId` int DEFAULT NULL,
+                        `LearningPathId` int DEFAULT NULL,
                         `MaterialId` int NOT NULL,
                         `Score` decimal(10,2) NOT NULL DEFAULT 0,
                         `Progress` int NOT NULL DEFAULT 0,
                         `UpdatedAt` datetime NOT NULL,
                         PRIMARY KEY (`UserId`, `MaterialId`),
                         INDEX `idx_program_id` (`ProgramId`),
+                        INDEX `idx_learning_path_id` (`LearningPathId`),
                         INDEX `idx_material_id` (`MaterialId`)
                     )";
 
@@ -1171,6 +1182,9 @@ namespace XR50TrainingAssetRepo.Services
                     await createCmd.ExecuteNonQueryAsync();
                     _logger.LogInformation("Created/verified UserMaterialScores table for tenant: {TenantName}", tenantName);
                 }
+
+                // Add LearningPathId column to UserMaterialScores if it doesn't exist
+                await AddColumnIfNotExistsAsync(connection, "UserMaterialScores", "LearningPathId", "int DEFAULT NULL", "ProgramId");
 
                 _logger.LogInformation("=== User Material tables migration completed for tenant: {TenantName} ===", tenantName);
                 return true;
@@ -1305,6 +1319,58 @@ CREATE TABLE IF NOT EXISTS `Tenants` (
     `TenantSchema` varchar(255) DEFAULT NULL,
     PRIMARY KEY (`TenantName`)
 )";
+        }
+
+        /// <summary>
+        /// Adds a column to a table if it doesn't already exist.
+        /// </summary>
+        private async Task AddColumnIfNotExistsAsync(MySqlConnection connection, string tableName, string columnName, string columnDefinition, string afterColumn)
+        {
+            try
+            {
+                // Check if column exists
+                var checkQuery = $@"
+                    SELECT COUNT(*)
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME = '{tableName}'
+                    AND COLUMN_NAME = '{columnName}'";
+
+                using var checkCmd = new MySqlCommand(checkQuery, connection);
+                var exists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+
+                if (!exists)
+                {
+                    var alterQuery = $"ALTER TABLE `{tableName}` ADD COLUMN `{columnName}` {columnDefinition} AFTER `{afterColumn}`";
+                    using var alterCmd = new MySqlCommand(alterQuery, connection);
+                    await alterCmd.ExecuteNonQueryAsync();
+                    _logger.LogInformation("Added column {ColumnName} to table {TableName}", columnName, tableName);
+
+                    // Add index for the new column
+                    var indexName = $"idx_{columnName.ToLower()}";
+                    var indexQuery = $"CREATE INDEX `{indexName}` ON `{tableName}` (`{columnName}`)";
+                    try
+                    {
+                        using var indexCmd = new MySqlCommand(indexQuery, connection);
+                        await indexCmd.ExecuteNonQueryAsync();
+                        _logger.LogInformation("Added index {IndexName} on column {ColumnName}", indexName, columnName);
+                    }
+                    catch (MySqlException ex) when (ex.Message.Contains("Duplicate key name"))
+                    {
+                        // Index already exists, ignore
+                        _logger.LogDebug("Index {IndexName} already exists", indexName);
+                    }
+                }
+                else
+                {
+                    _logger.LogDebug("Column {ColumnName} already exists in table {TableName}", columnName, tableName);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding column {ColumnName} to table {TableName}", columnName, tableName);
+                throw;
+            }
         }
     }
 }
