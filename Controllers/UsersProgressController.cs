@@ -22,20 +22,20 @@ namespace XR50TrainingAssetRepo.Controllers
         }
 
         /// <summary>
-        /// Get overall progress for current user
-        /// GET /api/{tenantName}/users/progress
+        /// Get overall progress for a specific user
+        /// GET /api/{tenantName}/users/{userId}/progress
         /// </summary>
-        [HttpGet("~/api/{tenantName}/users/progress")]
+        [HttpGet("~/api/{tenantName}/users/{userId}/progress")]
         // [Authorize] - Disabled for development
-        public async Task<ActionResult<UserProgressResponse>> GetUserProgress(string tenantName)
+        public async Task<ActionResult<UserProgressResponse>> GetUserProgressByUserId(
+            string tenantName,
+            string userId)
         {
             try
             {
-                var userId = GetUserIdFromAuth();
-
                 if (string.IsNullOrEmpty(userId))
                 {
-                    return Unauthorized(new { error = "User not authenticated" });
+                    return BadRequest(new { error = "userId is required" });
                 }
 
                 var result = await _userMaterialService.GetUserProgressAsync(userId);
@@ -50,6 +50,27 @@ namespace XR50TrainingAssetRepo.Controllers
             {
                 _logger.LogError(ex, "Error getting user progress");
                 return StatusCode(500, new { error = "Failed to get progress" });
+            }
+        }
+
+        /// <summary>
+        /// Get overall progress for all users
+        /// GET /api/{tenantName}/users/progress
+        /// </summary>
+        [HttpGet("~/api/{tenantName}/users/progress")]
+        // [Authorize] - Disabled for development
+        public async Task<ActionResult<List<UserProgressResponse>>> GetAllUsersProgress(
+            string tenantName)
+        {
+            try
+            {
+                var result = await _userMaterialService.GetAllUsersProgressAsync();
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting all users progress");
+                return StatusCode(500, new { error = "Failed to get users progress" });
             }
         }
 

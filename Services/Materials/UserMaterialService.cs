@@ -289,6 +289,25 @@ namespace XR50TrainingAssetRepo.Services.Materials
             };
         }
 
+        public async Task<List<UserProgressResponse>> GetAllUsersProgressAsync()
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+
+            var users = await context.Users
+                .Select(u => u.UserName)
+                .ToListAsync();
+
+            var result = new List<UserProgressResponse>();
+
+            foreach (var userId in users)
+            {
+                var progress = await GetUserProgressAsync(userId);
+                result.Add(progress);
+            }
+
+            return result;
+        }
+
         public async Task<UserMaterialDetailResponse?> GetUserMaterialDetailAsync(
             string userId,
             int materialId)

@@ -18,6 +18,11 @@ namespace XR50TrainingAssetRepo.Services.Materials
         Task<UserProgressResponse> GetUserProgressAsync(string userId);
 
         /// <summary>
+        /// Get overall progress for all users including all programs and standalone materials
+        /// </summary>
+        Task<List<UserProgressResponse>> GetAllUsersProgressAsync();
+
+        /// <summary>
         /// Get detailed data for a specific material submission
         /// </summary>
         Task<UserMaterialDetailResponse?> GetUserMaterialDetailAsync(
