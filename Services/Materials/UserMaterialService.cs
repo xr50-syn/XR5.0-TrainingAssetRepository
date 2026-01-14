@@ -1037,6 +1037,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
             switch (questionType)
             {
                 case "boolean":
+                case "choice":
                 case "multiple-choice":
                 case "single-choice":
                     return EvaluateChoiceQuestion(question, answer);
