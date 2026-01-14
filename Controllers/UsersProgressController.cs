@@ -150,7 +150,7 @@ namespace XR50TrainingAssetRepo.Controllers
             // Authorization disabled - return default admin user if not authenticated
             if (string.IsNullOrEmpty(userId))
             {
-                userId = "admin";
+                userId = "demoadmin";
                 _logger.LogInformation("No auth token - using default admin user");
             }
 

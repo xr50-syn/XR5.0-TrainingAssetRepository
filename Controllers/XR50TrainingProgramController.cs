@@ -173,7 +173,7 @@ namespace XR50TrainingAssetRepo.Controllers
                     var allowAnonymous = _configuration.GetValue<bool>("IAM:AllowAnonymousInDevelopment", false);
                     if (allowAnonymous)
                     {
-                        userId = _configuration.GetValue<string>("IAM:DevelopmentUserId") ?? "dev-test-user";
+                        userId = _configuration.GetValue<string>("IAM:DevelopmentUserId") ?? "demoadmin";
                         _logger.LogWarning("Using development fallback user ID: {UserId}", userId);
                     }
                 }
