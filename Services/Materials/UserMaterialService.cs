@@ -45,39 +45,42 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 int? learningPathId = null;
                 if (request.program_id.HasValue)
                 {
+                    // First check if material is directly assigned to program
                     var programMaterial = await context.ProgramMaterials
                         .FirstOrDefaultAsync(pm =>
                             pm.TrainingProgramId == request.program_id &&
                             pm.MaterialId == materialId);
 
-                    if (programMaterial == null)
-                    {
-                        throw new ArgumentException($"Material {materialId} is not part of program {request.program_id}");
-                    }
-
-                    // 2a. Infer learning path from program
                     // Get learning paths in this program
                     var programLearningPathIds = await context.Set<ProgramLearningPath>()
                         .Where(plp => plp.TrainingProgramId == request.program_id)
                         .Select(plp => plp.LearningPathId)
                         .ToListAsync();
 
+                    // Check if material belongs to any learning path in this program
+                    MaterialRelationship? materialRelationship = null;
                     if (programLearningPathIds.Any())
                     {
-                        // Check if material belongs to any of these learning paths
-                        var materialRelationship = await context.MaterialRelationships
+                        materialRelationship = await context.MaterialRelationships
                             .FirstOrDefaultAsync(mr =>
                                 mr.MaterialId == materialId &&
                                 mr.RelatedEntityType == "LearningPath" &&
                                 programLearningPathIds.Select(id => id.ToString()).Contains(mr.RelatedEntityId));
+                    }
 
-                        if (materialRelationship != null && int.TryParse(materialRelationship.RelatedEntityId, out int lpId))
-                        {
-                            learningPathId = lpId;
-                            _logger.LogInformation(
-                                "Material {MaterialId} belongs to learning path {LearningPathId} within program {ProgramId}",
-                                materialId, learningPathId, request.program_id);
-                        }
+                    // Material must be either directly in program OR in a learning path of the program
+                    if (programMaterial == null && materialRelationship == null)
+                    {
+                        throw new ArgumentException($"Material {materialId} is not part of program {request.program_id}");
+                    }
+
+                    // Set learning path ID if found
+                    if (materialRelationship != null && int.TryParse(materialRelationship.RelatedEntityId, out int lpId))
+                    {
+                        learningPathId = lpId;
+                        _logger.LogInformation(
+                            "Material {MaterialId} belongs to learning path {LearningPathId} within program {ProgramId}",
+                            materialId, learningPathId, request.program_id);
                     }
                 }
 
@@ -421,39 +424,43 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     throw new ArgumentException($"Material {materialId} not found");
                 }
 
-                // 2. Validate material is part of the program
+                // 2. Validate material is part of the program (directly or via learning path)
                 var programMaterial = await context.ProgramMaterials
                     .FirstOrDefaultAsync(pm =>
                         pm.TrainingProgramId == request.program_id &&
                         pm.MaterialId == materialId);
 
-                if (programMaterial == null)
-                {
-                    throw new ArgumentException($"Material {materialId} is not part of program {request.program_id}");
-                }
-
-                // 3. Infer learning path from program (reuse logic from SubmitAnswersAsync)
-                int? learningPathId = null;
+                // Get learning paths in this program
                 var programLearningPathIds = await context.Set<ProgramLearningPath>()
                     .Where(plp => plp.TrainingProgramId == request.program_id)
                     .Select(plp => plp.LearningPathId)
                     .ToListAsync();
 
+                // Check if material belongs to any learning path in this program
+                int? learningPathId = null;
+                MaterialRelationship? materialRelationship = null;
                 if (programLearningPathIds.Any())
                 {
-                    var materialRelationship = await context.MaterialRelationships
+                    materialRelationship = await context.MaterialRelationships
                         .FirstOrDefaultAsync(mr =>
                             mr.MaterialId == materialId &&
                             mr.RelatedEntityType == "LearningPath" &&
                             programLearningPathIds.Select(id => id.ToString()).Contains(mr.RelatedEntityId));
+                }
 
-                    if (materialRelationship != null && int.TryParse(materialRelationship.RelatedEntityId, out int lpId))
-                    {
-                        learningPathId = lpId;
-                        _logger.LogInformation(
-                            "Material {MaterialId} belongs to learning path {LearningPathId} within program {ProgramId}",
-                            materialId, learningPathId, request.program_id);
-                    }
+                // Material must be either directly in program OR in a learning path of the program
+                if (programMaterial == null && materialRelationship == null)
+                {
+                    throw new ArgumentException($"Material {materialId} is not part of program {request.program_id}");
+                }
+
+                // Set learning path ID if found
+                if (materialRelationship != null && int.TryParse(materialRelationship.RelatedEntityId, out int lpId))
+                {
+                    learningPathId = lpId;
+                    _logger.LogInformation(
+                        "Material {MaterialId} belongs to learning path {LearningPathId} within program {ProgramId}",
+                        materialId, learningPathId, request.program_id);
                 }
 
                 // 4. Calculate progress
@@ -540,8 +547,8 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     throw new ArgumentException($"Program {programId} not found");
                 }
 
-                // 2. Get all valid materials in this program
-                var programMaterialIds = await context.ProgramMaterials
+                // 2. Get all valid materials directly in this program
+                var directProgramMaterialIds = await context.ProgramMaterials
                     .Where(pm => pm.TrainingProgramId == programId)
                     .Select(pm => pm.MaterialId)
                     .ToListAsync();
@@ -569,6 +576,11 @@ namespace XR50TrainingAssetRepo.Services.Materials
                         }
                     }
                 }
+
+                // Combine direct materials and materials via learning paths
+                var programMaterialIds = directProgramMaterialIds
+                    .Union(materialToLearningPath.Keys)
+                    .ToList();
 
                 // 4. Get existing scores for these materials
                 var existingScores = await context.UserMaterialScores
