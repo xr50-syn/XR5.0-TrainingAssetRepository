@@ -106,7 +106,18 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public bool success { get; set; }
         public int program_id { get; set; }
         public int program_progress { get; set; }
+        /// <summary>
+        /// Number of materials completed in this request
+        /// </summary>
         public int materials_completed { get; set; }
+        /// <summary>
+        /// Total number of materials in the program
+        /// </summary>
+        public int total_materials { get; set; }
+        /// <summary>
+        /// Total number of materials completed by the user (all time)
+        /// </summary>
+        public int total_materials_completed { get; set; }
         public List<MaterialCompleteResult> results { get; set; } = new();
         public List<LearningPathProgressSummary> learning_path_summary { get; set; } = new();
     }

@@ -671,16 +671,23 @@ namespace XR50TrainingAssetRepo.Services.Materials
 
                 await transaction.CommitAsync();
 
+                // Calculate total materials completed (all time)
+                var totalMaterialsCompleted = await context.UserMaterialScores
+                    .Where(ums => ums.UserId == userId && programMaterialIds.Contains(ums.MaterialId))
+                    .CountAsync();
+
                 _logger.LogInformation(
-                    "User {UserId} bulk completed {Count} materials in program {ProgramId}. Program progress: {Progress}",
+                    "User {UserId} bulk completed {Count} materials in program {ProgramId}. Program progress: {Progress}%",
                     userId, successCount, programId, programProgress);
 
                 return new BulkMaterialCompleteResponse
                 {
-                    success = successCount > 0,
+                    success = successCount > 0 || totalMaterialsCompleted > 0,
                     program_id = programId,
                     program_progress = programProgress,
                     materials_completed = successCount,
+                    total_materials = programMaterialIds.Count,
+                    total_materials_completed = totalMaterialsCompleted,
                     results = results,
                     learning_path_summary = learningPathSummary
                 };
@@ -853,29 +860,49 @@ namespace XR50TrainingAssetRepo.Services.Materials
             int programId,
             int? newlyCompletedMaterialId = null)
         {
-            // Get total materials in program
-            var totalMaterials = await context.ProgramMaterials
-                .Where(pm => pm.TrainingProgramId == programId)
-                .CountAsync();
-
-            if (totalMaterials == 0)
-            {
-                return 100;
-            }
-
-            // Get material IDs in program
-            var programMaterialIds = await context.ProgramMaterials
+            // Get direct material IDs in program
+            var directMaterialIds = await context.ProgramMaterials
                 .Where(pm => pm.TrainingProgramId == programId)
                 .Select(pm => pm.MaterialId)
                 .ToListAsync();
 
+            // Get learning paths in this program
+            var programLearningPathIds = await context.Set<ProgramLearningPath>()
+                .Where(plp => plp.TrainingProgramId == programId)
+                .Select(plp => plp.LearningPathId)
+                .ToListAsync();
+
+            // Get materials from learning paths
+            var learningPathMaterialIds = new List<int>();
+            if (programLearningPathIds.Any())
+            {
+                learningPathMaterialIds = await context.MaterialRelationships
+                    .Where(mr =>
+                        mr.RelatedEntityType == "LearningPath" &&
+                        programLearningPathIds.Select(id => id.ToString()).Contains(mr.RelatedEntityId))
+                    .Select(mr => mr.MaterialId)
+                    .ToListAsync();
+            }
+
+            // Combine direct and learning path materials (no duplicates)
+            var allProgramMaterialIds = directMaterialIds
+                .Union(learningPathMaterialIds)
+                .ToList();
+
+            var totalMaterials = allProgramMaterialIds.Count;
+
+            if (totalMaterials == 0)
+            {
+                return 0; // No materials = 0% progress, not 100%
+            }
+
             // Get completed materials (those with scores)
             var completedCount = await context.UserMaterialScores
-                .Where(ums => ums.UserId == userId && programMaterialIds.Contains(ums.MaterialId))
+                .Where(ums => ums.UserId == userId && allProgramMaterialIds.Contains(ums.MaterialId))
                 .CountAsync();
 
             // Add 1 if we're about to insert a new score
-            if (newlyCompletedMaterialId.HasValue)
+            if (newlyCompletedMaterialId.HasValue && allProgramMaterialIds.Contains(newlyCompletedMaterialId.Value))
             {
                 var alreadyCounted = await context.UserMaterialScores
                     .AnyAsync(ums =>
