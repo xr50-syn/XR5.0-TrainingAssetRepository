@@ -32,7 +32,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Get all quiz progress in tenant (admins see all users, users see only their own)
         /// </summary>
         [HttpGet("tenant")]
-        [Authorize]
+        // [Authorize] - Disabled for development
         public async Task<ActionResult<TenantQuizProgressResponse>> GetTenantQuizProgress(
             string tenantName)
         {
@@ -60,7 +60,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Get quiz progress for a specific training program
         /// </summary>
         [HttpGet("program/{programId}")]
-        [Authorize]
+        // [Authorize] - Disabled for development
         public async Task<ActionResult<TrainingProgramQuizProgressResponse>> GetTrainingProgramQuizProgress(
             string tenantName,
             int programId)
@@ -94,7 +94,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Get quiz progress for a specific learning path
         /// </summary>
         [HttpGet("learning-path/{learningPathId}")]
-        [Authorize]
+        // [Authorize] - Disabled for development
         public async Task<ActionResult<LearningPathQuizProgressResponse>> GetLearningPathQuizProgress(
             string tenantName,
             int learningPathId)
@@ -128,7 +128,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Get quiz progress for a specific material
         /// </summary>
         [HttpGet("material/{materialId}")]
-        [Authorize]
+        // [Authorize] - Disabled for development
         public async Task<ActionResult<MaterialQuizProgressResponse>> GetMaterialQuizProgress(
             string tenantName,
             int materialId)
@@ -174,16 +174,19 @@ namespace XR50TrainingAssetRepo.Controllers
 
             _logger.LogDebug("Extracted userId from claims: {UserId}", userId);
 
+            // Authorization disabled - return default admin user if not authenticated
             if (string.IsNullOrEmpty(userId))
             {
-                return (null, false);
+                _logger.LogInformation("No auth token - using default admin user");
+                return ("admin", true);
             }
 
             // Check admin status from database
             using var context = _dbContextFactory.CreateDbContext();
             var user = await context.Users.FirstOrDefaultAsync(u => u.UserName == userId);
 
-            var isAdmin = user?.admin ?? false;
+            // Authorization disabled - treat all authenticated users as admin
+            var isAdmin = true; // user?.admin ?? false;
 
             _logger.LogDebug("User {UserId} admin status: {IsAdmin}", userId, isAdmin);
 

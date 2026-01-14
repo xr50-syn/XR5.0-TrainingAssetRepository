@@ -26,7 +26,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// GET /api/{tenantName}/users/progress
         /// </summary>
         [HttpGet("~/api/{tenantName}/users/progress")]
-        [Authorize]
+        // [Authorize] - Disabled for development
         public async Task<ActionResult<UserProgressResponse>> GetUserProgress(string tenantName)
         {
             try
@@ -58,7 +58,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// GET /api/{tenantName}/users/{userId}/materials/{materialId}
         /// </summary>
         [HttpGet("~/api/{tenantName}/users/{userId}/materials/{materialId}")]
-        [Authorize]
+        // [Authorize] - Disabled for development
         public async Task<ActionResult<UserMaterialDetailResponse>> GetUserMaterialDetail(
             string tenantName,
             string userId,
@@ -87,7 +87,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// GET /api/{tenantName}/users/{userId}/programs/{programId}/materials
         /// </summary>
         [HttpGet("~/api/{tenantName}/users/{userId}/programs/{programId}/materials")]
-        [Authorize]
+        // [Authorize] - Disabled for development
         public async Task<ActionResult<UserProgramMaterialsResponse>> GetUserProgramMaterials(
             string tenantName,
             string userId,
@@ -125,6 +125,13 @@ namespace XR50TrainingAssetRepo.Controllers
                 ?? User.FindFirst("email")?.Value
                 ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                 ?? User.FindFirst("sub")?.Value;
+
+            // Authorization disabled - return default admin user if not authenticated
+            if (string.IsNullOrEmpty(userId))
+            {
+                userId = "admin";
+                _logger.LogInformation("No auth token - using default admin user");
+            }
 
             _logger.LogInformation("Extracted userId: {UserId}", userId);
             return userId;

@@ -33,7 +33,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Admins see all users' progress, regular users see only their own.
         /// </summary>
         [HttpGet("program/{programId}")]
-        [Authorize]
+        // [Authorize] - Disabled for development
         public async Task<ActionResult<ProgramProgressResponse>> GetProgramProgress(
             string tenantName,
             int programId)
@@ -79,16 +79,19 @@ namespace XR50TrainingAssetRepo.Controllers
 
             _logger.LogDebug("Extracted userId from claims: {UserId}", userId);
 
+            // Authorization disabled - return default admin user if not authenticated
             if (string.IsNullOrEmpty(userId))
             {
-                return (null, false);
+                _logger.LogInformation("No auth token - using default admin user");
+                return ("admin", true);
             }
 
             // Check admin status from database
             using var context = _dbContextFactory.CreateDbContext();
             var user = await context.Users.FirstOrDefaultAsync(u => u.UserName == userId);
 
-            var isAdmin = user?.admin ?? false;
+            // Authorization disabled - treat all authenticated users as admin
+            var isAdmin = true; // user?.admin ?? false;
 
             _logger.LogDebug("User {UserId} admin status: {IsAdmin}", userId, isAdmin);
 

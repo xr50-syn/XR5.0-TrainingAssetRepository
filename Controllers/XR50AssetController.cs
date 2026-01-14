@@ -16,7 +16,7 @@ namespace XR50TrainingAssetRepo.Controllers
             public string? Description { get; set; }
             public string? Src { get; set; }
             public string? Filetype { get; set; }
-            // Filename is optional and not used - UUID is generated automatically
+            // Filename is optional - if not provided, uses File.FileName from multipart header
             public string? Filename { get; set; }
             public IFormFile File { get; set; }
         }
@@ -76,10 +76,23 @@ namespace XR50TrainingAssetRepo.Controllers
             asset.Src = fileUpload.Src;
             asset.Description = fileUpload.Description;
             asset.Filetype = fileUpload.Filetype;
-            asset.Filename = Guid.NewGuid().ToString();
-            if (fileUpload.Filetype != null)
+
+            // Use original filename from multipart header if available, otherwise generate UUID
+            if (!string.IsNullOrEmpty(fileUpload.File?.FileName))
             {
-                asset.Filename += $".{fileUpload.Filetype}";
+                asset.Filename = fileUpload.File.FileName;
+            }
+            else if (!string.IsNullOrEmpty(fileUpload.Filename))
+            {
+                asset.Filename = fileUpload.Filename;
+            }
+            else
+            {
+                asset.Filename = Guid.NewGuid().ToString();
+                if (fileUpload.Filetype != null)
+                {
+                    asset.Filename += $".{fileUpload.Filetype}";
+                }
             }
 
             _logger.LogInformation("Creating asset {Filename} for tenant: {TenantName}",
