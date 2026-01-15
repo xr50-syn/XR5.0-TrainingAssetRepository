@@ -1144,7 +1144,7 @@ namespace XR50TrainingAssetRepo.Services
                     CREATE TABLE IF NOT EXISTS `UserMaterialData` (
                         `Id` int NOT NULL AUTO_INCREMENT,
                         `UserId` varchar(255) NOT NULL,
-                        `ProgramId` int DEFAULT NULL,
+                        `ProgramId` int NOT NULL DEFAULT 0,
                         `LearningPathId` int DEFAULT NULL,
                         `MaterialId` int NOT NULL,
                         `Data` json DEFAULT NULL,
@@ -1155,7 +1155,7 @@ namespace XR50TrainingAssetRepo.Services
                         INDEX `idx_material_id` (`MaterialId`),
                         INDEX `idx_program_id` (`ProgramId`),
                         INDEX `idx_learning_path_id` (`LearningPathId`),
-                        UNIQUE INDEX `idx_user_material` (`UserId`, `MaterialId`)
+                        UNIQUE INDEX `idx_user_material_program` (`UserId`, `MaterialId`, `ProgramId`)
                     )";
 
                 using (var createCmd = new MySqlCommand(createUserMaterialDataQuery, connection))
@@ -1171,13 +1171,13 @@ namespace XR50TrainingAssetRepo.Services
                 var createUserMaterialScoresQuery = @"
                     CREATE TABLE IF NOT EXISTS `UserMaterialScores` (
                         `UserId` varchar(255) NOT NULL,
-                        `ProgramId` int DEFAULT NULL,
+                        `ProgramId` int NOT NULL DEFAULT 0,
                         `LearningPathId` int DEFAULT NULL,
                         `MaterialId` int NOT NULL,
                         `Score` decimal(10,2) NOT NULL DEFAULT 0,
                         `Progress` int NOT NULL DEFAULT 0,
                         `UpdatedAt` datetime NOT NULL,
-                        PRIMARY KEY (`UserId`, `MaterialId`),
+                        PRIMARY KEY (`UserId`, `MaterialId`, `ProgramId`),
                         INDEX `idx_program_id` (`ProgramId`),
                         INDEX `idx_learning_path_id` (`LearningPathId`),
                         INDEX `idx_material_id` (`MaterialId`)
