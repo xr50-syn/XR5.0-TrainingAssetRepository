@@ -277,6 +277,11 @@ namespace XR50TrainingAssetRepo.Models
         public string? RelationshipType { get; set; }
         public int? DisplayOrder { get; set; }
 
+        // Rank configuration for materials within learning paths
+        public bool? inherit_from_program { get; set; }
+        public int? min_level_rank { get; set; }
+        public int? max_level_rank { get; set; }
+        public int? required_upto_level_rank { get; set; }
 
         public virtual Material Material { get; set; }
     }

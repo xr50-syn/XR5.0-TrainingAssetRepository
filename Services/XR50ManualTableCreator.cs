@@ -21,6 +21,7 @@ namespace XR50TrainingAssetRepo.Services
         Task<bool> MigrateProgramAssignmentRanksAsync(string tenantName);
         Task<bool> MigrateQuizAnswersTableAsync(string tenantName);
         Task<bool> MigrateUserMaterialTablesAsync(string tenantName);
+        Task<bool> MigrateMaterialRelationshipRanksAsync(string tenantName);
     }
 
     public class XR50ManualTableCreator : IXR50ManualTableCreator
@@ -510,6 +511,10 @@ namespace XR50TrainingAssetRepo.Services
                     `RelatedEntityType` varchar(50) NOT NULL,
                     `RelationshipType` varchar(50) DEFAULT NULL,
                     `DisplayOrder` int DEFAULT NULL,
+                    `inherit_from_program` tinyint(1) DEFAULT NULL,
+                    `min_level_rank` int DEFAULT NULL,
+                    `max_level_rank` int DEFAULT NULL,
+                    `required_upto_level_rank` int DEFAULT NULL,
                     PRIMARY KEY (`Id`),
                     INDEX `idx_id` (`MaterialId`),
                     INDEX `idx_related_entity` (`RelatedEntityId`, `RelatedEntityType`),
@@ -1192,6 +1197,74 @@ namespace XR50TrainingAssetRepo.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error migrating User Material tables for tenant: {TenantName}", tenantName);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Migrates existing databases to add rank columns to MaterialRelationships table.
+        /// </summary>
+        public async Task<bool> MigrateMaterialRelationshipRanksAsync(string tenantName)
+        {
+            try
+            {
+                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
+                var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
+
+                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+
+                _logger.LogInformation("=== Migrating MaterialRelationships rank columns for tenant: {TenantName} ===", tenantName);
+
+                using var connection = new MySqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                // Add rank columns to MaterialRelationships table
+                var columnsToAdd = new Dictionary<string, string>
+                {
+                    { "inherit_from_program", "ALTER TABLE `MaterialRelationships` ADD COLUMN `inherit_from_program` tinyint(1) DEFAULT NULL" },
+                    { "min_level_rank", "ALTER TABLE `MaterialRelationships` ADD COLUMN `min_level_rank` int DEFAULT NULL" },
+                    { "max_level_rank", "ALTER TABLE `MaterialRelationships` ADD COLUMN `max_level_rank` int DEFAULT NULL" },
+                    { "required_upto_level_rank", "ALTER TABLE `MaterialRelationships` ADD COLUMN `required_upto_level_rank` int DEFAULT NULL" }
+                };
+
+                foreach (var column in columnsToAdd)
+                {
+                    var checkQuery = @"
+                        SELECT COUNT(*)
+                        FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_SCHEMA = @dbName
+                        AND TABLE_NAME = 'MaterialRelationships'
+                        AND COLUMN_NAME = @columnName";
+
+                    using (var checkCmd = new MySqlCommand(checkQuery, connection))
+                    {
+                        checkCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                        checkCmd.Parameters.AddWithValue("@columnName", column.Key);
+                        var exists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+
+                        if (!exists)
+                        {
+                            _logger.LogInformation("Adding {Column} column to MaterialRelationships table...", column.Key);
+                            using (var addCmd = new MySqlCommand(column.Value, connection))
+                            {
+                                await addCmd.ExecuteNonQueryAsync();
+                                _logger.LogInformation("Successfully added {Column} column to MaterialRelationships", column.Key);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogInformation("{Column} column already exists in MaterialRelationships", column.Key);
+                        }
+                    }
+                }
+
+                _logger.LogInformation("=== MaterialRelationships rank columns migration completed for tenant: {TenantName} ===", tenantName);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating MaterialRelationships rank columns for tenant: {TenantName}", tenantName);
                 return false;
             }
         }
