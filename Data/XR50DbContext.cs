@@ -332,7 +332,7 @@ namespace XR50TrainingAssetRepo.Data
                 .HasKey(umd => umd.Id);
 
             modelBuilder.Entity<UserMaterialData>()
-                .HasIndex(umd => new { umd.UserId, umd.MaterialId })
+                .HasIndex(umd => new { umd.UserId, umd.MaterialId, umd.ProgramId })
                 .IsUnique();
 
             modelBuilder.Entity<UserMaterialData>()
@@ -346,16 +346,18 @@ namespace XR50TrainingAssetRepo.Data
                 .HasColumnType("json");
 
             modelBuilder.Entity<UserMaterialData>()
+                .Property(umd => umd.ProgramId)
+                .HasDefaultValue(0);
+
+            modelBuilder.Entity<UserMaterialData>()
                 .HasOne(umd => umd.User)
                 .WithMany()
                 .HasForeignKey(umd => umd.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // No FK on Program - ProgramId=0 means "no specific program"
             modelBuilder.Entity<UserMaterialData>()
-                .HasOne(umd => umd.Program)
-                .WithMany()
-                .HasForeignKey(umd => umd.ProgramId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .Ignore(umd => umd.Program);
 
             modelBuilder.Entity<UserMaterialData>()
                 .HasOne(umd => umd.Material)
@@ -363,9 +365,9 @@ namespace XR50TrainingAssetRepo.Data
                 .HasForeignKey(umd => umd.MaterialId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // UserMaterialScore configuration - composite key
+            // UserMaterialScore configuration - composite key includes ProgramId
             modelBuilder.Entity<UserMaterialScore>()
-                .HasKey(ums => new { ums.UserId, ums.MaterialId });
+                .HasKey(ums => new { ums.UserId, ums.MaterialId, ums.ProgramId });
 
             modelBuilder.Entity<UserMaterialScore>()
                 .HasIndex(ums => ums.UserId);
@@ -378,16 +380,18 @@ namespace XR50TrainingAssetRepo.Data
                 .HasColumnType("decimal(10,2)");
 
             modelBuilder.Entity<UserMaterialScore>()
+                .Property(ums => ums.ProgramId)
+                .HasDefaultValue(0);
+
+            modelBuilder.Entity<UserMaterialScore>()
                 .HasOne(ums => ums.User)
                 .WithMany()
                 .HasForeignKey(ums => ums.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // No FK on Program - ProgramId=0 means "no specific program"
             modelBuilder.Entity<UserMaterialScore>()
-                .HasOne(ums => ums.Program)
-                .WithMany()
-                .HasForeignKey(ums => ums.ProgramId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .Ignore(ums => ums.Program);
 
             modelBuilder.Entity<UserMaterialScore>()
                 .HasOne(ums => ums.Material)
