@@ -279,11 +279,17 @@ namespace XR50TrainingAssetRepo.Services.Materials
             var totalCompleted = userScores.Count;
             var overallProgress = totalCompleted > 0 ? 100 : 0; // Simplified overall progress
 
+            // Get most recent activity timestamp
+            var lastUpdated = userScores.Any()
+                ? userScores.Max(s => s.UpdatedAt)
+                : (DateTime?)null;
+
             return new UserProgressResponse
             {
                 id = userId,
                 name = user.FullName ?? user.UserName,
                 progress = overallProgress,
+                updated_at = lastUpdated,
                 programs = programProgressList,
                 standalone_materials = standaloneProgressList
             };

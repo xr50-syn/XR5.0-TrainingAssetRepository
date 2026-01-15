@@ -214,6 +214,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string id { get; set; } = "";
         public string name { get; set; } = "";
         public int progress { get; set; }
+        public DateTime? updated_at { get; set; }
         public List<ProgramProgressDto> programs { get; set; } = new();
         public List<StandaloneMaterialProgressDto> standalone_materials { get; set; } = new();
     }
