@@ -87,16 +87,17 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 // 3. Evaluate answers and calculate score
                 var processedData = EvaluateAnswers(quiz, request);
 
-                // 4. Upsert user_material_data
+                // 4. Upsert user_material_data (keyed by UserId + MaterialId + ProgramId)
+                var programIdValue = request.program_id ?? 0;
                 var existingData = await context.UserMaterialData
                     .FirstOrDefaultAsync(umd =>
                         umd.UserId == userId &&
-                        umd.MaterialId == materialId);
+                        umd.MaterialId == materialId &&
+                        umd.ProgramId == programIdValue);
 
                 if (existingData != null)
                 {
                     existingData.Data = JsonSerializer.Serialize(processedData);
-                    existingData.ProgramId = request.program_id;
                     existingData.LearningPathId = learningPathId;
                     existingData.UpdatedAt = DateTime.UtcNow;
                 }
@@ -106,7 +107,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     {
                         UserId = userId,
                         MaterialId = materialId,
-                        ProgramId = request.program_id,
+                        ProgramId = programIdValue,
                         LearningPathId = learningPathId,
                         Data = JsonSerializer.Serialize(processedData),
                         CreatedAt = DateTime.UtcNow,
@@ -131,17 +132,17 @@ namespace XR50TrainingAssetRepo.Services.Materials
                         context, userId, learningPathId.Value, materialId);
                 }
 
-                // 6. Upsert user_material_scores
+                // 6. Upsert user_material_scores (keyed by UserId + MaterialId + ProgramId)
                 var existingScore = await context.UserMaterialScores
                     .FirstOrDefaultAsync(ums =>
                         ums.UserId == userId &&
-                        ums.MaterialId == materialId);
+                        ums.MaterialId == materialId &&
+                        ums.ProgramId == programIdValue);
 
                 if (existingScore != null)
                 {
                     existingScore.Score = processedData.total_score;
                     existingScore.Progress = progress;
-                    existingScore.ProgramId = request.program_id;
                     existingScore.LearningPathId = learningPathId;
                     existingScore.UpdatedAt = DateTime.UtcNow;
                 }
@@ -151,7 +152,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     {
                         UserId = userId,
                         MaterialId = materialId,
-                        ProgramId = request.program_id,
+                        ProgramId = programIdValue,
                         LearningPathId = learningPathId,
                         Score = processedData.total_score,
                         Progress = progress,
@@ -200,10 +201,10 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 .Where(ums => ums.UserId == userId)
                 .ToListAsync();
 
-            // Get programs the user has progress in
+            // Get programs the user has progress in (ProgramId > 0 means associated with a program)
             var programIds = userScores
-                .Where(s => s.ProgramId.HasValue)
-                .Select(s => s.ProgramId!.Value)
+                .Where(s => s.ProgramId > 0)
+                .Select(s => s.ProgramId)
                 .Distinct()
                 .ToList();
 
@@ -221,13 +222,9 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     .Where(s => s.ProgramId == program.id)
                     .ToList();
 
-                var totalMaterials = program.Materials?.Count ?? 0;
-                var completedMaterials = programScores.Count;
-                var programProgress = totalMaterials > 0
-                    ? (int)Math.Round((double)completedMaterials / totalMaterials * 100)
-                    : 0;
-
                 var materialScores = new List<MaterialScoreDto>();
+
+                // 1. Add direct materials
                 if (program.Materials != null)
                 {
                     foreach (var pm in program.Materials)
@@ -244,6 +241,50 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     }
                 }
 
+                // 2. Add materials from learning paths
+                var programLearningPathIds = await context.Set<ProgramLearningPath>()
+                    .Where(plp => plp.TrainingProgramId == program.id)
+                    .Select(plp => plp.LearningPathId)
+                    .ToListAsync();
+
+                if (programLearningPathIds.Any())
+                {
+                    var lpMaterialRelationships = await context.MaterialRelationships
+                        .Where(mr => mr.RelatedEntityType == "LearningPath" &&
+                                     programLearningPathIds.Select(id => id.ToString()).Contains(mr.RelatedEntityId))
+                        .OrderBy(mr => mr.DisplayOrder)
+                        .ToListAsync();
+
+                    var lpMaterialIds = lpMaterialRelationships.Select(mr => mr.MaterialId).ToList();
+                    var lpMaterials = await context.Materials
+                        .Where(m => lpMaterialIds.Contains(m.id))
+                        .ToDictionaryAsync(m => m.id);
+
+                    foreach (var mr in lpMaterialRelationships)
+                    {
+                        // Skip if already added (material could be both direct and in learning path)
+                        if (materialScores.Any(ms => ms.id == mr.MaterialId.ToString()))
+                            continue;
+
+                        var material = lpMaterials.GetValueOrDefault(mr.MaterialId);
+                        var score = programScores.FirstOrDefault(s => s.MaterialId == mr.MaterialId);
+                        materialScores.Add(new MaterialScoreDto
+                        {
+                            id = mr.MaterialId.ToString(),
+                            name = material?.Name ?? "",
+                            type = material?.Type.ToString() ?? "",
+                            score = score?.Score ?? 0,
+                            completed = score != null
+                        });
+                    }
+                }
+
+                var totalMaterials = materialScores.Count;
+                var completedMaterials = materialScores.Count(m => m.completed);
+                var programProgress = totalMaterials > 0
+                    ? (int)Math.Round((double)completedMaterials / totalMaterials * 100)
+                    : 0;
+
                 programProgressList.Add(new ProgramProgressDto
                 {
                     id = program.id.ToString(),
@@ -253,9 +294,9 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 });
             }
 
-            // Get standalone materials (no program)
+            // Get standalone materials (no program, ProgramId == 0)
             var standaloneMaterialIds = userScores
-                .Where(s => !s.ProgramId.HasValue)
+                .Where(s => s.ProgramId == 0)
                 .Select(s => s.MaterialId)
                 .ToList();
 
@@ -265,7 +306,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
 
             var standaloneProgressList = standaloneMaterials.Select(m =>
             {
-                var score = userScores.FirstOrDefault(s => s.MaterialId == m.id && !s.ProgramId.HasValue);
+                var score = userScores.FirstOrDefault(s => s.MaterialId == m.id && s.ProgramId == 0);
                 return new StandaloneMaterialProgressDto
                 {
                     id = m.id.ToString(),
@@ -499,17 +540,18 @@ namespace XR50TrainingAssetRepo.Services.Materials
                         context, userId, learningPathId.Value, materialId);
                 }
 
-                // 5. Upsert UserMaterialScore (preserve existing score if any)
+                // 5. Upsert UserMaterialScore (keyed by UserId + MaterialId + ProgramId, preserve existing score if any)
+                var programIdValue = request.program_id;
                 var existingScore = await context.UserMaterialScores
                     .FirstOrDefaultAsync(ums =>
                         ums.UserId == userId &&
-                        ums.MaterialId == materialId);
+                        ums.MaterialId == materialId &&
+                        ums.ProgramId == programIdValue);
 
                 if (existingScore != null)
                 {
                     // Update but preserve existing score
                     existingScore.Progress = progress;
-                    existingScore.ProgramId = request.program_id;
                     existingScore.LearningPathId = learningPathId;
                     existingScore.UpdatedAt = DateTime.UtcNow;
                 }
@@ -520,7 +562,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     {
                         UserId = userId,
                         MaterialId = materialId,
-                        ProgramId = request.program_id,
+                        ProgramId = programIdValue,
                         LearningPathId = learningPathId,
                         Score = 0,
                         Progress = progress,
@@ -607,9 +649,11 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     .Union(materialToLearningPath.Keys)
                     .ToList();
 
-                // 4. Get existing scores for these materials
+                // 4. Get existing scores for these materials in this program
                 var existingScores = await context.UserMaterialScores
-                    .Where(ums => ums.UserId == userId && request.material_ids.Contains(ums.MaterialId))
+                    .Where(ums => ums.UserId == userId &&
+                                  ums.ProgramId == programId &&
+                                  request.material_ids.Contains(ums.MaterialId))
                     .ToDictionaryAsync(ums => ums.MaterialId);
 
                 // 5. Process each material

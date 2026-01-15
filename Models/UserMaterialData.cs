@@ -15,7 +15,7 @@ namespace XR50TrainingAssetRepo.Models
         [StringLength(255)]
         public string UserId { get; set; } = "";
 
-        public int? ProgramId { get; set; }
+        public int ProgramId { get; set; } = 0;
 
         public int? LearningPathId { get; set; }
 
@@ -47,7 +47,7 @@ namespace XR50TrainingAssetRepo.Models
         [StringLength(255)]
         public string UserId { get; set; } = "";
 
-        public int? ProgramId { get; set; }
+        public int ProgramId { get; set; } = 0;
 
         public int? LearningPathId { get; set; }
 

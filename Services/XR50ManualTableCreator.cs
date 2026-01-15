@@ -22,6 +22,7 @@ namespace XR50TrainingAssetRepo.Services
         Task<bool> MigrateQuizAnswersTableAsync(string tenantName);
         Task<bool> MigrateUserMaterialTablesAsync(string tenantName);
         Task<bool> MigrateMaterialRelationshipRanksAsync(string tenantName);
+        Task<bool> MigrateUserMaterialProgramKeyAsync(string tenantName);
     }
 
     public class XR50ManualTableCreator : IXR50ManualTableCreator
@@ -540,7 +541,7 @@ namespace XR50TrainingAssetRepo.Services
                 @"CREATE TABLE IF NOT EXISTS `UserMaterialData` (
                     `Id` int NOT NULL AUTO_INCREMENT,
                     `UserId` varchar(255) NOT NULL,
-                    `ProgramId` int DEFAULT NULL,
+                    `ProgramId` int NOT NULL DEFAULT 0,
                     `LearningPathId` int DEFAULT NULL,
                     `MaterialId` int NOT NULL,
                     `Data` json DEFAULT NULL,
@@ -551,19 +552,19 @@ namespace XR50TrainingAssetRepo.Services
                     INDEX `idx_material_id` (`MaterialId`),
                     INDEX `idx_program_id` (`ProgramId`),
                     INDEX `idx_learning_path_id` (`LearningPathId`),
-                    UNIQUE INDEX `idx_user_material` (`UserId`, `MaterialId`)
+                    UNIQUE INDEX `idx_user_material_program` (`UserId`, `MaterialId`, `ProgramId`)
                 )",
 
                 // User Material Scores - cached scores for quick lookups
                 @"CREATE TABLE IF NOT EXISTS `UserMaterialScores` (
                     `UserId` varchar(255) NOT NULL,
-                    `ProgramId` int DEFAULT NULL,
+                    `ProgramId` int NOT NULL DEFAULT 0,
                     `LearningPathId` int DEFAULT NULL,
                     `MaterialId` int NOT NULL,
                     `Score` decimal(10,2) NOT NULL DEFAULT 0,
                     `Progress` int NOT NULL DEFAULT 0,
                     `UpdatedAt` datetime NOT NULL,
-                    PRIMARY KEY (`UserId`, `MaterialId`),
+                    PRIMARY KEY (`UserId`, `MaterialId`, `ProgramId`),
                     INDEX `idx_program_id` (`ProgramId`),
                     INDEX `idx_learning_path_id` (`LearningPathId`),
                     INDEX `idx_material_id` (`MaterialId`)
@@ -1265,6 +1266,125 @@ namespace XR50TrainingAssetRepo.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error migrating MaterialRelationships rank columns for tenant: {TenantName}", tenantName);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Migrates existing databases to change UserMaterialData and UserMaterialScores keys to include ProgramId.
+        /// This allows separate submissions per program for the same material.
+        /// </summary>
+        public async Task<bool> MigrateUserMaterialProgramKeyAsync(string tenantName)
+        {
+            try
+            {
+                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
+                var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
+
+                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+
+                _logger.LogInformation("=== Migrating UserMaterial tables to include ProgramId in keys for tenant: {TenantName} ===", tenantName);
+
+                using var connection = new MySqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                // Step 1: Update UserMaterialData - make ProgramId NOT NULL with DEFAULT 0
+                _logger.LogInformation("Updating UserMaterialData table...");
+
+                // Update NULL ProgramId values to 0
+                using (var updateCmd = new MySqlCommand("UPDATE `UserMaterialData` SET `ProgramId` = 0 WHERE `ProgramId` IS NULL", connection))
+                {
+                    var rowsUpdated = await updateCmd.ExecuteNonQueryAsync();
+                    _logger.LogInformation("Updated {Rows} rows in UserMaterialData with ProgramId = 0", rowsUpdated);
+                }
+
+                // Alter column to NOT NULL DEFAULT 0
+                try
+                {
+                    using (var alterCmd = new MySqlCommand("ALTER TABLE `UserMaterialData` MODIFY COLUMN `ProgramId` int NOT NULL DEFAULT 0", connection))
+                    {
+                        await alterCmd.ExecuteNonQueryAsync();
+                        _logger.LogInformation("Changed UserMaterialData.ProgramId to NOT NULL DEFAULT 0");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning("Could not alter UserMaterialData.ProgramId column (may already be correct): {Message}", ex.Message);
+                }
+
+                // Drop old unique index if exists
+                try
+                {
+                    using (var dropCmd = new MySqlCommand("ALTER TABLE `UserMaterialData` DROP INDEX `idx_user_material`", connection))
+                    {
+                        await dropCmd.ExecuteNonQueryAsync();
+                        _logger.LogInformation("Dropped old idx_user_material index from UserMaterialData");
+                    }
+                }
+                catch (Exception)
+                {
+                    _logger.LogInformation("Old idx_user_material index does not exist or already dropped");
+                }
+
+                // Create new unique index including ProgramId
+                try
+                {
+                    using (var createCmd = new MySqlCommand("CREATE UNIQUE INDEX `idx_user_material_program` ON `UserMaterialData` (`UserId`, `MaterialId`, `ProgramId`)", connection))
+                    {
+                        await createCmd.ExecuteNonQueryAsync();
+                        _logger.LogInformation("Created new idx_user_material_program index on UserMaterialData");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning("Could not create idx_user_material_program index (may already exist): {Message}", ex.Message);
+                }
+
+                // Step 2: Update UserMaterialScores - change PRIMARY KEY to include ProgramId
+                _logger.LogInformation("Updating UserMaterialScores table...");
+
+                // Update NULL ProgramId values to 0
+                using (var updateCmd = new MySqlCommand("UPDATE `UserMaterialScores` SET `ProgramId` = 0 WHERE `ProgramId` IS NULL", connection))
+                {
+                    var rowsUpdated = await updateCmd.ExecuteNonQueryAsync();
+                    _logger.LogInformation("Updated {Rows} rows in UserMaterialScores with ProgramId = 0", rowsUpdated);
+                }
+
+                // Alter column to NOT NULL DEFAULT 0
+                try
+                {
+                    using (var alterCmd = new MySqlCommand("ALTER TABLE `UserMaterialScores` MODIFY COLUMN `ProgramId` int NOT NULL DEFAULT 0", connection))
+                    {
+                        await alterCmd.ExecuteNonQueryAsync();
+                        _logger.LogInformation("Changed UserMaterialScores.ProgramId to NOT NULL DEFAULT 0");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning("Could not alter UserMaterialScores.ProgramId column (may already be correct): {Message}", ex.Message);
+                }
+
+                // Change PRIMARY KEY to include ProgramId
+                try
+                {
+                    using (var alterCmd = new MySqlCommand("ALTER TABLE `UserMaterialScores` DROP PRIMARY KEY, ADD PRIMARY KEY (`UserId`, `MaterialId`, `ProgramId`)", connection))
+                    {
+                        await alterCmd.ExecuteNonQueryAsync();
+                        _logger.LogInformation("Changed UserMaterialScores PRIMARY KEY to include ProgramId");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning("Could not change UserMaterialScores PRIMARY KEY (may already be correct): {Message}", ex.Message);
+                }
+
+                _logger.LogInformation("=== UserMaterial program key migration completed for tenant: {TenantName} ===", tenantName);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating UserMaterial program keys for tenant: {TenantName}", tenantName);
                 return false;
             }
         }
