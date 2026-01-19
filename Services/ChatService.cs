@@ -77,6 +77,52 @@ namespace XR50TrainingAssetRepo.Services
             }
         }
 
+        public async Task<ChatAskResponse> AskAsync(string query, string? sessionId = null)
+        {
+            var endpoint = _configuration.GetValue<string>("Chatbot:DefaultEndpoint");
+            if (string.IsNullOrEmpty(endpoint))
+            {
+                throw new InvalidOperationException("No default chatbot endpoint configured");
+            }
+
+            _logger.LogInformation("Sending query to default chatbot at {Endpoint}", endpoint);
+
+            var formContent = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("query", query),
+                new KeyValuePair<string, string>("session_id", sessionId ?? string.Empty)
+            });
+
+            var askUrl = endpoint.TrimEnd('/') + "/ask";
+
+            try
+            {
+                var response = await _httpClient.PostAsync(askUrl, formContent);
+                response.EnsureSuccessStatusCode();
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+
+                _logger.LogDebug("Received response from default chatbot: {Response}",
+                    responseContent.Length > 500 ? responseContent.Substring(0, 500) + "..." : responseContent);
+
+                var chatResponse = JsonSerializer.Deserialize<ChatAskResponse>(responseContent, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                return chatResponse ?? new ChatAskResponse
+                {
+                    Query = query,
+                    SessionId = sessionId ?? string.Empty
+                };
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "Failed to communicate with default chatbot endpoint {Endpoint}", askUrl);
+                throw new InvalidOperationException($"Failed to communicate with chatbot: {ex.Message}", ex);
+            }
+        }
+
         public async Task<bool> IsEndpointAvailableAsync(int chatbotMaterialId)
         {
             var chatbot = await _materialService.GetChatbotMaterialAsync(chatbotMaterialId);
@@ -86,6 +132,25 @@ namespace XR50TrainingAssetRepo.Services
             }
 
             var endpoint = GetEndpointFromChatbot(chatbot.ChatbotConfig);
+            if (string.IsNullOrEmpty(endpoint))
+            {
+                return false;
+            }
+
+            try
+            {
+                var response = await _httpClient.GetAsync(endpoint);
+                return response.IsSuccessStatusCode;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public async Task<bool> IsDefaultEndpointAvailableAsync()
+        {
+            var endpoint = _configuration.GetValue<string>("Chatbot:DefaultEndpoint");
             if (string.IsNullOrEmpty(endpoint))
             {
                 return false;

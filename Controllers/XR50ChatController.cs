@@ -24,6 +24,84 @@ namespace XR50TrainingAssetRepo.Controllers
         }
 
         /// <summary>
+        /// Sends a query to the default chatbot and returns the response.
+        /// </summary>
+        /// <param name="tenantName">The tenant name</param>
+        /// <param name="request">The chat request containing the query and optional session ID</param>
+        /// <returns>The chatbot's response</returns>
+        [HttpPost("ask")]
+        public async Task<ActionResult<ChatAskResponse>> Ask(
+            string tenantName,
+            [FromBody] ChatAskRequest request)
+        {
+            _logger.LogInformation("Chat request in tenant {TenantName}: {Query}", tenantName, request.Query);
+
+            if (string.IsNullOrWhiteSpace(request.Query))
+            {
+                return BadRequest(new { Error = "Query cannot be empty" });
+            }
+
+            try
+            {
+                var response = await _chatService.AskAsync(request.Query, request.SessionId);
+
+                _logger.LogInformation("Chat response received, session {SessionId}", response.SessionId);
+
+                return Ok(response);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogError(ex, "Chat operation failed");
+                return BadRequest(new { Error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error in chat");
+                return StatusCode(500, new { Error = "Internal server error" });
+            }
+        }
+
+        /// <summary>
+        /// Sends a query to the default chatbot using form data (alternative to JSON body).
+        /// </summary>
+        /// <param name="tenantName">The tenant name</param>
+        /// <param name="query">The question to ask</param>
+        /// <param name="session_id">Optional session ID for conversation continuity</param>
+        /// <returns>The chatbot's response</returns>
+        [HttpPost("ask/form")]
+        [Consumes("application/x-www-form-urlencoded")]
+        public async Task<ActionResult<ChatAskResponse>> AskForm(
+            string tenantName,
+            [FromForm] string query,
+            [FromForm] string? session_id = null)
+        {
+            return await Ask(tenantName, new ChatAskRequest
+            {
+                Query = query,
+                SessionId = session_id
+            });
+        }
+
+        /// <summary>
+        /// Checks if the default chatbot endpoint is available.
+        /// </summary>
+        /// <param name="tenantName">The tenant name</param>
+        /// <returns>Health status of the default chatbot endpoint</returns>
+        [HttpGet("health")]
+        public async Task<ActionResult<object>> CheckHealth(string tenantName)
+        {
+            _logger.LogInformation("Checking default chatbot health in tenant: {TenantName}", tenantName);
+
+            var isAvailable = await _chatService.IsDefaultEndpointAvailableAsync();
+
+            return Ok(new
+            {
+                available = isAvailable,
+                checkedAt = DateTime.UtcNow
+            });
+        }
+
+        /// <summary>
         /// Sends a query to a chatbot and returns the response.
         /// </summary>
         /// <param name="tenantName">The tenant name</param>
