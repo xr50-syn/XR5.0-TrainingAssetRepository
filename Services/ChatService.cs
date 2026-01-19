@@ -79,7 +79,7 @@ namespace XR50TrainingAssetRepo.Services
 
         public async Task<ChatAskResponse> AskAsync(string query, string? sessionId = null)
         {
-            var endpoint = _configuration.GetValue<string>("Chatbot:DefaultEndpoint");
+            var endpoint = _configuration.GetValue<string>("ChatbotApi:BaseUrl");
             if (string.IsNullOrEmpty(endpoint))
             {
                 throw new InvalidOperationException("No default chatbot endpoint configured");
@@ -150,7 +150,7 @@ namespace XR50TrainingAssetRepo.Services
 
         public async Task<bool> IsDefaultEndpointAvailableAsync()
         {
-            var endpoint = _configuration.GetValue<string>("Chatbot:DefaultEndpoint");
+            var endpoint = _configuration.GetValue<string>("ChatbotApi:BaseUrl");
             if (string.IsNullOrEmpty(endpoint))
             {
                 return false;
