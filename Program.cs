@@ -290,6 +290,7 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("assets", new OpenApiInfo { Title = "5. Asset Management", Version = "v1" });
     c.SwaggerDoc("users", new OpenApiInfo   { Title = "6. User Management", Version = "v1" });
     c.SwaggerDoc("chat", new OpenApiInfo { Title = "7. Chat API", Version = "v1", Description = "Chatbot conversation endpoints" });
+    c.SwaggerDoc("voice", new OpenApiInfo { Title = "8. Voice Assistant API", Version = "v1", Description = "Voice assistant conversation and document upload endpoints" });
 
     c.SwaggerDoc("all", new OpenApiInfo { 
         Title = "Complete XR50 Training Asset Repository API", 
@@ -314,6 +315,7 @@ builder.Services.AddSwaggerGen(c =>
             "assets" => controllerName.Contains("Assets"),
             "users" => controllerName.Contains("Users"),
             "chat" => controllerName.Equals("Chat", StringComparison.OrdinalIgnoreCase),
+            "voice" => controllerName.Equals("VoiceAssistant", StringComparison.OrdinalIgnoreCase),
             "test" => controllerName.Contains("test"),
             _ => false
         };
@@ -423,6 +425,7 @@ if (app.Environment.IsDevelopment())
           c.SwaggerEndpoint("/swagger/users/swagger.json", "6. User Management");
           c.SwaggerEndpoint("/swagger/v1/swagger.json", "Default");
           c.SwaggerEndpoint("/swagger/chat/swagger.json", "7. Chat API");
+          c.SwaggerEndpoint("/swagger/voice/swagger.json", "8. Voice Assistant API");
           // OAuth2 configuration for Swagger UI
           c.OAuthClientId("xr50-swagger");
           c.OAuthAppName("XR50 Training API - Swagger");
@@ -513,6 +516,9 @@ public static class ServiceCollectionExtensions
 
         // Chat Service for chatbot conversations
         services.AddHttpClient<IChatService, ChatService>();
+
+        // Voice Assistant Service (HttpClient-based)
+        services.AddHttpClient<IVoiceAssistantService, VoiceAssistantService>();
 
         // Background service for AI status synchronization (database-driven, adaptive polling)
         services.AddHostedService<AiStatusSyncService>();
