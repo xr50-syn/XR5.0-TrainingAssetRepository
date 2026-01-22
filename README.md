@@ -15,8 +15,12 @@ cd XR5.0-TrainingAssetRepository
 cp .env.sandbox .env
 docker-compose --profile sandbox up -d
 
-# Create sample buckets
+# Create sample buckets (choose your OS)
+# Note: The AWS CLI is not installed automatically; install it yourself first.
+# Linux/macOS
 chmod +x sandbox-init-buckets.sh && ./sandbox-init-buckets.sh
+# Windows (PowerShell)
+powershell -ExecutionPolicy Bypass -File .\sandbox-init-buckets.ps1
 
 # Access
 # - API Swagger: http://localhost:5286/swagger
