@@ -56,7 +56,7 @@ curl http://localhost:5286/health
 
 **IMPORTANT**: The application does NOT create S3 buckets automatically. All buckets must be pre-provisioned.
 
-Run the provided script to create sample buckets:
+Run the provided script to create sample buckets (choose your OS). Note: AWS CLI must be installed before running the script.
 
 ```bash
 # Make the script executable
@@ -66,17 +66,22 @@ chmod +x sandbox-init-buckets.sh
 ./sandbox-init-buckets.sh
 ```
 
+```powershell
+# Windows (PowerShell)
+powershell -ExecutionPolicy Bypass -File .\sandbox-init-buckets.ps1
+```
+
 This creates the following buckets in MinIO:
 - `xr50-sandbox-tenant-demo`
-- `xr50-sandbox-tenant-pilot1`
-- `xr50-sandbox-tenant-pilot2`
+- `xr50-sandbox-tenant-pilot4`
+- `xr50-sandbox-tenant-pilot5`
 
 **Alternative**: Create buckets manually via MinIO Console or AWS CLI:
 ```bash
 # Using AWS CLI
 aws --endpoint-url=http://localhost:9000 s3 mb s3://xr50-sandbox-tenant-demo
-aws --endpoint-url=http://localhost:9000 s3 mb s3://xr50-sandbox-tenant-pilot1
-aws --endpoint-url=http://localhost:9000 s3 mb s3://xr50-sandbox-tenant-pilot2
+aws --endpoint-url=http://localhost:9000 s3 mb s3://xr50-sandbox-tenant-pilot4
+aws --endpoint-url=http://localhost:9000 s3 mb s3://xr50-sandbox-tenant-pilot5
 
 # Verify buckets were created
 aws --endpoint-url=http://localhost:9000 s3 ls
@@ -120,8 +125,8 @@ Example request body (using pre-created bucket):
 
 **IMPORTANT**: The bucket must already exist! Use one of the pre-created buckets:
 - `xr50-sandbox-tenant-demo`
-- `xr50-sandbox-tenant-pilot1`
-- `xr50-sandbox-tenant-pilot2`
+- `xr50-sandbox-tenant-pilot4`
+- `xr50-sandbox-tenant-pilot5`
 
 If you need additional buckets, you can create them:
 
@@ -200,7 +205,10 @@ docker-compose --profile sandbox down -v
 docker-compose --profile sandbox up -d
 
 # Recreate buckets
+# Linux/macOS
 ./sandbox-init-buckets.sh
+# Windows (PowerShell)
+powershell -ExecutionPolicy Bypass -File .\sandbox-init-buckets.ps1
 ```
 
 ## Troubleshooting
