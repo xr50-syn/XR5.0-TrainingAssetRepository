@@ -138,7 +138,23 @@ namespace XR50TrainingAssetRepo.Services.Materials
             _logger.LogInformation("Created voice material: {Name} with ID: {Id} and {AssetCount} assets",
                 voice.Name, voice.id, assetIds.Count);
 
-            return voice;
+            // Automatically submit assets for AI processing
+            if (assetIds.Any())
+            {
+                try
+                {
+                    await SubmitForProcessingAsync(voice.id);
+                    _logger.LogInformation("Auto-submitted voice material {Id} for AI processing", voice.id);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Auto-submission failed for voice material {Id}. Manual submission required.", voice.id);
+                    // Don't throw - material is created, user can retry submission manually
+                }
+            }
+
+            // Reload to get updated status
+            return await GetByIdAsync(voice.id) ?? voice;
         }
 
         public async Task<VoiceMaterial?> GetWithAssetsAsync(int id)
@@ -274,7 +290,9 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 .Where(a => assetIds.Contains(a.Id))
                 .ToListAsync();
 
-            var hasSubmissions = false;
+            var successCount = 0;
+            var failedAssets = new List<(int AssetId, string Error)>();
+            var skippedCount = 0;
 
             foreach (var asset in assets)
             {
@@ -285,7 +303,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                         var jobId = await _chatbotApiService.SubmitDocumentAsync(asset.Id, asset.URL, asset.Filetype ?? "pdf");
                         asset.JobId = jobId;
                         asset.AiAvailable = "process";
-                        hasSubmissions = true;
+                        successCount++;
 
                         _logger.LogInformation("Submitted asset {AssetId} for processing. Job ID: {JobId}",
                             asset.Id, jobId);
@@ -293,15 +311,34 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     catch (ChatbotApiException ex)
                     {
                         _logger.LogWarning(ex, "Failed to submit asset {AssetId} for processing", asset.Id);
+                        failedAssets.Add((asset.Id, ex.Message));
                     }
+                }
+                else
+                {
+                    skippedCount++;
                 }
             }
 
-            if (hasSubmissions)
+            // If all eligible assets failed, throw an error with details
+            if (successCount == 0 && failedAssets.Any())
+            {
+                var errorDetails = string.Join("; ", failedAssets.Select(f => $"Asset {f.AssetId}: {f.Error}"));
+                throw new InvalidOperationException($"Failed to submit all assets for processing. Errors: {errorDetails}");
+            }
+
+            if (successCount > 0)
             {
                 voice.VoiceStatus = "process";
                 voice.Updated_at = DateTime.UtcNow;
                 await context.SaveChangesAsync();
+
+                // Log if there were partial failures
+                if (failedAssets.Any())
+                {
+                    _logger.LogWarning("Partial submission failure for voice material {VoiceId}: {SuccessCount} succeeded, {FailedCount} failed",
+                        voiceId, successCount, failedAssets.Count);
+                }
             }
 
             return voice;
