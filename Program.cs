@@ -494,7 +494,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IXR50ManualTableCreator, XR50ManualTableCreator>();
         services.AddScoped<IXR50TenantDbContextFactory, XR50TenantDbContextFactory>();
         services.AddScoped<ILearningPathService, LearningPathService>();
-        services.AddScoped<IMaterialService, MaterialService>();
         services.AddScoped<IAssetService, AssetService>();
 
         // New specialized material services

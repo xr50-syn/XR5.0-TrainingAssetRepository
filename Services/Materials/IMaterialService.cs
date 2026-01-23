@@ -1,3 +1,4 @@
+using System.Text.Json;
 using XR50TrainingAssetRepo.Models;
 
 namespace XR50TrainingAssetRepo.Services.Materials
@@ -14,6 +15,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
         Task<T?> GetByIdAsync<T>(int id) where T : Material;
         Task<Material> CreateAsync(Material material);
         Task<Material> CreateCompleteAsync(Material material);
+        Task<Material> CreateFromJsonAsync(JsonElement materialData);
         Task<Material> UpdateAsync(Material material);
         Task<bool> DeleteAsync(int id);
         Task<bool> ExistsAsync(int id);

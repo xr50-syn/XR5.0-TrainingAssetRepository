@@ -1,5 +1,6 @@
 using System.Text.Json;
 using XR50TrainingAssetRepo.Models.DTOs;
+using XR50TrainingAssetRepo.Services.Materials;
 
 namespace XR50TrainingAssetRepo.Services
 {
@@ -9,25 +10,25 @@ namespace XR50TrainingAssetRepo.Services
     public class ChatService : IChatService
     {
         private readonly HttpClient _httpClient;
-        private readonly IMaterialService _materialService;
+        private readonly ISimpleMaterialService _simpleMaterialService;
         private readonly IConfiguration _configuration;
         private readonly ILogger<ChatService> _logger;
 
         public ChatService(
             HttpClient httpClient,
-            IMaterialService materialService,
+            ISimpleMaterialService simpleMaterialService,
             IConfiguration configuration,
             ILogger<ChatService> logger)
         {
             _httpClient = httpClient;
-            _materialService = materialService;
+            _simpleMaterialService = simpleMaterialService;
             _configuration = configuration;
             _logger = logger;
         }
 
         public async Task<ChatAskResponse> AskAsync(int chatbotMaterialId, string query, string? sessionId = null)
         {
-            var chatbot = await _materialService.GetChatbotMaterialAsync(chatbotMaterialId);
+            var chatbot = await _simpleMaterialService.GetChatbotByIdAsync(chatbotMaterialId);
             if (chatbot == null)
             {
                 throw new KeyNotFoundException($"ChatbotMaterial with ID {chatbotMaterialId} not found");
@@ -125,7 +126,7 @@ namespace XR50TrainingAssetRepo.Services
 
         public async Task<bool> IsEndpointAvailableAsync(int chatbotMaterialId)
         {
-            var chatbot = await _materialService.GetChatbotMaterialAsync(chatbotMaterialId);
+            var chatbot = await _simpleMaterialService.GetChatbotByIdAsync(chatbotMaterialId);
             if (chatbot == null)
             {
                 return false;

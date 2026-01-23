@@ -60,6 +60,20 @@ namespace XR50TrainingAssetRepo.Controllers
                 // Validate the request
                 request.Validate();
 
+                // Validate storage type matches running implementation
+                var runningStorageType = _storageService.GetStorageType();
+                if (!request.StorageType.Equals(runningStorageType, StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning("Storage type mismatch: requested {RequestedType}, but server is configured for {RunningType}",
+                        request.StorageType, runningStorageType);
+                    return BadRequest(new
+                    {
+                        Error = "Storage type mismatch",
+                        Message = $"This server is configured for {runningStorageType} storage. Cannot create tenant with {request.StorageType} storage.",
+                        ConfiguredStorageType = runningStorageType
+                    });
+                }
+
                 // Create tenant object from request
                 var tenant = new XR50Tenant
                 {

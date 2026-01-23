@@ -8,6 +8,7 @@ using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Services;
+using XR50TrainingAssetRepo.Services.Materials;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
@@ -23,16 +24,16 @@ namespace XR50TrainingAssetRepo.Controllers
     public class LearningPathsController : ControllerBase
     {
         private readonly ILearningPathService _learningPathService;
-        private readonly IMaterialService _materialService;
+        private readonly IMaterialRelationshipService _materialRelationshipService;
         private readonly ILogger<LearningPathsController> _logger;
 
         public LearningPathsController(
             ILearningPathService learningPathService,
-            IMaterialService materialService,
+            IMaterialRelationshipService materialRelationshipService,
             ILogger<LearningPathsController> logger)
         {
             _learningPathService = learningPathService;
-            _materialService = materialService;
+            _materialRelationshipService = materialRelationshipService;
             _logger = logger;
         }
 
@@ -205,7 +206,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 return NotFound($"Learning path {learningPathId} not found");
             }
 
-            var materials = await _materialService.GetMaterialsByLearningPathAsync(learningPathId, includeOrder);
+            var materials = await _materialRelationshipService.GetMaterialsByLearningPathAsync(learningPathId, includeOrder);
 
             _logger.LogInformation("Found {Count} materials for learning path {LearningPathId} for tenant: {TenantName}",
                 materials.Count(), learningPathId, tenantName);
@@ -226,7 +227,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
             try
             {
-                var relationshipId = await _materialService.AssignMaterialToLearningPathAsync(
+                var relationshipId = await _materialRelationshipService.AssignMaterialToLearningPathAsync(
                     materialId, learningPathId, relationshipType, displayOrder);
 
                 _logger.LogInformation("Successfully assigned material {MaterialId} to learning path {LearningPathId} (Relationship: {RelationshipId}) for tenant: {TenantName}",
@@ -260,7 +261,7 @@ namespace XR50TrainingAssetRepo.Controllers
             _logger.LogInformation("Removing material {MaterialId} from learning path {LearningPathId} for tenant: {TenantName}",
                 materialId, learningPathId, tenantName);
 
-            var success = await _materialService.RemoveMaterialFromLearningPathAsync(materialId, learningPathId);
+            var success = await _materialRelationshipService.RemoveMaterialFromLearningPathAsync(materialId, learningPathId);
 
             if (!success)
             {
@@ -285,7 +286,7 @@ namespace XR50TrainingAssetRepo.Controllers
             _logger.LogInformation("Reordering {Count} materials in learning path {LearningPathId} for tenant: {TenantName}",
                 materialOrderMap.Count, learningPathId, tenantName);
 
-            var success = await _materialService.ReorderMaterialsInLearningPathAsync(learningPathId, materialOrderMap);
+            var success = await _materialRelationshipService.ReorderMaterialsInLearningPathAsync(learningPathId, materialOrderMap);
 
             if (!success)
             {
@@ -316,7 +317,7 @@ namespace XR50TrainingAssetRepo.Controllers
               {
                   try
                   {
-                      var relationshipId = await _materialService.AssignMaterialToLearningPathAsync(
+                      var relationshipId = await _materialRelationshipService.AssignMaterialToLearningPathAsync(
                           assignment.MaterialId,
                           learningPathId,
                           assignment.RelationshipType ?? "contains",
@@ -428,7 +429,7 @@ namespace XR50TrainingAssetRepo.Controllers
             {
                 try
                 {
-                    var relationshipId = await _materialService.AssignMaterialToLearningPathAsync(
+                    var relationshipId = await _materialRelationshipService.AssignMaterialToLearningPathAsync(
                         materialAssignment.MaterialId, 
                         learningPathId, 
                         materialAssignment.RelationshipType ?? "contains", 

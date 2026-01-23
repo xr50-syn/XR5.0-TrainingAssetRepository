@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Data;
@@ -92,6 +93,204 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 throw;
             }
         }
+
+        public async Task<Material> CreateFromJsonAsync(JsonElement materialData)
+        {
+            // Helper method to get property case-insensitively
+            bool TryGetPropertyCI(JsonElement element, string propertyName, out JsonElement value)
+            {
+                if (element.TryGetProperty(propertyName, out value)) return true;
+                if (element.TryGetProperty(propertyName.ToLower(), out value)) return true;
+                if (element.TryGetProperty(char.ToUpper(propertyName[0]) + propertyName.Substring(1), out value)) return true;
+                return false;
+            }
+
+            // Determine material type
+            string materialType = "default";
+            if (TryGetPropertyCI(materialData, "type", out var typeProp))
+            {
+                materialType = typeProp.GetString()?.ToLower() ?? "default";
+            }
+            else if (TryGetPropertyCI(materialData, "materialType", out var materialTypeProp))
+            {
+                materialType = materialTypeProp.GetString()?.ToLower() ?? "default";
+            }
+
+            _logger.LogInformation("Creating material of type: {Type} from JSON", materialType);
+
+            // Create appropriate material based on type
+            Material material = materialType switch
+            {
+                "workflow" => ParseWorkflowFromJson(materialData, TryGetPropertyCI),
+                "checklist" => ParseChecklistFromJson(materialData, TryGetPropertyCI),
+                "video" => ParseVideoFromJson(materialData, TryGetPropertyCI),
+                "questionnaire" or "quiz" => ParseQuestionnaireFromJson(materialData, TryGetPropertyCI),
+                "image" => ParseImageFromJson(materialData, TryGetPropertyCI),
+                "pdf" => ParsePDFFromJson(materialData, TryGetPropertyCI),
+                "unity" or "unitydemo" => ParseUnityFromJson(materialData, TryGetPropertyCI),
+                "chatbot" => ParseChatbotFromJson(materialData, TryGetPropertyCI),
+                "mqtt_template" or "mqtt" => ParseMQTTFromJson(materialData, TryGetPropertyCI),
+                _ => ParseDefaultFromJson(materialData, TryGetPropertyCI)
+            };
+
+            // Create the material using the complete method
+            return await CreateCompleteAsync(material);
+        }
+
+        #region JSON Parsing Helpers
+
+        private delegate bool TryGetPropertyDelegate(JsonElement element, string propertyName, out JsonElement value);
+
+        private Material ParseWorkflowFromJson(JsonElement json, TryGetPropertyDelegate tryGet)
+        {
+            var workflow = new WorkflowMaterial();
+            SetCommonPropertiesFromJson(workflow, json, tryGet);
+
+            if (tryGet(json, "steps", out var stepsProp) && stepsProp.ValueKind == JsonValueKind.Array)
+            {
+                workflow.WorkflowSteps = new List<WorkflowStep>();
+                foreach (var step in stepsProp.EnumerateArray())
+                {
+                    workflow.WorkflowSteps.Add(new WorkflowStep
+                    {
+                        Title = tryGet(step, "title", out var title) ? title.GetString() ?? "" : "",
+                        Content = tryGet(step, "content", out var content) ? content.GetString() : null
+                    });
+                }
+            }
+
+            return workflow;
+        }
+
+        private Material ParseChecklistFromJson(JsonElement json, TryGetPropertyDelegate tryGet)
+        {
+            var checklist = new ChecklistMaterial();
+            SetCommonPropertiesFromJson(checklist, json, tryGet);
+
+            if (tryGet(json, "entries", out var entriesProp) && entriesProp.ValueKind == JsonValueKind.Array)
+            {
+                checklist.Entries = new List<ChecklistEntry>();
+                foreach (var entry in entriesProp.EnumerateArray())
+                {
+                    checklist.Entries.Add(new ChecklistEntry
+                    {
+                        Text = tryGet(entry, "text", out var text) ? text.GetString() ?? "" : "",
+                        Description = tryGet(entry, "description", out var desc) ? desc.GetString() : null
+                    });
+                }
+            }
+
+            return checklist;
+        }
+
+        private Material ParseVideoFromJson(JsonElement json, TryGetPropertyDelegate tryGet)
+        {
+            var video = new VideoMaterial();
+            SetCommonPropertiesFromJson(video, json, tryGet);
+
+            if (tryGet(json, "assetId", out var assetId)) video.AssetId = assetId.GetInt32();
+            if (tryGet(json, "videoPath", out var path)) video.VideoPath = path.GetString();
+            if (tryGet(json, "videoDuration", out var duration)) video.VideoDuration = duration.GetInt32();
+            if (tryGet(json, "videoResolution", out var res)) video.VideoResolution = res.GetString();
+            if (tryGet(json, "startTime", out var startTime)) video.startTime = startTime.GetString();
+            if (tryGet(json, "annotations", out var annotations)) video.Annotations = annotations.GetRawText();
+
+            return video;
+        }
+
+        private Material ParseQuestionnaireFromJson(JsonElement json, TryGetPropertyDelegate tryGet)
+        {
+            var questionnaire = new QuestionnaireMaterial();
+            SetCommonPropertiesFromJson(questionnaire, json, tryGet);
+
+            if (tryGet(json, "questions", out var questionsProp) && questionsProp.ValueKind == JsonValueKind.Array)
+            {
+                questionnaire.QuestionnaireEntries = new List<QuestionnaireEntry>();
+                foreach (var q in questionsProp.EnumerateArray())
+                {
+                    questionnaire.QuestionnaireEntries.Add(new QuestionnaireEntry
+                    {
+                        Text = tryGet(q, "question", out var question) ? question.GetString() ?? "" :
+                               (tryGet(q, "text", out var text) ? text.GetString() ?? "" : ""),
+                        Description = tryGet(q, "description", out var desc) ? desc.GetString() : null
+                    });
+                }
+            }
+
+            return questionnaire;
+        }
+
+        private Material ParseImageFromJson(JsonElement json, TryGetPropertyDelegate tryGet)
+        {
+            var image = new ImageMaterial();
+            SetCommonPropertiesFromJson(image, json, tryGet);
+
+            if (tryGet(json, "assetId", out var assetId)) image.AssetId = assetId.GetInt32();
+            if (tryGet(json, "imagePath", out var path)) image.ImagePath = path.GetString();
+
+            return image;
+        }
+
+        private Material ParsePDFFromJson(JsonElement json, TryGetPropertyDelegate tryGet)
+        {
+            var pdf = new PDFMaterial();
+            SetCommonPropertiesFromJson(pdf, json, tryGet);
+
+            if (tryGet(json, "assetId", out var assetId)) pdf.AssetId = assetId.GetInt32();
+
+            return pdf;
+        }
+
+        private Material ParseUnityFromJson(JsonElement json, TryGetPropertyDelegate tryGet)
+        {
+            var unity = new UnityMaterial();
+            SetCommonPropertiesFromJson(unity, json, tryGet);
+
+            if (tryGet(json, "assetId", out var assetId)) unity.AssetId = assetId.GetInt32();
+
+            return unity;
+        }
+
+        private Material ParseChatbotFromJson(JsonElement json, TryGetPropertyDelegate tryGet)
+        {
+            var chatbot = new ChatbotMaterial();
+            SetCommonPropertiesFromJson(chatbot, json, tryGet);
+
+            if (tryGet(json, "chatbotConfig", out var config)) chatbot.ChatbotConfig = config.GetString();
+
+            return chatbot;
+        }
+
+        private Material ParseMQTTFromJson(JsonElement json, TryGetPropertyDelegate tryGet)
+        {
+            var mqtt = new MQTT_TemplateMaterial();
+            SetCommonPropertiesFromJson(mqtt, json, tryGet);
+
+            if (tryGet(json, "messageType", out var msgType)) mqtt.message_type = msgType.GetString();
+            if (tryGet(json, "messageText", out var msgText)) mqtt.message_text = msgText.GetString();
+
+            return mqtt;
+        }
+
+        private Material ParseDefaultFromJson(JsonElement json, TryGetPropertyDelegate tryGet)
+        {
+            var defaultMat = new DefaultMaterial();
+            SetCommonPropertiesFromJson(defaultMat, json, tryGet);
+
+            if (tryGet(json, "assetId", out var assetId)) defaultMat.AssetId = assetId.GetInt32();
+
+            return defaultMat;
+        }
+
+        private void SetCommonPropertiesFromJson(Material material, JsonElement json, TryGetPropertyDelegate tryGet)
+        {
+            if (tryGet(json, "name", out var name)) material.Name = name.GetString() ?? "";
+            if (tryGet(json, "description", out var desc)) material.Description = desc.GetString();
+            if (tryGet(json, "unique_id", out var unique_id) && unique_id.ValueKind == JsonValueKind.Number)
+                material.Unique_id = unique_id.GetInt32();
+        }
+
+        #endregion
 
         public async Task<Material> UpdateAsync(Material material)
         {
