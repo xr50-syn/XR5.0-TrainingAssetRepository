@@ -1510,12 +1510,14 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         /// ```
         /// </remarks>
         /// <param name="tenantName">The tenant name</param>
-        /// <param name="formData">Form data containing material JSON, optional asset data, and optional file (for multipart/form-data requests)</param>
         /// <returns>The created material</returns>
+        /// <remarks>
+        /// Accepts both application/json and multipart/form-data content types.
+        /// - For JSON: Send material data directly in the request body
+        /// - For multipart/form-data: Send 'material' field with JSON, optional 'file', optional 'assetData'
+        /// </remarks>
         [HttpPost]
-        public async Task<ActionResult<CreateMaterialResponse>> PostMaterialDetailed(
-            string tenantName,
-            [FromForm] MaterialCreateFormData? formData = null)
+        public async Task<ActionResult<CreateMaterialResponse>> PostMaterialDetailed(string tenantName)
         {
             try
             {
@@ -1530,8 +1532,10 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 {
                     _logger.LogInformation("Received material creation request via JSON body");
 
-                    using var reader = new StreamReader(Request.Body);
+                    Request.EnableBuffering();
+                    using var reader = new StreamReader(Request.Body, leaveOpen: true);
                     var body = await reader.ReadToEndAsync();
+                    Request.Body.Position = 0;
 
                     if (string.IsNullOrEmpty(body))
                     {
@@ -1553,16 +1557,19 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 {
                     _logger.LogInformation("Received material creation request via form-data");
 
-                    if (formData == null || string.IsNullOrEmpty(formData.material))
+                    var form = await Request.ReadFormAsync();
+                    var materialJson = form["material"].FirstOrDefault();
+
+                    if (string.IsNullOrEmpty(materialJson))
                     {
-                        return BadRequest("material is required");
+                        return BadRequest("material field is required");
                     }
 
-                    file = formData.file;
+                    file = form.Files.GetFile("file");
 
                     try
                     {
-                        materialData = JsonSerializer.Deserialize<JsonElement>(formData.material);
+                        materialData = JsonSerializer.Deserialize<JsonElement>(materialJson);
                     }
                     catch (JsonException ex)
                     {
@@ -1571,11 +1578,12 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     }
 
                     // Extract optional assetData
-                    if (!string.IsNullOrEmpty(formData.assetData))
+                    var assetDataJson = form["assetData"].FirstOrDefault();
+                    if (!string.IsNullOrEmpty(assetDataJson))
                     {
                         try
                         {
-                            assetData = JsonSerializer.Deserialize<JsonElement>(formData.assetData);
+                            assetData = JsonSerializer.Deserialize<JsonElement>(assetDataJson);
                         }
                         catch (JsonException ex)
                         {
@@ -1589,6 +1597,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 else
                 {
                     return BadRequest($"Unsupported content type: {contentType}. Use application/json or multipart/form-data");
+                }
+
+                // Validate required fields
+                var validationError = ValidateMaterialData(materialData);
+                if (validationError != null)
+                {
+                    return BadRequest(validationError);
                 }
 
                 // Parse the incoming JSON to determine material type
@@ -1658,6 +1673,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             {
                 _logger.LogInformation("Received material creation request via JSON body");
 
+                // Validate required fields
+                var validationError = ValidateMaterialData(materialData);
+                if (validationError != null)
+                {
+                    return BadRequest(validationError);
+                }
+
                 // Parse the incoming JSON to determine material type
                 var materialType = GetMaterialTypeFromJson(materialData);
 
@@ -1698,6 +1720,52 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
 
             return "default";
+        }
+
+        // Valid material types (lowercase)
+        private static readonly HashSet<string> ValidMaterialTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "image", "video", "pdf", "unity", "chatbot", "questionnaire",
+            "checklist", "workflow", "mqtt_template", "answers", "quiz", "ai_assistant", "default"
+        };
+
+        /// <summary>
+        /// Validates material data for required fields and valid type
+        /// </summary>
+        /// <returns>Error object if validation fails, null if valid</returns>
+        private object? ValidateMaterialData(JsonElement materialData)
+        {
+            // Check for required name field
+            if (!TryGetPropertyCaseInsensitive(materialData, "name", out var nameProp) ||
+                string.IsNullOrWhiteSpace(nameProp.GetString()))
+            {
+                _logger.LogWarning("Material creation failed: name is required");
+                return new { Error = "Material name is required" };
+            }
+
+            // Check for valid type if provided
+            if (TryGetPropertyCaseInsensitive(materialData, "type", out var typeProp))
+            {
+                var typeValue = typeProp.GetString();
+                if (!string.IsNullOrEmpty(typeValue) && !ValidMaterialTypes.Contains(typeValue))
+                {
+                    _logger.LogWarning("Material creation failed: invalid type '{Type}'", typeValue);
+                    return new { Error = $"Invalid material type: '{typeValue}'. Valid types are: {string.Join(", ", ValidMaterialTypes)}" };
+                }
+            }
+
+            // Check discriminator as an alternative type field
+            if (TryGetPropertyCaseInsensitive(materialData, "discriminator", out var discProp))
+            {
+                var discValue = discProp.GetString()?.Replace("Material", "");
+                if (!string.IsNullOrEmpty(discValue) && !ValidMaterialTypes.Contains(discValue))
+                {
+                    _logger.LogWarning("Material creation failed: invalid discriminator '{Discriminator}'", discValue);
+                    return new { Error = $"Invalid material discriminator: '{discValue}'. Valid types are: {string.Join(", ", ValidMaterialTypes)}" };
+                }
+            }
+
+            return null;
         }
 
         // Helper method to convert Type enum to lowercase string (matching EnumMember values)

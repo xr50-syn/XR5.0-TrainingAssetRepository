@@ -17,7 +17,8 @@ Start-Sleep -Seconds 5
 $buckets = @(
   "xr50-sandbox-tenant-demo",
   "xr50-sandbox-tenant-pilot4",
-  "xr50-sandbox-tenant-pilot5"
+  "xr50-sandbox-tenant-pilot5",
+  "xr50-test-verification"
 )
 
 Write-Host ""

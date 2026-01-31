@@ -48,6 +48,9 @@ module.exports = {
   // Skip cleanup (useful for debugging failed tests)
   SKIP_CLEANUP: process.env.SKIP_CLEANUP === 'true',
 
+  // No authentication mode (for testing without Keycloak)
+  NO_AUTH: process.env.NO_AUTH === 'true',
+
   // Computed values
   get KEYCLOAK_TOKEN_URL() {
     return `${this.KEYCLOAK_URL}/realms/${this.KEYCLOAK_REALM}/protocol/openid-connect/token`;

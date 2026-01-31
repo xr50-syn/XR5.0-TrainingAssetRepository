@@ -14,24 +14,50 @@ class ApiClient {
       validateStatus: () => true // Don't throw on non-2xx status
     });
 
-    // Debug logging
-    if (config.DEBUG) {
-      this.client.interceptors.request.use(req => {
-        console.log(`[API] ${req.method.toUpperCase()} ${req.url}`);
-        return req;
-      });
+    // Debug logging - always enabled for better test diagnostics
+    this.client.interceptors.request.use(req => {
+      if (config.DEBUG) {
+        console.log(`\n[API REQUEST] ${req.method.toUpperCase()} ${req.url}`);
+        if (req.data && typeof req.data === 'object' && !(req.data instanceof FormData)) {
+          console.log('[API REQUEST BODY]', JSON.stringify(req.data, null, 2));
+        }
+        if (req.headers) {
+          const headers = { ...req.headers };
+          if (headers.Authorization) {
+            headers.Authorization = headers.Authorization.substring(0, 20) + '...';
+          }
+          console.log('[API REQUEST HEADERS]', headers);
+        }
+      }
+      return req;
+    });
 
-      this.client.interceptors.response.use(res => {
-        console.log(`[API] Response: ${res.status}`);
-        return res;
-      });
-    }
+    this.client.interceptors.response.use(res => {
+      if (config.DEBUG) {
+        console.log(`[API RESPONSE] ${res.status} ${res.statusText}`);
+        if (res.data) {
+          const dataStr = typeof res.data === 'string'
+            ? res.data.substring(0, 500)
+            : JSON.stringify(res.data, null, 2).substring(0, 500);
+          console.log('[API RESPONSE BODY]', dataStr);
+        }
+      }
+      return res;
+    });
   }
 
   /**
    * Get authentication token from Keycloak
+   * If NO_AUTH mode is enabled, skip authentication
    */
   async authenticate(username = config.TEST_USER, password = config.TEST_PASSWORD) {
+    // Skip authentication in NO_AUTH mode
+    if (config.NO_AUTH) {
+      this.token = null;
+      this.tokenExpiry = null;
+      return { noAuth: true };
+    }
+
     const params = new URLSearchParams();
     params.append('grant_type', 'password');
     params.append('client_id', config.KEYCLOAK_CLIENT_ID);
@@ -73,8 +99,12 @@ class ApiClient {
 
   /**
    * Check if token is still valid
+   * Returns true in NO_AUTH mode
    */
   isAuthenticated() {
+    if (config.NO_AUTH) {
+      return true;
+    }
     return this.token && this.tokenExpiry && Date.now() < this.tokenExpiry;
   }
 
@@ -306,5 +336,23 @@ class ApiClient {
   }
 }
 
-// Export singleton instance
-module.exports = new ApiClient();
+/**
+ * Log response details for debugging failed tests
+ */
+function logResponse(response, context = '') {
+  const prefix = context ? `[${context}] ` : '';
+  console.log(`${prefix}Status: ${response.status}`);
+  console.log(`${prefix}URL: ${response.config?.url || 'unknown'}`);
+  console.log(`${prefix}Method: ${response.config?.method?.toUpperCase() || 'unknown'}`);
+  if (response.data) {
+    const dataStr = typeof response.data === 'string'
+      ? response.data.substring(0, 1000)
+      : JSON.stringify(response.data, null, 2).substring(0, 1000);
+    console.log(`${prefix}Response:`, dataStr);
+  }
+}
+
+// Export singleton instance and helper
+const apiClient = new ApiClient();
+apiClient.logResponse = logResponse;
+module.exports = apiClient;
