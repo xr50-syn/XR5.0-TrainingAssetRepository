@@ -1,0 +1,7 @@
+{
+  "name": "Assignments",
+  "description": "Check my assignments",
+  "type": "ai_assistant",
+  "unique_id": 1002,
+  "assetIds": [3, 4]
+}

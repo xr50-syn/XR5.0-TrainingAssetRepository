@@ -568,6 +568,20 @@ namespace XR50TrainingAssetRepo.Services
                     INDEX `idx_program_id` (`ProgramId`),
                     INDEX `idx_learning_path_id` (`LearningPathId`),
                     INDEX `idx_material_id` (`MaterialId`)
+                )",
+
+                // AI Assistant Sessions - stores Siemens API sessions for AIAssistantMaterial
+                @"CREATE TABLE IF NOT EXISTS `AIAssistantSessions` (
+                    `Id` int NOT NULL AUTO_INCREMENT,
+                    `AIAssistantMaterialId` int NOT NULL,
+                    `SessionId` varchar(500) NOT NULL,
+                    `Status` varchar(20) NOT NULL DEFAULT 'active',
+                    `CreatedAt` datetime(6) NOT NULL,
+                    `AssetHash` varchar(64) DEFAULT NULL,
+                    PRIMARY KEY (`Id`),
+                    UNIQUE INDEX `IX_AIAssistantSessions_AIAssistantMaterialId` (`AIAssistantMaterialId`),
+                    CONSTRAINT `FK_AIAssistantSessions_Materials_AIAssistantMaterialId`
+                        FOREIGN KEY (`AIAssistantMaterialId`) REFERENCES `Materials` (`id`) ON DELETE CASCADE
                 )"
             };
         }

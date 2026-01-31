@@ -390,6 +390,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 assetIds = material.GetAssetIdsList(),
                 serviceJobId = material.ServiceJobId,
                 hasActiveSession = activeSession != null,
+                sessionId = activeSession?.SessionId,
                 sessionCreatedAt = activeSession?.CreatedAt,
                 created_at = material.Created_at,
                 updated_at = material.Updated_at

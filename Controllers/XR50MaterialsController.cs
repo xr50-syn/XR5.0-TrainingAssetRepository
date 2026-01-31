@@ -803,6 +803,7 @@ private async Task<object?> GetAIAssistantDetails(int materialId)
         ServiceJobId = aiAssistant.ServiceJobId,
         AIAssistantStatus = aiAssistant.AIAssistantStatus,
         HasActiveSession = activeSession != null,
+        SessionId = activeSession?.SessionId,
         SessionCreatedAt = activeSession?.CreatedAt,
         Assets = assets,
         Related = related
@@ -1715,6 +1716,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 XR50TrainingAssetRepo.Models.Type.MQTT_Template => "mqtt_template",
                 XR50TrainingAssetRepo.Models.Type.Answers => "answers",
                 XR50TrainingAssetRepo.Models.Type.Quiz => "quiz",
+                XR50TrainingAssetRepo.Models.Type.AIAssistant => "ai_assistant",
                 XR50TrainingAssetRepo.Models.Type.Default => "default",
                 _ => "default"
             };
@@ -5263,6 +5265,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         AIAssistantStatus = aiAssistant.AIAssistantStatus,
                         AssetIds = aiAssistant.GetAssetIdsList(),
                         HasActiveSession = activeSession != null,
+                        SessionId = activeSession?.SessionId,
+                        SessionCreatedAt = activeSession?.CreatedAt,
                         Created_at = aiAssistant.Created_at,
                         Updated_at = aiAssistant.Updated_at
                     });
