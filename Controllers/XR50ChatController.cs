@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services;
+using XR50TrainingAssetRepo.Services.Materials;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
@@ -10,16 +11,16 @@ namespace XR50TrainingAssetRepo.Controllers
     public class ChatController : ControllerBase
     {
         private readonly IChatService _chatService;
-        private readonly IMaterialService _materialService;
+        private readonly ISimpleMaterialService _simpleMaterialService;
         private readonly ILogger<ChatController> _logger;
 
         public ChatController(
             IChatService chatService,
-            IMaterialService materialService,
+            ISimpleMaterialService simpleMaterialService,
             ILogger<ChatController> logger)
         {
             _chatService = chatService;
-            _materialService = materialService;
+            _simpleMaterialService = simpleMaterialService;
             _logger = logger;
         }
 
@@ -181,7 +182,7 @@ namespace XR50TrainingAssetRepo.Controllers
         {
             _logger.LogInformation("Getting chatbots for tenant: {TenantName}", tenantName);
 
-            var chatbots = await _materialService.GetAllChatbotMaterialsAsync();
+            var chatbots = await _simpleMaterialService.GetAllChatbotAsync();
 
             var result = chatbots.Select(c => new
             {
@@ -210,7 +211,7 @@ namespace XR50TrainingAssetRepo.Controllers
         {
             _logger.LogInformation("Getting chatbot {ChatbotId} for tenant: {TenantName}", chatbotId, tenantName);
 
-            var chatbot = await _materialService.GetChatbotMaterialAsync(chatbotId);
+            var chatbot = await _simpleMaterialService.GetChatbotByIdAsync(chatbotId);
             if (chatbot == null)
             {
                 _logger.LogWarning("Chatbot {ChatbotId} not found in tenant: {TenantName}", chatbotId, tenantName);

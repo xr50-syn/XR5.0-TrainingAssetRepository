@@ -7,25 +7,26 @@ using XR50TrainingAssetRepo.Services.Materials;
 namespace XR50TrainingAssetRepo.Services
 {
     /// <summary>
-    /// Service for interacting with the Voice Assistant API (Siemens API wrapper).
+    /// Service for interacting with the AI Assistant API (Siemens API wrapper).
     /// Provides document upload and conversational chat with audio responses.
+    /// Manages sessions automatically - first call appends filenames, subsequent calls use stored session.
     /// </summary>
-    public class VoiceAssistantService : IVoiceAssistantService
+    public class AIAssistantService : IAIAssistantService
     {
         private readonly HttpClient _httpClient;
-        private readonly IVoiceMaterialService _voiceMaterialService;
+        private readonly IAIAssistantMaterialService _aiAssistantMaterialService;
         private readonly IConfiguration _configuration;
-        private readonly ILogger<VoiceAssistantService> _logger;
+        private readonly ILogger<AIAssistantService> _logger;
         private readonly string _baseUrl;
 
-        public VoiceAssistantService(
+        public AIAssistantService(
             HttpClient httpClient,
-            IVoiceMaterialService voiceMaterialService,
+            IAIAssistantMaterialService aiAssistantMaterialService,
             IConfiguration configuration,
-            ILogger<VoiceAssistantService> logger)
+            ILogger<AIAssistantService> logger)
         {
             _httpClient = httpClient;
-            _voiceMaterialService = voiceMaterialService;
+            _aiAssistantMaterialService = aiAssistantMaterialService;
             _configuration = configuration;
             _logger = logger;
 
@@ -48,9 +49,9 @@ namespace XR50TrainingAssetRepo.Services
 
         #region Default Endpoint Operations
 
-        public async Task<VoiceAskResponse> AskAsync(string query, string? sessionId = null)
+        public async Task<AIAssistantAskResponse> AskAsync(string query, string? sessionId = null)
         {
-            _logger.LogInformation("Sending query to default voice assistant: {Query}", query);
+            _logger.LogInformation("Sending query to default AI assistant: {Query}", query);
 
             var formContent = new FormUrlEncodedContent(new[]
             {
@@ -67,21 +68,21 @@ namespace XR50TrainingAssetRepo.Services
 
                 var responseContent = await response.Content.ReadAsStringAsync();
 
-                _logger.LogDebug("Received response from voice assistant: {Response}",
+                _logger.LogDebug("Received response from AI assistant: {Response}",
                     responseContent.Length > 500 ? responseContent.Substring(0, 500) + "..." : responseContent);
 
                 return ParseAskResponse(responseContent, query, sessionId);
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "Failed to communicate with voice assistant endpoint {Endpoint}", askUrl);
-                throw new InvalidOperationException($"Failed to communicate with voice assistant: {ex.Message}", ex);
+                _logger.LogError(ex, "Failed to communicate with AI assistant endpoint {Endpoint}", askUrl);
+                throw new InvalidOperationException($"Failed to communicate with AI assistant: {ex.Message}", ex);
             }
         }
 
-        public async Task<VoiceDocumentUploadResponse> UploadDocumentAsync(Stream fileStream, string fileName, string contentType)
+        public async Task<AIAssistantDocumentUploadResponse> UploadDocumentAsync(Stream fileStream, string fileName, string contentType)
         {
-            _logger.LogInformation("Uploading document to voice assistant: {FileName}", fileName);
+            _logger.LogInformation("Uploading document to AI assistant: {FileName}", fileName);
 
             try
             {
@@ -95,20 +96,20 @@ namespace XR50TrainingAssetRepo.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorContent = await response.Content.ReadAsStringAsync();
-                    _logger.LogError("Voice assistant document upload failed: {StatusCode} - {Error}",
+                    _logger.LogError("AI assistant document upload failed: {StatusCode} - {Error}",
                         response.StatusCode, errorContent);
                     throw new InvalidOperationException($"Failed to upload document: {response.StatusCode} - {errorContent}");
                 }
 
                 var responseContent = await response.Content.ReadAsStringAsync();
-                var result = JsonSerializer.Deserialize<VoiceDocumentApiResponse>(responseContent, new JsonSerializerOptions
+                var result = JsonSerializer.Deserialize<AIAssistantDocumentApiResponse>(responseContent, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
                 });
 
                 _logger.LogInformation("Document uploaded successfully. Job ID: {JobId}", result?.JobId);
 
-                return new VoiceDocumentUploadResponse
+                return new AIAssistantDocumentUploadResponse
                 {
                     JobId = result?.JobId,
                     Status = result?.Status ?? "pending",
@@ -118,7 +119,7 @@ namespace XR50TrainingAssetRepo.Services
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "Network error uploading document to voice assistant");
+                _logger.LogError(ex, "Network error uploading document to AI assistant");
                 throw new InvalidOperationException($"Network error uploading document: {ex.Message}", ex);
             }
         }
@@ -138,56 +139,91 @@ namespace XR50TrainingAssetRepo.Services
 
         #endregion
 
-        #region VoiceMaterial-specific Operations
+        #region AIAssistantMaterial-specific Operations
 
-        public async Task<VoiceAskResponse> AskAsync(int voiceMaterialId, string query, string? sessionId = null)
+        public async Task<AIAssistantAskResponse> AskAsync(int aiAssistantMaterialId, string query, string? sessionId = null)
         {
-            var voiceMaterial = await _voiceMaterialService.GetByIdAsync(voiceMaterialId);
-            if (voiceMaterial == null)
+            var aiAssistantMaterial = await _aiAssistantMaterialService.GetByIdAsync(aiAssistantMaterialId);
+            if (aiAssistantMaterial == null)
             {
-                throw new KeyNotFoundException($"VoiceMaterial with ID {voiceMaterialId} not found");
+                throw new KeyNotFoundException($"AIAssistantMaterial with ID {aiAssistantMaterialId} not found");
             }
 
-            _logger.LogInformation("Sending query to voice assistant for material {VoiceMaterialId}: {Query}",
-                voiceMaterialId, query);
+            // Check for existing valid session
+            var existingSession = await _aiAssistantMaterialService.GetActiveSessionAsync(aiAssistantMaterialId);
 
-            // For now, use the default endpoint. In the future, VoiceMaterial could have
-            // custom endpoint configuration like ChatbotMaterial.
-            return await AskAsync(query, sessionId);
+            string effectiveQuery = query;
+            string? sessionIdToUse = sessionId ?? existingSession?.SessionId;
+
+            // If no session exists (or explicit sessionId not provided and no stored session),
+            // this is a first call - append filenames
+            if (existingSession == null && string.IsNullOrEmpty(sessionId))
+            {
+                var assets = await _aiAssistantMaterialService.GetAssetsAsync(aiAssistantMaterialId);
+                var filenames = assets.Select(a => a.Filename).Where(f => !string.IsNullOrEmpty(f)).ToList();
+
+                if (filenames.Any())
+                {
+                    var filenameList = string.Join(", ", filenames);
+                    effectiveQuery = $"{query} using filenames {filenameList}";
+                    _logger.LogInformation("First call for AI Assistant material {AIAssistantMaterialId}. Appending filenames: {Filenames}",
+                        aiAssistantMaterialId, filenameList);
+                }
+
+                sessionIdToUse = null; // No session for first call
+            }
+            else
+            {
+                _logger.LogInformation("Using existing session for AI Assistant material {AIAssistantMaterialId}. Session ID: {SessionId}",
+                    aiAssistantMaterialId, sessionIdToUse);
+            }
+
+            // Make the API call
+            var response = await AskAsync(effectiveQuery, sessionIdToUse);
+
+            // If this was a first call and we got a session_id back, store it
+            if (existingSession == null && string.IsNullOrEmpty(sessionId) && !string.IsNullOrEmpty(response.SessionId))
+            {
+                await _aiAssistantMaterialService.CreateSessionAsync(aiAssistantMaterialId, response.SessionId);
+                _logger.LogInformation("Stored new session for AI Assistant material {AIAssistantMaterialId}. Session ID: {SessionId}",
+                    aiAssistantMaterialId, response.SessionId);
+            }
+
+            return response;
         }
 
-        public async Task<VoiceDocumentUploadResponse> UploadDocumentAsync(int voiceMaterialId, Stream fileStream, string fileName, string contentType)
+        public async Task<AIAssistantDocumentUploadResponse> UploadDocumentAsync(int aiAssistantMaterialId, Stream fileStream, string fileName, string contentType)
         {
-            var voiceMaterial = await _voiceMaterialService.GetByIdAsync(voiceMaterialId);
-            if (voiceMaterial == null)
+            var aiAssistantMaterial = await _aiAssistantMaterialService.GetByIdAsync(aiAssistantMaterialId);
+            if (aiAssistantMaterial == null)
             {
-                throw new KeyNotFoundException($"VoiceMaterial with ID {voiceMaterialId} not found");
+                throw new KeyNotFoundException($"AIAssistantMaterial with ID {aiAssistantMaterialId} not found");
             }
 
-            _logger.LogInformation("Uploading document for voice material {VoiceMaterialId}: {FileName}",
-                voiceMaterialId, fileName);
+            _logger.LogInformation("Uploading document for AI Assistant material {AIAssistantMaterialId}: {FileName}",
+                aiAssistantMaterialId, fileName);
 
             // Upload the document
             var result = await UploadDocumentAsync(fileStream, fileName, contentType);
 
-            // Note: The document is uploaded but not automatically associated with the VoiceMaterial.
+            // Note: The document is uploaded but not automatically associated with the AIAssistantMaterial.
             // To associate it, an Asset would need to be created first, then linked via AddAssetAsync.
             // This could be extended in the future to handle asset creation automatically.
 
             return result;
         }
 
-        public async Task<IEnumerable<VoiceDocumentInfo>> GetDocumentsAsync(int voiceMaterialId)
+        public async Task<IEnumerable<AIAssistantDocumentInfo>> GetDocumentsAsync(int aiAssistantMaterialId)
         {
-            var voiceMaterial = await _voiceMaterialService.GetByIdAsync(voiceMaterialId);
-            if (voiceMaterial == null)
+            var aiAssistantMaterial = await _aiAssistantMaterialService.GetByIdAsync(aiAssistantMaterialId);
+            if (aiAssistantMaterial == null)
             {
-                throw new KeyNotFoundException($"VoiceMaterial with ID {voiceMaterialId} not found");
+                throw new KeyNotFoundException($"AIAssistantMaterial with ID {aiAssistantMaterialId} not found");
             }
 
-            var assets = await _voiceMaterialService.GetAssetsAsync(voiceMaterialId);
+            var assets = await _aiAssistantMaterialService.GetAssetsAsync(aiAssistantMaterialId);
 
-            return assets.Select(a => new VoiceDocumentInfo
+            return assets.Select(a => new AIAssistantDocumentInfo
             {
                 AssetId = a.Id,
                 FileName = a.Filename,
@@ -197,10 +233,10 @@ namespace XR50TrainingAssetRepo.Services
             });
         }
 
-        public async Task<bool> IsEndpointAvailableAsync(int voiceMaterialId)
+        public async Task<bool> IsEndpointAvailableAsync(int aiAssistantMaterialId)
         {
-            var voiceMaterial = await _voiceMaterialService.GetByIdAsync(voiceMaterialId);
-            if (voiceMaterial == null)
+            var aiAssistantMaterial = await _aiAssistantMaterialService.GetByIdAsync(aiAssistantMaterialId);
+            if (aiAssistantMaterial == null)
             {
                 return false;
             }
@@ -213,16 +249,16 @@ namespace XR50TrainingAssetRepo.Services
 
         #region Response Parsing
 
-        private VoiceAskResponse ParseAskResponse(string responseContent, string query, string? sessionId)
+        private AIAssistantAskResponse ParseAskResponse(string responseContent, string query, string? sessionId)
         {
             try
             {
-                var apiResponse = JsonSerializer.Deserialize<VoiceApiResponse>(responseContent, new JsonSerializerOptions
+                var apiResponse = JsonSerializer.Deserialize<AIAssistantApiResponse>(responseContent, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
                 });
 
-                return new VoiceAskResponse
+                return new AIAssistantAskResponse
                 {
                     SessionId = apiResponse?.SessionId ?? sessionId ?? string.Empty,
                     Query = query,
@@ -234,8 +270,8 @@ namespace XR50TrainingAssetRepo.Services
             }
             catch (JsonException ex)
             {
-                _logger.LogWarning(ex, "Failed to parse voice assistant response, returning raw content");
-                return new VoiceAskResponse
+                _logger.LogWarning(ex, "Failed to parse AI assistant response, returning raw content");
+                return new AIAssistantAskResponse
                 {
                     SessionId = sessionId ?? string.Empty,
                     Query = query,
@@ -248,7 +284,7 @@ namespace XR50TrainingAssetRepo.Services
 
         #region Internal Response Models
 
-        private class VoiceApiResponse
+        private class AIAssistantApiResponse
         {
             [JsonPropertyName("session_id")]
             public string? SessionId { get; set; }
@@ -257,7 +293,7 @@ namespace XR50TrainingAssetRepo.Services
             public string? Query { get; set; }
 
             [JsonPropertyName("response")]
-            public VoiceApiResponseContent? Response { get; set; }
+            public AIAssistantApiResponseContent? Response { get; set; }
 
             [JsonPropertyName("reasoning")]
             public string? Reasoning { get; set; }
@@ -266,10 +302,10 @@ namespace XR50TrainingAssetRepo.Services
             public List<string>? Sources { get; set; }
         }
 
-        private class VoiceApiResponseContent
+        private class AIAssistantApiResponseContent
         {
             [JsonPropertyName("speech")]
-            public VoiceApiSpeechContent? Speech { get; set; }
+            public AIAssistantApiSpeechContent? Speech { get; set; }
 
             [JsonPropertyName("markdown")]
             public string? Markdown { get; set; }
@@ -278,7 +314,7 @@ namespace XR50TrainingAssetRepo.Services
             public List<string>? Images { get; set; }
         }
 
-        private class VoiceApiSpeechContent
+        private class AIAssistantApiSpeechContent
         {
             [JsonPropertyName("text")]
             public string? Text { get; set; }
@@ -287,7 +323,7 @@ namespace XR50TrainingAssetRepo.Services
             public string? Link { get; set; }
         }
 
-        private class VoiceDocumentApiResponse
+        private class AIAssistantDocumentApiResponse
         {
             [JsonPropertyName("job_id")]
             public string? JobId { get; set; }

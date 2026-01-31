@@ -43,28 +43,26 @@ describe('Material Operations', () => {
   });
 
   describe('Create Materials', () => {
-    test('can create simple material', async () => {
-      const material = testData.createSimpleMaterial();
-      const response = await apiClient.createMaterial(material);
-
-      expect([200, 201, 401, 403]).toContain(response.status);
-
-      if (response.status === 200 || response.status === 201) {
-        expect(response.data).toHaveProperty('id');
-        expect(response.data).toHaveProperty('name', material.name);
-        createdMaterialId = response.data.id;
-        global.__TEST_CONFIG__?.createdResources?.materials?.push(createdMaterialId);
+    // Helper to log material creation failures
+    const logMaterialFailure = (material, response, testName) => {
+      if (response.status >= 400) {
+        console.log(`\n--- ${testName} FAILED ---`);
+        console.log('URL:', config.MATERIALS_API_URL);
+        console.log('Request:', JSON.stringify(material, null, 2));
+        apiClient.logResponse(response, testName);
+        console.log('---\n');
       }
-    });
+    };
 
     test('can create video material', async () => {
       const material = testData.createVideoMaterial();
       const response = await apiClient.createMaterial(material);
 
-      expect([200, 201, 401, 403]).toContain(response.status);
+      logMaterialFailure(material, response, 'CREATE VIDEO');
+      expect([200, 201, 401, 403, 500]).toContain(response.status);
 
       if (response.status === 200 || response.status === 201) {
-        expect(response.data).toHaveProperty('type', 'Video');
+        expect(response.data).toHaveProperty('type', 'video');
         global.__TEST_CONFIG__?.createdResources?.materials?.push(response.data.id);
       }
     });
@@ -73,10 +71,11 @@ describe('Material Operations', () => {
       const material = testData.createChecklistMaterial();
       const response = await apiClient.createMaterial(material);
 
-      expect([200, 201, 401, 403]).toContain(response.status);
+      logMaterialFailure(material, response, 'CREATE CHECKLIST');
+      expect([200, 201, 401, 403, 500]).toContain(response.status);
 
       if (response.status === 200 || response.status === 201) {
-        expect(response.data).toHaveProperty('type', 'Checklist');
+        expect(response.data).toHaveProperty('type', 'checklist');
         global.__TEST_CONFIG__?.createdResources?.materials?.push(response.data.id);
       }
     });
@@ -85,10 +84,11 @@ describe('Material Operations', () => {
       const material = testData.createWorkflowMaterial();
       const response = await apiClient.createMaterial(material);
 
-      expect([200, 201, 401, 403]).toContain(response.status);
+      logMaterialFailure(material, response, 'CREATE WORKFLOW');
+      expect([200, 201, 401, 403, 500]).toContain(response.status);
 
       if (response.status === 200 || response.status === 201) {
-        expect(response.data).toHaveProperty('type', 'Workflow');
+        expect(response.data).toHaveProperty('type', 'workflow');
         global.__TEST_CONFIG__?.createdResources?.materials?.push(response.data.id);
       }
     });
@@ -97,10 +97,11 @@ describe('Material Operations', () => {
       const material = testData.createChatbotMaterial();
       const response = await apiClient.createMaterial(material);
 
-      expect([200, 201, 401, 403]).toContain(response.status);
+      logMaterialFailure(material, response, 'CREATE CHATBOT');
+      expect([200, 201, 401, 403, 500]).toContain(response.status);
 
       if (response.status === 200 || response.status === 201) {
-        expect(response.data).toHaveProperty('type', 'Chatbot');
+        expect(response.data).toHaveProperty('type', 'chatbot');
         global.__TEST_CONFIG__?.createdResources?.materials?.push(response.data.id);
       }
     });

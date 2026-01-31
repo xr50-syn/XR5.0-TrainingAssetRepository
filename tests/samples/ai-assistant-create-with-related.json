@@ -1,0 +1,10 @@
+{
+  "name": "Training Module Assistant",
+  "description": "AI assistant for the welding training module with related video materials",
+  "type": "ai_assistant",
+  "asset_ids": [5, 6],
+  "related": [
+    { "id": 10, "name": "Welding Safety Video" },
+    { "id": 11, "name": "Equipment Checklist" }
+  ]
+}

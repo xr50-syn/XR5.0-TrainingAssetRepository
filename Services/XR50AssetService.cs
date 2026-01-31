@@ -3,6 +3,7 @@ using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Services;
+using XR50TrainingAssetRepo.Services.Materials;
 using System.Diagnostics;
 
 namespace XR50TrainingAssetRepo.Services
@@ -51,7 +52,7 @@ namespace XR50TrainingAssetRepo.Services
     {
         private readonly IConfiguration _configuration;
         private readonly IXR50TenantDbContextFactory _dbContextFactory;
-        private readonly IMaterialService _materialService;
+        private readonly IMaterialServiceBase _materialServiceBase;
         private readonly IXR50TenantManagementService _tenantManagementService;
         private readonly IStorageService _storageService; // Unified storage interface
         private readonly IChatbotApiService _chatbotApiService;
@@ -60,7 +61,7 @@ namespace XR50TrainingAssetRepo.Services
         public AssetService(
             IConfiguration configuration,
             IXR50TenantDbContextFactory dbContextFactory,
-            IMaterialService materialService,
+            IMaterialServiceBase materialServiceBase,
             IXR50TenantManagementService tenantManagementService,
             IStorageService storageService,
             IChatbotApiService chatbotApiService,
@@ -68,7 +69,7 @@ namespace XR50TrainingAssetRepo.Services
         {
             _configuration = configuration;
             _dbContextFactory = dbContextFactory;
-            _materialService = materialService;
+            _materialServiceBase = materialServiceBase;
             _tenantManagementService = tenantManagementService;
             _storageService = storageService;
             _chatbotApiService = chatbotApiService;
@@ -494,7 +495,7 @@ namespace XR50TrainingAssetRepo.Services
                 return new List<Material>();
             }
 
-            return await _materialService.GetMaterialsByAssetIdAsync(assetId);
+            return await _materialServiceBase.GetByAssetIdAsync(assetId);
         }
 
         public async Task<int> GetAssetUsageCountAsync(int assetId)

@@ -76,10 +76,32 @@ namespace XR50TrainingAssetRepo.Controllers
         {
             _logger.LogInformation("Creating user {UserName} for tenant: {TenantName}", user.UserName, tenantName);
 
+            // Validate required fields
+            if (string.IsNullOrWhiteSpace(user.UserName))
+            {
+                _logger.LogWarning("User creation failed: UserName is required for tenant: {TenantName}", tenantName);
+                return BadRequest(new { Error = "UserName is required" });
+            }
+
+            if (string.IsNullOrWhiteSpace(user.Password))
+            {
+                _logger.LogWarning("User creation failed: Password is required for tenant: {TenantName}", tenantName);
+                return BadRequest(new { Error = "Password is required" });
+            }
+
             try
             {
                 // 1. Create user in tenant database (MySQL)
                 using var context = _dbContextFactory.CreateDbContext();
+
+                // Check for duplicate username
+                if (await context.Users.AnyAsync(u => u.UserName == user.UserName))
+                {
+                    _logger.LogWarning("User creation failed: UserName '{UserName}' already exists for tenant: {TenantName}",
+                        user.UserName, tenantName);
+                    return Conflict(new { Error = $"User '{user.UserName}' already exists" });
+                }
+
                 context.Users.Add(user);
                 await context.SaveChangesAsync();
 
@@ -123,21 +145,42 @@ namespace XR50TrainingAssetRepo.Controllers
         [HttpPut("{userName}")]
         public async Task<IActionResult> PutUser(string tenantName, string userName, User user)
         {
-            if (userName != user.UserName)
-            {
-                return BadRequest("Username mismatch");
-            }
-
             _logger.LogInformation("Updating user {UserName} for tenant: {TenantName}", userName, tenantName);
 
             try
             {
-                // 1. Update in database
+                // 1. Fetch existing user from database
                 using var context = _dbContextFactory.CreateDbContext();
-                context.Entry(user).State = EntityState.Modified;
+                var existingUser = await context.Users.FindAsync(userName);
+
+                if (existingUser == null)
+                {
+                    _logger.LogWarning("User {UserName} not found for update in tenant: {TenantName}", userName, tenantName);
+                    return NotFound(new { Error = $"User '{userName}' not found" });
+                }
+
+                // 2. Apply partial updates (only update non-null/non-empty fields from request)
+                if (!string.IsNullOrEmpty(user.FullName))
+                {
+                    existingUser.FullName = user.FullName;
+                }
+                if (!string.IsNullOrEmpty(user.UserEmail))
+                {
+                    existingUser.UserEmail = user.UserEmail;
+                }
+                if (!string.IsNullOrEmpty(user.Password))
+                {
+                    existingUser.Password = user.Password;
+                }
+                // Allow explicit setting of admin flag
+                existingUser.admin = user.admin;
+
                 await context.SaveChangesAsync();
 
                 _logger.LogInformation("Updated user {UserName} in database for tenant: {TenantName}", userName, tenantName);
+
+                // Use the merged user for OwnCloud updates
+                user = existingUser;
 
                 // 2. Update in OwnCloud (if using OwnCloud storage)
                 if (_storageService.GetStorageType() == "OwnCloud")
@@ -162,16 +205,10 @@ namespace XR50TrainingAssetRepo.Controllers
 
                 return NoContent();
             }
-            catch (DbUpdateConcurrencyException)
+            catch (DbUpdateConcurrencyException ex)
             {
-                if (!await UserExistsAsync(userName))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
+                _logger.LogWarning(ex, "Concurrency conflict updating user {UserName} for tenant: {TenantName}", userName, tenantName);
+                return Conflict(new { Error = "The user was modified by another request. Please retry." });
             }
             catch (Exception ex)
             {

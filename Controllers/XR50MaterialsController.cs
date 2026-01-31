@@ -48,29 +48,53 @@ namespace XR50TrainingAssetRepo.Controllers
     [ApiController]
     public class materialsController : ControllerBase
     {
-        private readonly IMaterialService _materialService;
+        private readonly IMaterialServiceBase _materialServiceBase;
+        private readonly IVideoMaterialService _videoMaterialService;
+        private readonly IChecklistMaterialService _checklistMaterialService;
+        private readonly IWorkflowMaterialService _workflowMaterialService;
+        private readonly IQuestionnaireMaterialService _questionnaireMaterialService;
+        private readonly IQuizMaterialService _quizMaterialService;
+        private readonly ISimpleMaterialService _simpleMaterialService;
+        private readonly IImageMaterialService _imageMaterialService;
+        private readonly IMaterialRelationshipService _materialRelationshipService;
         private readonly IAssetService _assetService;
         private readonly ILearningPathService _learningPathService;
-        private readonly IVoiceMaterialService _voiceMaterialService;
+        private readonly IAIAssistantMaterialService _aiAssistantMaterialService;
         private readonly IUserMaterialService _userMaterialService;
         private readonly IConfiguration _configuration;
         private readonly IWebHostEnvironment _environment;
         private readonly ILogger<materialsController> _logger;
 
         public materialsController(
-            IMaterialService materialService,
+            IMaterialServiceBase materialServiceBase,
+            IVideoMaterialService videoMaterialService,
+            IChecklistMaterialService checklistMaterialService,
+            IWorkflowMaterialService workflowMaterialService,
+            IQuestionnaireMaterialService questionnaireMaterialService,
+            IQuizMaterialService quizMaterialService,
+            ISimpleMaterialService simpleMaterialService,
+            IImageMaterialService imageMaterialService,
+            IMaterialRelationshipService materialRelationshipService,
             IAssetService assetService,
             ILearningPathService learningPathService,
-            IVoiceMaterialService voiceMaterialService,
+            IAIAssistantMaterialService aiAssistantMaterialService,
             IUserMaterialService userMaterialService,
             IConfiguration configuration,
             IWebHostEnvironment environment,
             ILogger<materialsController> logger)
         {
-            _materialService = materialService;
+            _materialServiceBase = materialServiceBase;
+            _videoMaterialService = videoMaterialService;
+            _checklistMaterialService = checklistMaterialService;
+            _workflowMaterialService = workflowMaterialService;
+            _questionnaireMaterialService = questionnaireMaterialService;
+            _quizMaterialService = quizMaterialService;
+            _simpleMaterialService = simpleMaterialService;
+            _imageMaterialService = imageMaterialService;
+            _materialRelationshipService = materialRelationshipService;
             _assetService = assetService;
             _learningPathService = learningPathService;
-            _voiceMaterialService = voiceMaterialService;
+            _aiAssistantMaterialService = aiAssistantMaterialService;
             _userMaterialService = userMaterialService;
             _configuration = configuration;
             _environment = environment;
@@ -83,7 +107,7 @@ namespace XR50TrainingAssetRepo.Controllers
         {
             _logger.LogInformation("Getting materials for tenant: {TenantName}", tenantName);
 
-            var materials = await _materialService.GetAllMaterialsAsync();
+            var materials = await _materialServiceBase.GetAllAsync();
 
             _logger.LogInformation("Found {MaterialCount} materials for tenant: {TenantName}",
                 materials.Count(), tenantName);
@@ -97,7 +121,7 @@ namespace XR50TrainingAssetRepo.Controllers
         {
             _logger.LogInformation("Getting material {Id} for tenant: {TenantName}", id, tenantName);
 
-            var material = await _materialService.GetMaterialAsync(id);
+            var material = await _materialServiceBase.GetByIdAsync(id);
 
             if (material == null)
             {
@@ -228,7 +252,7 @@ public async Task<ActionResult<object>> GetCompleteMaterialDetails(string tenant
         _logger.LogInformation("Getting complete details for material: {MaterialId} in tenant: {TenantName}", id, tenantName);
 
         // First get the basic material to determine type
-        var baseMaterial = await _materialService.GetMaterialAsync(id);
+        var baseMaterial = await _materialServiceBase.GetByIdAsync(id);
         if (baseMaterial == null)
         {
             _logger.LogWarning("Material not found: {MaterialId}", id);
@@ -248,7 +272,7 @@ public async Task<ActionResult<object>> GetCompleteMaterialDetails(string tenant
             MaterialType.Unity => await GetUnityDetails(id),
             MaterialType.Chatbot => await GetChatbotDetails(id),
             MaterialType.MQTT_Template => await GetMQTTTemplateDetails(id),
-            MaterialType.Voice => await GetVoiceDetails(id),
+            MaterialType.AIAssistant => await GetAIAssistantDetails(id),
             _ => await GetBasicMaterialDetails(id)
         };
 
@@ -271,7 +295,7 @@ public async Task<ActionResult<object>> GetCompleteMaterialDetails(string tenant
 
 private async Task<object?> GetWorkflowDetails(int materialId)
 {
-    var workflow = await _materialService.GetWorkflowMaterialWithStepsAsync(materialId);
+    var workflow = await _workflowMaterialService.GetWithStepsAsync(materialId);
     if (workflow == null) return null;
 
     var related = await GetRelatedMaterialsAsync(materialId);
@@ -312,7 +336,7 @@ private async Task<object?> GetWorkflowDetails(int materialId)
 
 private async Task<object?> GetVideoDetails(int materialId)
 {
-    var video = await _materialService.GetVideoMaterialWithTimestampsAsync(materialId);
+    var video = await _videoMaterialService.GetWithTimestampsAsync(materialId);
     if (video == null) return null;
 
     // Fetch full asset if AssetId exists
@@ -382,7 +406,7 @@ private async Task<object?> GetVideoDetails(int materialId)
 
 private async Task<object?> GetChecklistDetails(int materialId)
 {
-    var checklist = await _materialService.GetChecklistMaterialWithEntriesAsync(materialId);
+    var checklist = await _checklistMaterialService.GetWithEntriesAsync(materialId);
     if (checklist == null) return null;
 
     var related = await GetRelatedMaterialsAsync(materialId);
@@ -423,7 +447,7 @@ private async Task<object?> GetChecklistDetails(int materialId)
 
 private async Task<object?> GetQuestionnaireDetails(int materialId)
 {
-    var questionnaire = await _materialService.GetQuestionnaireMaterialWithEntriesAsync(materialId);
+    var questionnaire = await _questionnaireMaterialService.GetWithEntriesAsync(materialId);
     if (questionnaire == null) return null;
 
     var related = await GetRelatedMaterialsAsync(materialId);
@@ -467,7 +491,7 @@ private async Task<object?> GetQuestionnaireDetails(int materialId)
 
 private async Task<object?> GetQuizDetails(int materialId)
 {
-    var quiz = await _materialService.GetQuizMaterialWithQuestionsAsync(materialId);
+    var quiz = await _quizMaterialService.GetWithQuestionsAsync(materialId);
     if (quiz == null) return null;
 
     var related = await GetRelatedMaterialsAsync(materialId);
@@ -535,7 +559,7 @@ private async Task<object?> GetQuizDetails(int materialId)
 
 private async Task<object?> GetImageDetails(int materialId)
 {
-    var image = await _materialService.GetImageMaterialAsync(materialId);
+    var image = await _imageMaterialService.GetByIdAsync(materialId);
     if (image == null) return null;
 
     // Fetch full asset if AssetId exists
@@ -604,7 +628,7 @@ private async Task<object?> GetImageDetails(int materialId)
 
 private async Task<object?> GetPDFDetails(int materialId)
 {
-    var pdf = await _materialService.GetPDFMaterialAsync(materialId);
+    var pdf = await _simpleMaterialService.GetPDFByIdAsync(materialId);
     if (pdf == null) return null;
 
     // Fetch full asset if AssetId exists
@@ -647,7 +671,7 @@ private async Task<object?> GetPDFDetails(int materialId)
 
 private async Task<object?> GetUnityDetails(int materialId)
 {
-    var unity = await _materialService.GetUnityMaterialAsync(materialId);
+    var unity = await _simpleMaterialService.GetUnityByIdAsync(materialId);
     if (unity == null) return null;
 
     // Fetch full asset if AssetId exists
@@ -691,7 +715,7 @@ private async Task<object?> GetUnityDetails(int materialId)
 
 private async Task<object?> GetChatbotDetails(int materialId)
 {
-    var chatbot = await _materialService.GetChatbotMaterialAsync(materialId);
+    var chatbot = await _simpleMaterialService.GetChatbotByIdAsync(materialId);
     if (chatbot == null) return null;
 
     var related = await GetRelatedMaterialsAsync(materialId);
@@ -714,7 +738,7 @@ private async Task<object?> GetChatbotDetails(int materialId)
 
 private async Task<object?> GetMQTTTemplateDetails(int materialId)
 {
-    var mqtt = await _materialService.GetMQTTTemplateMaterialAsync(materialId);
+    var mqtt = await _simpleMaterialService.GetMQTTByIdAsync(materialId);
     if (mqtt == null) return null;
 
     var related = await GetRelatedMaterialsAsync(materialId);
@@ -734,13 +758,13 @@ private async Task<object?> GetMQTTTemplateDetails(int materialId)
     };
 }
 
-private async Task<object?> GetVoiceDetails(int materialId)
+private async Task<object?> GetAIAssistantDetails(int materialId)
 {
-    var voice = await _voiceMaterialService.GetByIdAsync(materialId);
-    if (voice == null) return null;
+    var aiAssistant = await _aiAssistantMaterialService.GetByIdAsync(materialId);
+    if (aiAssistant == null) return null;
 
-    // Get all assets for this voice material
-    var assetIds = voice.GetAssetIdsList();
+    // Get all assets for this AI assistant material
+    var assetIds = aiAssistant.GetAssetIdsList();
     var assets = new List<object>();
 
     foreach (var assetId in assetIds)
@@ -764,17 +788,23 @@ private async Task<object?> GetVoiceDetails(int materialId)
 
     var related = await GetRelatedMaterialsAsync(materialId);
 
+    // Get active session info
+    var activeSession = await _aiAssistantMaterialService.GetActiveSessionAsync(materialId);
+
     return new
     {
-        id = voice.id.ToString(),
-        Name = voice.Name,
-        Description = voice.Description,
-        Type = GetLowercaseType(voice.Type),
-        Unique_id = voice.Unique_id,
-        Created_at = voice.Created_at,
-        Updated_at = voice.Updated_at,
-        ServiceJobId = voice.ServiceJobId,
-        VoiceStatus = voice.VoiceStatus,
+        id = aiAssistant.id.ToString(),
+        Name = aiAssistant.Name,
+        Description = aiAssistant.Description,
+        Type = GetLowercaseType(aiAssistant.Type),
+        Unique_id = aiAssistant.Unique_id,
+        Created_at = aiAssistant.Created_at,
+        Updated_at = aiAssistant.Updated_at,
+        ServiceJobId = aiAssistant.ServiceJobId,
+        AIAssistantStatus = aiAssistant.AIAssistantStatus,
+        HasActiveSession = activeSession != null,
+        SessionId = activeSession?.SessionId,
+        SessionCreatedAt = activeSession?.CreatedAt,
         Assets = assets,
         Related = related
     };
@@ -782,7 +812,7 @@ private async Task<object?> GetVoiceDetails(int materialId)
 
 private async Task<object?> GetBasicMaterialDetails(int materialId)
 {
-    var material = await _materialService.GetMaterialAsync(materialId);
+    var material = await _materialServiceBase.GetByIdAsync(materialId);
     if (material == null) return null;
 
     // Check if it's a DefaultMaterial with an asset
@@ -826,7 +856,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             {
                 _logger.LogInformation("Getting complete typed material: {MaterialId}", id);
 
-                var material = await _materialService.GetCompleteMaterialAsync(id);
+                var material = await _materialServiceBase.GetCompleteAsync(id);
 
                 if (material == null)
                 {
@@ -862,13 +892,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 }
 
                 // Use the enum overload of GetMaterialsByTypeAsync
-                var materials = await _materialService.GetMaterialsByTypeAsync(GetSystemTypeFromMaterialType(type));
+                var materials = await _materialServiceBase.GetByTypeAsync(GetSystemTypeFromMaterialType(type));
 
                 // Get complete details for each
                 var completeMaterials = new List<object>();
                 foreach (var material in materials)
                 {
-                    var completeDetails = await _materialService.GetCompleteMaterialDetailsAsync(material.id);
+                    var completeDetails = await _materialServiceBase.GetCompleteDetailsAsync(material.id);
                     if (completeDetails != null)
                     {
                         completeMaterials.Add(completeDetails);
@@ -895,7 +925,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 _logger.LogInformation("Getting material summary: {MaterialId}", id);
                 
                 // Use the service instead of direct DbContext access
-                var material = await _materialService.GetMaterialAsync(id);
+                var material = await _materialServiceBase.GetByIdAsync(id);
                 if (material == null)
                 {
                     return NotFound(new { Error = $"Material with ID {id} not found" });
@@ -990,7 +1020,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 _logger.LogInformation("Creating material {Name} (Type: {Type}) for tenant: {TenantName}",
                     material.Name, material.GetType().Name, tenantName);
 
-                var createdMaterial = await _materialService.CreateMaterialAsync(material);
+                var createdMaterial = await _materialServiceBase.CreateAsync(material);
 
                 _logger.LogInformation("Created material {Name} with ID {Id} for tenant: {TenantName}",
                     createdMaterial.Name, createdMaterial.id, tenantName);
@@ -1193,7 +1223,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 try
                 {
                     material = CreateMaterialWithAssetId(materialData, materialType, createdAsset.Id);
-                    var createdMaterial = await _materialService.CreateMaterialAsyncComplete(material);
+                    var createdMaterial = await _materialServiceBase.CreateCompleteAsync(material);
 
                     _logger.LogInformation("Created material {MaterialId} ({Name}) with asset {AssetId}",
                         createdMaterial.id, createdMaterial.Name, createdAsset.Id);
@@ -1480,12 +1510,14 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         /// ```
         /// </remarks>
         /// <param name="tenantName">The tenant name</param>
-        /// <param name="formData">Form data containing material JSON, optional asset data, and optional file (for multipart/form-data requests)</param>
         /// <returns>The created material</returns>
+        /// <remarks>
+        /// Accepts both application/json and multipart/form-data content types.
+        /// - For JSON: Send material data directly in the request body
+        /// - For multipart/form-data: Send 'material' field with JSON, optional 'file', optional 'assetData'
+        /// </remarks>
         [HttpPost]
-        public async Task<ActionResult<CreateMaterialResponse>> PostMaterialDetailed(
-            string tenantName,
-            [FromForm] MaterialCreateFormData? formData = null)
+        public async Task<ActionResult<CreateMaterialResponse>> PostMaterialDetailed(string tenantName)
         {
             try
             {
@@ -1500,8 +1532,10 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 {
                     _logger.LogInformation("Received material creation request via JSON body");
 
-                    using var reader = new StreamReader(Request.Body);
+                    Request.EnableBuffering();
+                    using var reader = new StreamReader(Request.Body, leaveOpen: true);
                     var body = await reader.ReadToEndAsync();
+                    Request.Body.Position = 0;
 
                     if (string.IsNullOrEmpty(body))
                     {
@@ -1523,16 +1557,19 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 {
                     _logger.LogInformation("Received material creation request via form-data");
 
-                    if (formData == null || string.IsNullOrEmpty(formData.material))
+                    var form = await Request.ReadFormAsync();
+                    var materialJson = form["material"].FirstOrDefault();
+
+                    if (string.IsNullOrEmpty(materialJson))
                     {
-                        return BadRequest("material is required");
+                        return BadRequest("material field is required");
                     }
 
-                    file = formData.file;
+                    file = form.Files.GetFile("file");
 
                     try
                     {
-                        materialData = JsonSerializer.Deserialize<JsonElement>(formData.material);
+                        materialData = JsonSerializer.Deserialize<JsonElement>(materialJson);
                     }
                     catch (JsonException ex)
                     {
@@ -1541,11 +1578,12 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     }
 
                     // Extract optional assetData
-                    if (!string.IsNullOrEmpty(formData.assetData))
+                    var assetDataJson = form["assetData"].FirstOrDefault();
+                    if (!string.IsNullOrEmpty(assetDataJson))
                     {
                         try
                         {
-                            assetData = JsonSerializer.Deserialize<JsonElement>(formData.assetData);
+                            assetData = JsonSerializer.Deserialize<JsonElement>(assetDataJson);
                         }
                         catch (JsonException ex)
                         {
@@ -1559,6 +1597,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 else
                 {
                     return BadRequest($"Unsupported content type: {contentType}. Use application/json or multipart/form-data");
+                }
+
+                // Validate required fields
+                var validationError = ValidateMaterialData(materialData);
+                if (validationError != null)
+                {
+                    return BadRequest(validationError);
                 }
 
                 // Parse the incoming JSON to determine material type
@@ -1585,7 +1630,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     "checklist" => await CreateChecklistFromJson(tenantName, materialData),
                     "questionnaire" => await CreateQuestionnaireFromJson(tenantName, materialData),
                     "quiz" => await CreateQuizFromJson(tenantName, materialData),
-                    "voice" => await CreateVoiceFromJson(tenantName, materialData),
+                    "ai_assistant" => await CreateAIAssistantFromJson(tenantName, materialData),
                     _ => await CreateBasicMaterialFromJson(tenantName, materialData)
                 };
             }
@@ -1628,6 +1673,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             {
                 _logger.LogInformation("Received material creation request via JSON body");
 
+                // Validate required fields
+                var validationError = ValidateMaterialData(materialData);
+                if (validationError != null)
+                {
+                    return BadRequest(validationError);
+                }
+
                 // Parse the incoming JSON to determine material type
                 var materialType = GetMaterialTypeFromJson(materialData);
 
@@ -1642,7 +1694,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     "checklist" => await CreateChecklistFromJson(tenantName, materialData),
                     "questionnaire" => await CreateQuestionnaireFromJson(tenantName, materialData),
                     "quiz" => await CreateQuizFromJson(tenantName, materialData),
-                    "voice" => await CreateVoiceFromJson(tenantName, materialData),
+                    "ai_assistant" => await CreateAIAssistantFromJson(tenantName, materialData),
                     _ => await CreateBasicMaterialFromJson(tenantName, materialData)
                 };
             }
@@ -1670,6 +1722,52 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             return "default";
         }
 
+        // Valid material types (lowercase)
+        private static readonly HashSet<string> ValidMaterialTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "image", "video", "pdf", "unity", "chatbot", "questionnaire",
+            "checklist", "workflow", "mqtt_template", "answers", "quiz", "ai_assistant", "default"
+        };
+
+        /// <summary>
+        /// Validates material data for required fields and valid type
+        /// </summary>
+        /// <returns>Error object if validation fails, null if valid</returns>
+        private object? ValidateMaterialData(JsonElement materialData)
+        {
+            // Check for required name field
+            if (!TryGetPropertyCaseInsensitive(materialData, "name", out var nameProp) ||
+                string.IsNullOrWhiteSpace(nameProp.GetString()))
+            {
+                _logger.LogWarning("Material creation failed: name is required");
+                return new { Error = "Material name is required" };
+            }
+
+            // Check for valid type if provided
+            if (TryGetPropertyCaseInsensitive(materialData, "type", out var typeProp))
+            {
+                var typeValue = typeProp.GetString();
+                if (!string.IsNullOrEmpty(typeValue) && !ValidMaterialTypes.Contains(typeValue))
+                {
+                    _logger.LogWarning("Material creation failed: invalid type '{Type}'", typeValue);
+                    return new { Error = $"Invalid material type: '{typeValue}'. Valid types are: {string.Join(", ", ValidMaterialTypes)}" };
+                }
+            }
+
+            // Check discriminator as an alternative type field
+            if (TryGetPropertyCaseInsensitive(materialData, "discriminator", out var discProp))
+            {
+                var discValue = discProp.GetString()?.Replace("Material", "");
+                if (!string.IsNullOrEmpty(discValue) && !ValidMaterialTypes.Contains(discValue))
+                {
+                    _logger.LogWarning("Material creation failed: invalid discriminator '{Discriminator}'", discValue);
+                    return new { Error = $"Invalid material discriminator: '{discValue}'. Valid types are: {string.Join(", ", ValidMaterialTypes)}" };
+                }
+            }
+
+            return null;
+        }
+
         // Helper method to convert Type enum to lowercase string (matching EnumMember values)
         private string GetLowercaseType(XR50TrainingAssetRepo.Models.Type type)
         {
@@ -1686,6 +1784,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 XR50TrainingAssetRepo.Models.Type.MQTT_Template => "mqtt_template",
                 XR50TrainingAssetRepo.Models.Type.Answers => "answers",
                 XR50TrainingAssetRepo.Models.Type.Quiz => "quiz",
+                XR50TrainingAssetRepo.Models.Type.AIAssistant => "ai_assistant",
                 XR50TrainingAssetRepo.Models.Type.Default => "default",
                 _ => "default"
             };
@@ -1762,7 +1861,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 _logger.LogInformation("Parsed workflow: {Name} with {StepCount} steps", workflow.Name, steps.Count);
 
                 // Use the service method directly instead of the controller method
-                var createdMaterial = await _materialService.CreateWorkflowWithStepsAsync(workflow, steps);
+                var createdMaterial = await _workflowMaterialService.CreateWithStepsAsync(workflow, steps);
 
                 _logger.LogInformation("Created workflow material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
@@ -1930,7 +2029,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     video.Name, timestamps.Count, timestampRelatedMaterials.Count);
 
                 // Use the service method directly instead of the controller method
-                var createdMaterial = await _materialService.CreateVideoWithTimestampsAsync(video, timestamps);
+                var createdMaterial = await _videoMaterialService.CreateWithTimestampsAsync(video, timestamps);
 
                 _logger.LogInformation("Created video material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
@@ -2050,7 +2149,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     checklist.Name, entries.Count, entryRelatedMaterials.Count);
 
                 // Use the service method directly instead of the controller method
-                var createdMaterial = await _materialService.CreateChecklistWithEntriesAsync(checklist, entries);
+                var createdMaterial = await _checklistMaterialService.CreateWithEntriesAsync(checklist, entries);
 
                 _logger.LogInformation("Created checklist material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
@@ -2175,7 +2274,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 _logger.LogInformation("Parsed questionnaire: {Name} with {EntryCount} entries", questionnaire.Name, entries.Count);
 
                 // For questionnaires, we can use the existing service method directly
-                var createdMaterial = await _materialService.CreateQuestionnaireMaterialWithEntriesAsync(questionnaire, entries);
+                var createdMaterial = await _questionnaireMaterialService.CreateWithEntriesAsync(questionnaire, entries);
 
                 _logger.LogInformation("Created questionnaire material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
@@ -2378,7 +2477,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 }
 
                 // Use the service method to create quiz with questions
-                var createdMaterial = await _materialService.CreateQuizWithQuestionsAsync(quiz, questions);
+                var createdMaterial = await _quizMaterialService.CreateWithQuestionsAsync(quiz, questions);
 
                 _logger.LogInformation("Created quiz material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
@@ -2419,22 +2518,22 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
         }
 
-        private async Task<ActionResult<CreateMaterialResponse>> CreateVoiceFromJson(string tenantName, JsonElement jsonElement)
+        private async Task<ActionResult<CreateMaterialResponse>> CreateAIAssistantFromJson(string tenantName, JsonElement jsonElement)
         {
             try
             {
-                _logger.LogInformation("Creating voice material from JSON");
+                _logger.LogInformation("Creating AI assistant material from JSON");
 
-                var voice = new VoiceMaterial();
+                var aiAssistant = new AIAssistantMaterial();
 
                 if (TryGetPropertyCaseInsensitive(jsonElement, "name", out var nameProp))
-                    voice.Name = nameProp.GetString();
+                    aiAssistant.Name = nameProp.GetString();
 
                 if (TryGetPropertyCaseInsensitive(jsonElement, "description", out var descProp))
-                    voice.Description = descProp.GetString();
+                    aiAssistant.Description = descProp.GetString();
 
                 if (TryGetPropertyCaseInsensitive(jsonElement, "unique_id", out var uniqueIdProp) && uniqueIdProp.ValueKind == JsonValueKind.Number)
-                    voice.Unique_id = uniqueIdProp.GetInt32();
+                    aiAssistant.Unique_id = uniqueIdProp.GetInt32();
 
                 // Parse asset IDs from JSON
                 var assetIds = new List<int>();
@@ -2468,18 +2567,18 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     }
                 }
 
-                // Create the voice material
-                VoiceMaterial createdMaterial;
+                // Create the AI assistant material
+                AIAssistantMaterial createdMaterial;
                 if (assetIds.Any())
                 {
-                    createdMaterial = await _voiceMaterialService.CreateWithAssetsAsync(voice, assetIds);
+                    createdMaterial = await _aiAssistantMaterialService.CreateWithAssetsAsync(aiAssistant, assetIds);
                 }
                 else
                 {
-                    createdMaterial = await _voiceMaterialService.CreateAsync(voice);
+                    createdMaterial = await _aiAssistantMaterialService.CreateAsync(aiAssistant);
                 }
 
-                _logger.LogInformation("Created voice material {Name} with ID {Id} and {AssetCount} assets",
+                _logger.LogInformation("Created AI assistant material {Name} with ID {Id} and {AssetCount} assets",
                     createdMaterial.Name, createdMaterial.id, assetIds.Count);
 
                 // Process related materials if provided
@@ -2488,7 +2587,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var response = new CreateMaterialResponse
                 {
                     Status = "success",
-                    Message = "Voice material created successfully",
+                    Message = "AI assistant material created successfully",
                     id = createdMaterial.id,
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
@@ -2503,7 +2602,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error creating voice material from JSON");
+                _logger.LogError(ex, "Error creating AI assistant material from JSON");
                 throw;
             }
         }
@@ -2523,7 +2622,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 }
                 
                 // Use the complete creation method to handle subcomponents (annotations, timestamps, etc.)
-                var createdMaterial = await _materialService.CreateMaterialAsyncComplete(material);
+                var createdMaterial = await _materialServiceBase.CreateCompleteAsync(material);
 
                 _logger.LogInformation("Created material {Name} with ID {Id}",
                     createdMaterial.Name, createdMaterial.id);
@@ -3465,7 +3564,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 _logger.LogInformation("Updating material {Id} for tenant: {TenantName}", materialId, tenantName);
 
                 // Check if material exists
-                var existingMaterial = await _materialService.GetMaterialAsync(materialId);
+                var existingMaterial = await _materialServiceBase.GetByIdAsync(materialId);
                 if (existingMaterial == null)
                 {
                     return NotFound($"Material with ID {materialId} not found");
@@ -3514,7 +3613,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 }
 
                 // Update the material and get the updated instance with populated child IDs
-                var updatedMaterial = await _materialService.UpdateMaterialAsync(material);
+                var updatedMaterial = await _materialServiceBase.UpdateAsync(material);
                 _logger.LogInformation("Updated material {Id} for tenant: {TenantName}", materialId, tenantName);
 
                 // Process related materials for subcomponents based on material type
@@ -3528,7 +3627,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     _logger.LogInformation("Processing relationship updates for material {Id}", materialId);
 
                     // Get current relationships
-                    var currentChildren = await _materialService.GetChildMaterialsAsync(materialId, includeOrder: true);
+                    var currentChildren = await _materialRelationshipService.GetChildMaterialsAsync(materialId, includeOrder: true);
                     var currentChildIds = currentChildren.Select(m => m.id).ToHashSet();
 
                     // Parse desired relationships from JSON
@@ -3559,7 +3658,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         {
                             try
                             {
-                                await _materialService.RemoveMaterialFromMaterialAsync(materialId, childId);
+                                await _materialRelationshipService.RemoveMaterialFromMaterialAsync(materialId, childId);
                                 _logger.LogInformation("Removed relationship: material {ParentId} -> {ChildId}",
                                     materialId, childId);
                             }
@@ -3579,7 +3678,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         {
                             try
                             {
-                                await _materialService.AssignMaterialToMaterialAsync(
+                                await _materialRelationshipService.AssignMaterialToMaterialAsync(
                                     materialId, childId, "contains", displayOrder);
                                 _logger.LogInformation("Added relationship: material {ParentId} -> {ChildId}",
                                     materialId, childId);
@@ -3618,7 +3717,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         {
             _logger.LogInformation("Deleting material {Id} for tenant: {TenantName}", id, tenantName);
 
-            var deleted = await _materialService.DeleteMaterialAsync(id);
+            var deleted = await _materialServiceBase.DeleteAsync(id);
 
             if (!deleted)
             {
@@ -3636,7 +3735,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         {
             _logger.LogInformation("🎥 Getting video materials for tenant: {TenantName}", tenantName);
 
-            var videos = await _materialService.GetAllVideoMaterialsAsync();
+            var videos = await _videoMaterialService.GetAllAsync();
 
             _logger.LogInformation("Found {Count} video materials for tenant: {TenantName}",
                 videos.Count(), tenantName);
@@ -3650,7 +3749,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         {
             _logger.LogInformation("Getting checklist materials for tenant: {TenantName}", tenantName);
 
-            var checklists = await _materialService.GetAllChecklistMaterialsAsync();
+            var checklists = await _checklistMaterialService.GetAllAsync();
 
             _logger.LogInformation("Found {Count} checklist materials for tenant: {TenantName}",
                 checklists.Count(), tenantName);
@@ -3664,7 +3763,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         {
             _logger.LogInformation("Getting workflow materials for tenant: {TenantName}", tenantName);
 
-            var workflows = await _materialService.GetAllWorkflowMaterialsAsync();
+            var workflows = await _workflowMaterialService.GetAllAsync();
 
             _logger.LogInformation("Found {Count} workflow materials for tenant: {TenantName}",
                 workflows.Count(), tenantName);
@@ -3678,7 +3777,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         {
             _logger.LogInformation("Getting image materials for tenant: {TenantName}", tenantName);
 
-            var images = await _materialService.GetAllImageMaterialsAsync();
+            var images = await _imageMaterialService.GetAllAsync();
 
             _logger.LogInformation("Found {Count} image materials for tenant: {TenantName}",
                 images.Count(), tenantName);
@@ -3692,7 +3791,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         {
             _logger.LogInformation("📄 Getting PDF materials for tenant: {TenantName}", tenantName);
 
-            var pdfs = await _materialService.GetAllPDFMaterialsAsync();
+            var pdfs = await _simpleMaterialService.GetAllPDFAsync();
 
             _logger.LogInformation("Found {Count} PDF materials for tenant: {TenantName}",
                 pdfs.Count(), tenantName);
@@ -3706,7 +3805,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         {
             _logger.LogInformation("🤖 Getting chatbot materials for tenant: {TenantName}", tenantName);
 
-            var chatbots = await _materialService.GetAllChatbotMaterialsAsync();
+            var chatbots = await _simpleMaterialService.GetAllChatbotAsync();
 
             _logger.LogInformation("Found {Count} chatbot materials for tenant: {TenantName}",
                 chatbots.Count(), tenantName);
@@ -3720,7 +3819,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         {
             _logger.LogInformation("❓ Getting questionnaire materials for tenant: {TenantName}", tenantName);
 
-            var questionnaires = await _materialService.GetAllQuestionnaireMaterialsAsync();
+            var questionnaires = await _questionnaireMaterialService.GetAllAsync();
 
             _logger.LogInformation("Found {Count} questionnaire materials for tenant: {TenantName}",
                 questionnaires.Count(), tenantName);
@@ -3734,7 +3833,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         {
             _logger.LogInformation("📡 Getting MQTT template materials for tenant: {TenantName}", tenantName);
 
-            var templates = await _materialService.GetAllMQTTTemplateMaterialsAsync();
+            var templates = await _simpleMaterialService.GetAllMQTTAsync();
 
             _logger.LogInformation("Found {Count} MQTT template materials for tenant: {TenantName}",
                 templates.Count(), tenantName);
@@ -3748,7 +3847,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         {
             _logger.LogInformation("🎮 Getting Unity demo materials for tenant: {TenantName}", tenantName);
 
-            var unitys = await _materialService.GetAllUnityMaterialsAsync();
+            var unitys = await _simpleMaterialService.GetAllUnityAsync();
 
             _logger.LogInformation("Found {Count} Unity demo materials for tenant: {TenantName}",
                 unitys.Count(), tenantName);
@@ -3767,7 +3866,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             try
             {
-                var createdMaterial = await _materialService.CreateWorkflowWithStepsAsync(
+                var createdMaterial = await _workflowMaterialService.CreateWithStepsAsync(
                     request.Workflow,
                     request.Steps);
 
@@ -3793,7 +3892,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             try
             {
-                var createdMaterial = await _materialService.CreateVideoWithTimestampsAsync(
+                var createdMaterial = await _videoMaterialService.CreateWithTimestampsAsync(
                     request.Video,
                     request.Timestamps);
 
@@ -3830,7 +3929,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             try
             {
-                var createdMaterial = await _materialService.CreateChecklistWithEntriesAsync(
+                var createdMaterial = await _checklistMaterialService.CreateWithEntriesAsync(
                     request.Checklist,
                     request.Entries);
 
@@ -3852,7 +3951,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("🎥 Getting video material {Id} with timestamps for tenant: {TenantName}",
                 id, tenantName);
 
-            var video = await _materialService.GetVideoMaterialWithTimestampsAsync(id);
+            var video = await _videoMaterialService.GetWithTimestampsAsync(id);
 
             if (video == null)
             {
@@ -3875,7 +3974,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             try
             {
-                var video = await _materialService.AddTimestampToVideoAsync(videoId, timestamp);
+                var video = await _videoMaterialService.AddTimestampAsync(videoId, timestamp);
 
                 _logger.LogInformation("Added timestamp to video {VideoId} for tenant: {TenantName}",
                     videoId, tenantName);
@@ -3895,7 +3994,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Removing timestamp {TimestampId} from video {VideoId} for tenant: {TenantName}",
                 timestampId, videoId, tenantName);
 
-            var removed = await _materialService.RemoveTimestampFromVideoAsync(videoId, timestampId);
+            var removed = await _videoMaterialService.RemoveTimestampAsync(videoId, timestampId);
 
             if (!removed)
             {
@@ -3916,7 +4015,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Getting checklist material {Id} with entries for tenant: {TenantName}",
                 id, tenantName);
 
-            var checklist = await _materialService.GetChecklistMaterialWithEntriesAsync(id);
+            var checklist = await _checklistMaterialService.GetWithEntriesAsync(id);
 
             if (checklist == null)
             {
@@ -3939,7 +4038,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             try
             {
-                var checklist = await _materialService.AddEntryToChecklistAsync(checklistId, entry);
+                var checklist = await _checklistMaterialService.AddEntryAsync(checklistId, entry);
 
                 _logger.LogInformation("Added entry to checklist {ChecklistId} for tenant: {TenantName}",
                     checklistId, tenantName);
@@ -3960,7 +4059,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Removing entry {EntryId} from checklist {ChecklistId} for tenant: {TenantName}",
                 entryId, checklistId, tenantName);
 
-            var removed = await _materialService.RemoveEntryFromChecklistAsync(checklistId, entryId);
+            var removed = await _checklistMaterialService.RemoveEntryAsync(checklistId, entryId);
 
             if (!removed)
             {
@@ -3981,7 +4080,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Getting workflow material {Id} with steps for tenant: {TenantName}",
                 id, tenantName);
 
-            var workflow = await _materialService.GetWorkflowMaterialWithStepsAsync(id);
+            var workflow = await _workflowMaterialService.GetWithStepsAsync(id);
 
             if (workflow == null)
             {
@@ -4004,7 +4103,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             try
             {
-                var workflow = await _materialService.AddStepToWorkflowAsync(workflowId, step);
+                var workflow = await _workflowMaterialService.AddStepAsync(workflowId, step);
 
                 _logger.LogInformation("Added step to workflow {WorkflowId} for tenant: {TenantName}",
                     workflowId, tenantName);
@@ -4025,7 +4124,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Removing step {StepId} from workflow {WorkflowId} for tenant: {TenantName}",
                 stepId, workflowId, tenantName);
 
-            var removed = await _materialService.RemoveStepFromWorkflowAsync(workflowId, stepId);
+            var removed = await _workflowMaterialService.RemoveStepAsync(workflowId, stepId);
 
             if (!removed)
             {
@@ -4045,7 +4144,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Getting materials for asset {AssetId} in tenant: {TenantName}",
                 assetId, tenantName);
 
-            var materials = await _materialService.GetMaterialsByAssetIdAsync(assetId);
+            var materials = await _materialServiceBase.GetByAssetIdAsync(assetId);
 
             _logger.LogInformation("Found {Count} materials for asset {AssetId} in tenant: {TenantName}",
                 materials.Count(), assetId, tenantName);
@@ -4060,7 +4159,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Getting asset for material {MaterialId} in tenant: {TenantName}",
                 materialId, tenantName);
 
-            var assetId = await _materialService.GetMaterialAssetIdAsync(materialId);
+            var assetId = await _materialServiceBase.GetAssetIdAsync(materialId);
 
             if (assetId == null)
             {
@@ -4080,7 +4179,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Assigning asset {AssetId} to material {MaterialId} for tenant: {TenantName}",
                 assetId, materialId, tenantName);
 
-            var success = await _materialService.AssignAssetToMaterialAsync(materialId, assetId);
+            var success = await _materialServiceBase.AssignAssetAsync(materialId, assetId);
 
             if (!success)
             {
@@ -4100,7 +4199,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Removing asset from material {MaterialId} for tenant: {TenantName}",
                 materialId, tenantName);
 
-            var success = await _materialService.RemoveAssetFromMaterialAsync(materialId);
+            var success = await _materialServiceBase.RemoveAssetAsync(materialId);
 
             if (!success)
             {
@@ -4120,7 +4219,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Getting relationships for material {MaterialId} in tenant: {TenantName}",
                 materialId, tenantName);
 
-            var relationships = await _materialService.GetMaterialRelationshipsAsync(materialId);
+            var relationships = await _materialRelationshipService.GetMaterialRelationshipsAsync(materialId);
 
             _logger.LogInformation("Found {Count} relationships for material {MaterialId} in tenant: {TenantName}",
                 relationships.Count(), materialId, tenantName);
@@ -4136,7 +4235,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Assigning material {MaterialId} to learning path {LearningPathId} for tenant: {TenantName}",
                 materialId, learningPathId, tenantName);
 
-            var relationshipId = await _materialService.AssignMaterialToLearningPathAsync(materialId, learningPathId, relationshipType, displayOrder);
+            var relationshipId = await _materialRelationshipService.AssignMaterialToLearningPathAsync(materialId, learningPathId, relationshipType, displayOrder);
 
             _logger.LogInformation("Assigned material {MaterialId} to learning path {LearningPathId} (Relationship: {RelationshipId}) for tenant: {TenantName}",
                 materialId, learningPathId, relationshipId, tenantName);
@@ -4157,7 +4256,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Removing material {MaterialId} from learning path {LearningPathId} for tenant: {TenantName}",
                 materialId, learningPathId, tenantName);
 
-            var success = await _materialService.RemoveMaterialFromLearningPathAsync(materialId, learningPathId);
+            var success = await _materialRelationshipService.RemoveMaterialFromLearningPathAsync(materialId, learningPathId);
 
             if (!success)
             {
@@ -4182,7 +4281,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             try
             {
-                var relationshipId = await _materialService.AssignMaterialToMaterialAsync(
+                var relationshipId = await _materialRelationshipService.AssignMaterialToMaterialAsync(
                     parentMaterialId, childMaterialId, relationshipType, displayOrder);
 
                 _logger.LogInformation("Assigned material {ChildId} to material {ParentId} (Relationship: {RelationshipId}) for tenant: {TenantName}",
@@ -4218,7 +4317,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Removing material {ChildId} from material {ParentId} for tenant: {TenantName}",
                 childMaterialId, parentMaterialId, tenantName);
 
-            var success = await _materialService.RemoveMaterialFromMaterialAsync(parentMaterialId, childMaterialId);
+            var success = await _materialRelationshipService.RemoveMaterialFromMaterialAsync(parentMaterialId, childMaterialId);
 
             if (!success)
             {
@@ -4241,7 +4340,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Getting child materials for material {MaterialId} in tenant: {TenantName}",
                 materialId, tenantName);
 
-            var children = await _materialService.GetChildMaterialsAsync(materialId, includeOrder, relationshipType);
+            var children = await _materialRelationshipService.GetChildMaterialsAsync(materialId, includeOrder, relationshipType);
 
             var result = children.Select(m => new
             {
@@ -4266,7 +4365,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Getting parent materials for material {MaterialId} in tenant: {TenantName}",
                 materialId, tenantName);
 
-            var parents = await _materialService.GetParentMaterialsAsync(materialId, relationshipType);
+            var parents = await _materialRelationshipService.GetParentMaterialsAsync(materialId, relationshipType);
 
             var result = parents.Select(m => new
             {
@@ -4293,7 +4392,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             try
             {
-                var hierarchy = await _materialService.GetMaterialHierarchyAsync(materialId, maxDepth);
+                var hierarchy = await _materialRelationshipService.GetMaterialHierarchyAsync(materialId, maxDepth);
 
                 var result = new
                 {
@@ -4341,7 +4440,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         private async Task<List<object>> GetRelatedMaterialsAsync(int materialId)
         {
-            var childMaterials = await _materialService.GetChildMaterialsAsync(materialId, includeOrder: true);
+            var childMaterials = await _materialRelationshipService.GetChildMaterialsAsync(materialId, includeOrder: true);
 
             return childMaterials.Select(m => new
             {
@@ -4353,7 +4452,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         private async Task<List<object>> GetSubcomponentRelatedMaterialsAsync(int subcomponentId, string subcomponentType)
         {
-            var relatedMaterials = await _materialService.GetMaterialsForSubcomponentAsync(subcomponentId, subcomponentType, includeOrder: true);
+            var relatedMaterials = await _materialRelationshipService.GetMaterialsForSubcomponentAsync(subcomponentId, subcomponentType, includeOrder: true);
 
             return relatedMaterials.Select(m => new
             {
@@ -4365,7 +4464,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         private async Task<List<object>> GetAnnotationRelatedMaterialsAsync(int annotationId)
         {
-            var relatedMaterials = await _materialService.GetMaterialsForSubcomponentAsync(annotationId, "ImageAnnotation", includeOrder: true);
+            var relatedMaterials = await _materialRelationshipService.GetMaterialsForSubcomponentAsync(annotationId, "ImageAnnotation", includeOrder: true);
 
             return relatedMaterials.Select(m => new
             {
@@ -4420,7 +4519,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 try
                 {
                     // Assign the relationship
-                    await _materialService.AssignMaterialToMaterialAsync(
+                    await _materialRelationshipService.AssignMaterialToMaterialAsync(
                         parentMaterialId,
                         childMaterialId,
                         relationshipType: "contains",
@@ -4479,7 +4578,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 {
                     try
                     {
-                        await _materialService.AssignMaterialToSubcomponentAsync(
+                        await _materialRelationshipService.AssignMaterialToSubcomponentAsync(
                             subcomponentId, subcomponentType, relatedMaterialId, "related", displayOrder);
 
                         _logger.LogInformation("Assigned material {MaterialId} to {SubcomponentType} {SubcomponentId}",
@@ -4536,7 +4635,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 {
                     try
                     {
-                        await _materialService.AssignMaterialToSubcomponentAsync(
+                        await _materialRelationshipService.AssignMaterialToSubcomponentAsync(
                             answer.QuizAnswerId, "QuizAnswer", relatedMaterialId, "related", displayOrder);
 
                         _logger.LogInformation("Assigned material {MaterialId} to QuizAnswer {AnswerId}",
@@ -4580,7 +4679,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     // Re-fetch the image with annotations to ensure we have the database-assigned annotation IDs
                     // (the original material may not have the navigation property populated after save)
                     _logger.LogInformation("🖼️ Processing ImageMaterial {Id} - checking for annotations", image.id);
-                    var freshImage = await _materialService.GetImageMaterialAsync(image.id);
+                    var freshImage = await _imageMaterialService.GetByIdAsync(image.id);
                     _logger.LogInformation("🖼️ Fresh image has {Count} annotations", freshImage?.ImageAnnotations?.Count ?? 0);
                     if (freshImage?.ImageAnnotations?.Any() == true)
                     {
@@ -4759,7 +4858,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             {
                 try
                 {
-                    await _materialService.AssignMaterialToSubcomponentAsync(
+                    await _materialRelationshipService.AssignMaterialToSubcomponentAsync(
                         subcomponentId, subcomponentType, relatedMaterialId, "related", displayOrder);
 
                     _logger.LogInformation("Assigned material {MaterialId} to {SubcomponentType} {SubcomponentId}",
@@ -4851,7 +4950,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         {
                             try
                             {
-                                await _materialService.AssignMaterialToSubcomponentAsync(
+                                await _materialRelationshipService.AssignMaterialToSubcomponentAsync(
                                     matchedAnnotation.ImageAnnotationId, "ImageAnnotation", relatedMaterialId, "related", displayOrder);
 
                                 _logger.LogInformation("Assigned material {MaterialId} to ImageAnnotation {AnnotationId}",
@@ -4950,7 +5049,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             try
             {
-                var relationshipId = await _materialService.AssignMaterialToSubcomponentAsync(
+                var relationshipId = await _materialRelationshipService.AssignMaterialToSubcomponentAsync(
                     subcomponentId, subcomponentType, materialId, relationshipType, displayOrder);
 
                 return Ok(new
@@ -4989,7 +5088,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Removing material {MaterialId} from {SubcomponentType} {SubcomponentId} for tenant: {TenantName}",
                 materialId, subcomponentType, subcomponentId, tenantName);
 
-            var success = await _materialService.RemoveMaterialFromSubcomponentAsync(
+            var success = await _materialRelationshipService.RemoveMaterialFromSubcomponentAsync(
                 subcomponentId, subcomponentType, materialId);
 
             if (!success)
@@ -5011,7 +5110,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Getting materials for {SubcomponentType} {SubcomponentId} in tenant: {TenantName}",
                 subcomponentType, subcomponentId, tenantName);
 
-            var materials = await _materialService.GetMaterialsForSubcomponentAsync(
+            var materials = await _materialRelationshipService.GetMaterialsForSubcomponentAsync(
                 subcomponentId, subcomponentType, includeOrder);
 
             var result = materials.Select(m => new
@@ -5036,7 +5135,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Reordering materials for {SubcomponentType} {SubcomponentId} in tenant: {TenantName}",
                 subcomponentType, subcomponentId, tenantName);
 
-            var success = await _materialService.ReorderSubcomponentMaterialsAsync(
+            var success = await _materialRelationshipService.ReorderSubcomponentMaterialsAsync(
                 subcomponentId, subcomponentType, materialOrderMap);
 
             if (!success)
@@ -5057,7 +5156,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Getting relationships for {SubcomponentType} {SubcomponentId} in tenant: {TenantName}",
                 subcomponentType, subcomponentId, tenantName);
 
-            var relationships = await _materialService.GetSubcomponentRelationshipsAsync(
+            var relationships = await _materialRelationshipService.GetSubcomponentRelationshipsAsync(
                 subcomponentId, subcomponentType);
 
             var result = relationships.Select(r => new
@@ -5088,16 +5187,16 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var summary = new MaterialTypeSummary
                 {
                     TenantName = tenantName,
-                    Videos = (await _materialService.GetAllVideoMaterialsAsync()).Count(),
-                    Images = (await _materialService.GetAllImageMaterialsAsync()).Count(),
-                    Checklists = (await _materialService.GetAllChecklistMaterialsAsync()).Count(),
-                    Workflows = (await _materialService.GetAllWorkflowMaterialsAsync()).Count(),
-                    PDFs = (await _materialService.GetAllPDFMaterialsAsync()).Count(),
-                    Chatbots = (await _materialService.GetAllChatbotMaterialsAsync()).Count(),
-                    Questionnaires = (await _materialService.GetAllQuestionnaireMaterialsAsync()).Count(),
-                    MQTTTemplates = (await _materialService.GetAllMQTTTemplateMaterialsAsync()).Count(),
-                    Unitys = (await _materialService.GetAllUnityMaterialsAsync()).Count(),
-                    Total = (await _materialService.GetAllMaterialsAsync()).Count()
+                    Videos = (await _videoMaterialService.GetAllAsync()).Count(),
+                    Images = (await _imageMaterialService.GetAllAsync()).Count(),
+                    Checklists = (await _checklistMaterialService.GetAllAsync()).Count(),
+                    Workflows = (await _workflowMaterialService.GetAllAsync()).Count(),
+                    PDFs = (await _simpleMaterialService.GetAllPDFAsync()).Count(),
+                    Chatbots = (await _simpleMaterialService.GetAllChatbotAsync()).Count(),
+                    Questionnaires = (await _questionnaireMaterialService.GetAllAsync()).Count(),
+                    MQTTTemplates = (await _simpleMaterialService.GetAllMQTTAsync()).Count(),
+                    Unitys = (await _simpleMaterialService.GetAllUnityAsync()).Count(),
+                    Total = (await _materialServiceBase.GetAllAsync()).Count()
                 };
 
                 _logger.LogInformation("Generated material summary for tenant: {TenantName} ({Total} total materials)",
@@ -5123,7 +5222,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 materialId, tenantName);
 
             // Get relationships where this material is assigned to learning paths
-            var relationships = await _materialService.GetRelationshipsByTypeAsync(materialId, "LearningPath");
+            var relationships = await _materialRelationshipService.GetRelationshipsByTypeAsync(materialId, "LearningPath");
 
             // Extract learning path IDs and fetch the actual learning paths
             var LearningPaths = relationships.Select(r => int.Parse(r.RelatedEntityId)).ToList();
@@ -5153,7 +5252,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Getting training programs containing material {MaterialId} for tenant: {TenantName}",
                 materialId, tenantName);
 
-            var programs = await _materialService.GetTrainingProgramsContainingMaterialAsync(materialId);
+            var programs = await _materialRelationshipService.GetTrainingProgramsContainingMaterialAsync(materialId);
 
             _logger.LogInformation("Found {Count} training programs containing material {MaterialId} for tenant: {TenantName}",
                 programs.Count(), materialId, tenantName);
@@ -5172,7 +5271,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             _logger.LogInformation("Getting all relationships for material {MaterialId} for tenant: {TenantName}",
                 materialId, tenantName);
 
-            var relationships = await _materialService.GetMaterialRelationshipsAsync(materialId);
+            var relationships = await _materialRelationshipService.GetMaterialRelationshipsAsync(materialId);
 
             var groupedRelationships = relationships
                 .GroupBy(r => r.RelatedEntityType)
@@ -5202,38 +5301,42 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 MaterialType.Unity => typeof(UnityMaterial),
                 MaterialType.Chatbot => typeof(ChatbotMaterial),
                 MaterialType.MQTT_Template => typeof(MQTT_TemplateMaterial),
-                MaterialType.Voice => typeof(VoiceMaterial),
+                MaterialType.AIAssistant => typeof(AIAssistantMaterial),
                 _ => typeof(Material)
             };
         }
 
-        #region Voice Material Endpoints
+        #region AI Assistant Material Endpoints
 
         /// <summary>
-        /// Get all voice materials
+        /// Get all AI assistant materials
         /// </summary>
-        [HttpGet("voice")]
-        public async Task<ActionResult<IEnumerable<object>>> GetVoiceMaterials(string tenantName)
+        [HttpGet("ai-assistant")]
+        public async Task<ActionResult<IEnumerable<object>>> GetAIAssistantMaterials(string tenantName)
         {
-            _logger.LogInformation("Getting voice materials for tenant: {TenantName}", tenantName);
+            _logger.LogInformation("Getting AI assistant materials for tenant: {TenantName}", tenantName);
 
             try
             {
-                var voiceMaterials = await _voiceMaterialService.GetAllAsync();
+                var aiAssistantMaterials = await _aiAssistantMaterialService.GetAllAsync();
                 var result = new List<object>();
 
-                foreach (var voice in voiceMaterials)
+                foreach (var aiAssistant in aiAssistantMaterials)
                 {
+                    var activeSession = await _aiAssistantMaterialService.GetActiveSessionAsync(aiAssistant.id);
                     result.Add(new
                     {
-                        id = voice.id,
-                        Name = voice.Name,
-                        Description = voice.Description,
-                        Type = GetLowercaseType(voice.Type),
-                        VoiceStatus = voice.VoiceStatus,
-                        AssetIds = voice.GetAssetIdsList(),
-                        Created_at = voice.Created_at,
-                        Updated_at = voice.Updated_at
+                        id = aiAssistant.id,
+                        Name = aiAssistant.Name,
+                        Description = aiAssistant.Description,
+                        Type = GetLowercaseType(aiAssistant.Type),
+                        AIAssistantStatus = aiAssistant.AIAssistantStatus,
+                        AssetIds = aiAssistant.GetAssetIdsList(),
+                        HasActiveSession = activeSession != null,
+                        SessionId = activeSession?.SessionId,
+                        SessionCreatedAt = activeSession?.CreatedAt,
+                        Created_at = aiAssistant.Created_at,
+                        Updated_at = aiAssistant.Updated_at
                     });
                 }
 
@@ -5241,35 +5344,35 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting voice materials");
-                return StatusCode(500, new { Error = "Failed to get voice materials", Details = ex.Message });
+                _logger.LogError(ex, "Error getting AI assistant materials");
+                return StatusCode(500, new { Error = "Failed to get AI assistant materials", Details = ex.Message });
             }
         }
 
         /// <summary>
-        /// Submit a voice material for AI processing
+        /// Submit an AI assistant material for AI processing
         /// </summary>
-        [HttpPost("{id}/voice/submit")]
-        public async Task<ActionResult<object>> SubmitVoiceForProcessing(string tenantName, int id)
+        [HttpPost("{id}/ai-assistant/submit")]
+        public async Task<ActionResult<object>> SubmitAIAssistantForProcessing(string tenantName, int id)
         {
-            _logger.LogInformation("Submitting voice material {Id} for AI processing in tenant {TenantName}", id, tenantName);
+            _logger.LogInformation("Submitting AI assistant material {Id} for AI processing in tenant {TenantName}", id, tenantName);
 
             try
             {
-                var voice = await _voiceMaterialService.SubmitForProcessingAsync(id);
+                var aiAssistant = await _aiAssistantMaterialService.SubmitForProcessingAsync(id);
 
                 return Ok(new
                 {
                     Status = "success",
-                    Message = "Voice material submitted for AI processing",
-                    MaterialId = voice.id,
-                    VoiceStatus = voice.VoiceStatus,
-                    AssetIds = voice.GetAssetIdsList()
+                    Message = "AI assistant material submitted for AI processing",
+                    MaterialId = aiAssistant.id,
+                    AIAssistantStatus = aiAssistant.AIAssistantStatus,
+                    AssetIds = aiAssistant.GetAssetIdsList()
                 });
             }
             catch (KeyNotFoundException)
             {
-                return NotFound(new { Error = $"Voice material {id} not found" });
+                return NotFound(new { Error = $"AI assistant material {id} not found" });
             }
             catch (InvalidOperationException ex)
             {
@@ -5277,98 +5380,98 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error submitting voice material {Id} for AI processing", id);
-                return StatusCode(500, new { Error = "Failed to submit voice material for AI processing", Details = ex.Message });
+                _logger.LogError(ex, "Error submitting AI assistant material {Id} for AI processing", id);
+                return StatusCode(500, new { Error = "Failed to submit AI assistant material for AI processing", Details = ex.Message });
             }
         }
 
         /// <summary>
-        /// Refresh the status of a voice material based on its assets
+        /// Refresh the status of an AI assistant material based on its assets
         /// </summary>
-        [HttpPost("{id}/voice/refresh-status")]
-        public async Task<ActionResult<object>> RefreshVoiceStatus(string tenantName, int id)
+        [HttpPost("{id}/ai-assistant/refresh-status")]
+        public async Task<ActionResult<object>> RefreshAIAssistantStatus(string tenantName, int id)
         {
-            _logger.LogInformation("Refreshing voice material {Id} status in tenant {TenantName}", id, tenantName);
+            _logger.LogInformation("Refreshing AI assistant material {Id} status in tenant {TenantName}", id, tenantName);
 
             try
             {
-                var voice = await _voiceMaterialService.UpdateStatusFromAssetsAsync(id);
+                var aiAssistant = await _aiAssistantMaterialService.UpdateStatusFromAssetsAsync(id);
 
                 return Ok(new
                 {
                     Status = "success",
-                    MaterialId = voice.id,
-                    VoiceStatus = voice.VoiceStatus
+                    MaterialId = aiAssistant.id,
+                    AIAssistantStatus = aiAssistant.AIAssistantStatus
                 });
             }
             catch (KeyNotFoundException)
             {
-                return NotFound(new { Error = $"Voice material {id} not found" });
+                return NotFound(new { Error = $"AI assistant material {id} not found" });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error refreshing voice material {Id} status", id);
-                return StatusCode(500, new { Error = "Failed to refresh voice material status", Details = ex.Message });
+                _logger.LogError(ex, "Error refreshing AI assistant material {Id} status", id);
+                return StatusCode(500, new { Error = "Failed to refresh AI assistant material status", Details = ex.Message });
             }
         }
 
         /// <summary>
-        /// Add an asset to a voice material
+        /// Add an asset to an AI assistant material
         /// </summary>
-        [HttpPost("{id}/voice/assets/{assetId}")]
-        public async Task<ActionResult<object>> AddAssetToVoice(string tenantName, int id, int assetId)
+        [HttpPost("{id}/ai-assistant/assets/{assetId}")]
+        public async Task<ActionResult<object>> AddAssetToAIAssistant(string tenantName, int id, int assetId)
         {
-            _logger.LogInformation("Adding asset {AssetId} to voice material {Id} in tenant {TenantName}", assetId, id, tenantName);
+            _logger.LogInformation("Adding asset {AssetId} to AI assistant material {Id} in tenant {TenantName}", assetId, id, tenantName);
 
             try
             {
-                var result = await _voiceMaterialService.AddAssetAsync(id, assetId);
+                var result = await _aiAssistantMaterialService.AddAssetAsync(id, assetId);
 
                 if (!result)
                 {
-                    return NotFound(new { Error = $"Voice material {id} not found" });
+                    return NotFound(new { Error = $"AI assistant material {id} not found" });
                 }
 
                 return Ok(new
                 {
                     Status = "success",
-                    Message = $"Asset {assetId} added to voice material {id}"
+                    Message = $"Asset {assetId} added to AI assistant material {id}. Session invalidated - next /ask will re-establish context."
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error adding asset {AssetId} to voice material {Id}", assetId, id);
-                return StatusCode(500, new { Error = "Failed to add asset to voice material", Details = ex.Message });
+                _logger.LogError(ex, "Error adding asset {AssetId} to AI assistant material {Id}", assetId, id);
+                return StatusCode(500, new { Error = "Failed to add asset to AI assistant material", Details = ex.Message });
             }
         }
 
         /// <summary>
-        /// Remove an asset from a voice material
+        /// Remove an asset from an AI assistant material
         /// </summary>
-        [HttpDelete("{id}/voice/assets/{assetId}")]
-        public async Task<ActionResult<object>> RemoveAssetFromVoice(string tenantName, int id, int assetId)
+        [HttpDelete("{id}/ai-assistant/assets/{assetId}")]
+        public async Task<ActionResult<object>> RemoveAssetFromAIAssistant(string tenantName, int id, int assetId)
         {
-            _logger.LogInformation("Removing asset {AssetId} from voice material {Id} in tenant {TenantName}", assetId, id, tenantName);
+            _logger.LogInformation("Removing asset {AssetId} from AI assistant material {Id} in tenant {TenantName}", assetId, id, tenantName);
 
             try
             {
-                var result = await _voiceMaterialService.RemoveAssetAsync(id, assetId);
+                var result = await _aiAssistantMaterialService.RemoveAssetAsync(id, assetId);
 
                 if (!result)
                 {
-                    return NotFound(new { Error = $"Voice material {id} not found or asset not in list" });
+                    return NotFound(new { Error = $"AI assistant material {id} not found or asset not in list" });
                 }
 
                 return Ok(new
                 {
                     Status = "success",
-                    Message = $"Asset {assetId} removed from voice material {id}"
+                    Message = $"Asset {assetId} removed from AI assistant material {id}. Session invalidated - next /ask will re-establish context."
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error removing asset {AssetId} from voice material {Id}", assetId, id);
-                return StatusCode(500, new { Error = "Failed to remove asset from voice material", Details = ex.Message });
+                _logger.LogError(ex, "Error removing asset {AssetId} from AI assistant material {Id}", assetId, id);
+                return StatusCode(500, new { Error = "Failed to remove asset from AI assistant material", Details = ex.Message });
             }
         }
 

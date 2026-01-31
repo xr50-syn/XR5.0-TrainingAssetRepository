@@ -20,7 +20,8 @@ namespace XR50TrainingAssetRepo.Controllers
     public class programsController : ControllerBase
     {
         private readonly ITrainingProgramService _trainingProgramService;
-        private readonly IMaterialService _materialService;
+        private readonly IMaterialServiceBase _materialServiceBase;
+        private readonly IMaterialRelationshipService _materialRelationshipService;
         private readonly IUserMaterialService _userMaterialService;
         private readonly IConfiguration _configuration;
         private readonly IWebHostEnvironment _environment;
@@ -28,14 +29,16 @@ namespace XR50TrainingAssetRepo.Controllers
 
         public programsController(
             ITrainingProgramService trainingProgramService,
-            IMaterialService materialService,
+            IMaterialServiceBase materialServiceBase,
+            IMaterialRelationshipService materialRelationshipService,
             IUserMaterialService userMaterialService,
             IConfiguration configuration,
             IWebHostEnvironment environment,
             ILogger<programsController> logger)
         {
             _trainingProgramService = trainingProgramService;
-            _materialService = materialService;
+            _materialServiceBase = materialServiceBase;
+            _materialRelationshipService = materialRelationshipService;
             _userMaterialService = userMaterialService;
             _configuration = configuration;
             _environment = environment;
@@ -411,7 +414,7 @@ namespace XR50TrainingAssetRepo.Controllers
             try
             {
                 // Delegate to material service for creation
-                var material = await _materialService.CreateMaterialFromJsonAsync(materialData);
+                var material = await _materialServiceBase.CreateFromJsonAsync(materialData);
 
                 if (material != null)
                 {
@@ -466,7 +469,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 return NotFound($"Training program {trainingProgramId} not found");
             }
 
-            var materials = await _materialService.GetMaterialsByTrainingProgramAsync(trainingProgramId);
+            var materials = await _materialRelationshipService.GetMaterialsByTrainingProgramAsync(trainingProgramId);
 
             _logger.LogInformation("Found {Count} materials for training program {TrainingProgramId} for tenant: {TenantName}",
                 materials.Count(), trainingProgramId, tenantName);
@@ -630,7 +633,7 @@ namespace XR50TrainingAssetRepo.Controllers
             {
                 try
                 {
-                    var relationshipId = await _materialService.AssignMaterialToTrainingProgramAsync(
+                    var relationshipId = await _materialRelationshipService.AssignMaterialToTrainingProgramAsync(
                         assignment.MaterialId,
                         trainingProgramId,
                         assignment.RelationshipType ?? "assigned");

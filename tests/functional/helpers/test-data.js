@@ -9,6 +9,10 @@ const config = require('../config');
 
 const timestamp = Date.now();
 
+// Storage type can be overridden via STORAGE_TYPE env var
+// Defaults to 'S3' but can be set to 'OwnCloud'
+const STORAGE_TYPE = process.env.STORAGE_TYPE || 'S3';
+
 /**
  * Generate a test tenant configuration with S3 storage
  */
@@ -31,6 +35,40 @@ function createS3Tenant(name = config.TEST_TENANT) {
       admin: true
     }
   };
+}
+
+/**
+ * Generate a test tenant configuration with OwnCloud storage
+ */
+function createOwnCloudTenant(name = config.TEST_TENANT) {
+  return {
+    tenantName: name,
+    tenantGroup: 'verification-tests',
+    description: `Verification test tenant created at ${new Date().toISOString()}`,
+    storageType: 'OwnCloud',
+    ownCloudConfig: {
+      tenantDirectory: `${name}-files`,
+      endpoint: process.env.OWNCLOUD_URL || 'http://owncloud:8080'
+    },
+    owner: {
+      userName: 'testadmin',
+      fullName: 'Test Administrator',
+      userEmail: `admin@${name}.test`,
+      password: 'TestPass123!',
+      admin: true
+    }
+  };
+}
+
+/**
+ * Generate a test tenant configuration based on STORAGE_TYPE environment variable.
+ * Defaults to S3 if not set.
+ */
+function createTenant(name = config.TEST_TENANT) {
+  if (STORAGE_TYPE.toLowerCase() === 'owncloud') {
+    return createOwnCloudTenant(name);
+  }
+  return createS3Tenant(name);
 }
 
 /**
@@ -359,7 +397,9 @@ class TestResourceTracker {
 }
 
 module.exports = {
+  createTenant,
   createS3Tenant,
+  createOwnCloudTenant,
   createMinioTenant,
   createSimpleMaterial,
   createVideoMaterial,
@@ -374,5 +414,6 @@ module.exports = {
   createAdminUser,
   createTestTextFile,
   createTestImageFile,
-  TestResourceTracker
+  TestResourceTracker,
+  STORAGE_TYPE
 };

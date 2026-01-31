@@ -8,18 +8,29 @@ const config = require('../config');
  */
 
 describe('Authentication', () => {
-  // Skip auth tests if Keycloak is not available
+  // Skip auth tests if Keycloak is not available or NO_AUTH mode is enabled
   const skipIfNoKeycloak = () => {
+    if (config.NO_AUTH) {
+      return true;
+    }
     if (global.__TEST_CONFIG__?.keycloakAvailable === false) {
       return true;
     }
     return false;
   };
 
+  // Skip reason message for logging
+  const getSkipReason = () => {
+    if (config.NO_AUTH) return 'NO_AUTH mode enabled';
+    if (global.__TEST_CONFIG__?.keycloakAvailable === false) return 'Keycloak not available';
+    return null;
+  };
+
   describe('Token Acquisition', () => {
     test('can obtain token with valid credentials', async () => {
-      if (skipIfNoKeycloak()) {
-        console.log('Skipping: Keycloak not available');
+      const skipReason = getSkipReason();
+      if (skipReason) {
+        console.log(`Skipping: ${skipReason}`);
         return;
       }
 
@@ -35,8 +46,9 @@ describe('Authentication', () => {
     });
 
     test('token contains expected claims', async () => {
-      if (skipIfNoKeycloak()) {
-        console.log('Skipping: Keycloak not available');
+      const skipReason = getSkipReason();
+      if (skipReason) {
+        console.log(`Skipping: ${skipReason}`);
         return;
       }
 
@@ -55,8 +67,9 @@ describe('Authentication', () => {
     });
 
     test('rejects invalid credentials', async () => {
-      if (skipIfNoKeycloak()) {
-        console.log('Skipping: Keycloak not available');
+      const skipReason = getSkipReason();
+      if (skipReason) {
+        console.log(`Skipping: ${skipReason}`);
         return;
       }
 
@@ -78,8 +91,9 @@ describe('Authentication', () => {
 
   describe('Protected Endpoints', () => {
     test('authenticated request succeeds', async () => {
-      if (skipIfNoKeycloak()) {
-        console.log('Skipping: Keycloak not available');
+      const skipReason = getSkipReason();
+      if (skipReason) {
+        console.log(`Skipping: ${skipReason}`);
         return;
       }
 
@@ -93,6 +107,12 @@ describe('Authentication', () => {
     });
 
     test('unauthenticated request is rejected', async () => {
+      const skipReason = getSkipReason();
+      if (skipReason) {
+        console.log(`Skipping: ${skipReason}`);
+        return;
+      }
+
       // Clear any existing token
       apiClient.token = null;
 
@@ -105,6 +125,12 @@ describe('Authentication', () => {
 
   describe('Token Validation', () => {
     test('expired token is rejected', async () => {
+      const skipReason = getSkipReason();
+      if (skipReason) {
+        console.log(`Skipping: ${skipReason}`);
+        return;
+      }
+
       // Use a known-expired token (this is a test JWT that's already expired)
       const expiredToken = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2MDAwMDAwMDAsImlhdCI6MTYwMDAwMDAwMCwic3ViIjoidGVzdCJ9.invalid';
 
@@ -117,6 +143,12 @@ describe('Authentication', () => {
     });
 
     test('malformed token is rejected', async () => {
+      const skipReason = getSkipReason();
+      if (skipReason) {
+        console.log(`Skipping: ${skipReason}`);
+        return;
+      }
+
       const response = await apiClient.get(config.TENANT_API_URL, {
         auth: false,
         headers: { 'Authorization': 'Bearer not-a-valid-token' }

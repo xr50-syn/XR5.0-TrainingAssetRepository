@@ -29,16 +29,13 @@ namespace XR50TrainingAssetRepo.Services
     public class LearningPathService : ILearningPathService
     {
         private readonly IXR50TenantDbContextFactory _dbContextFactory;
-        private readonly IMaterialService _materialService;
         private readonly ILogger<LearningPathService> _logger;
 
         public LearningPathService(
             IXR50TenantDbContextFactory dbContextFactory,
-            IMaterialService materialService,
             ILogger<LearningPathService> logger)
         {
             _dbContextFactory = dbContextFactory;
-            _materialService = materialService;
             _logger = logger;
         }
 
