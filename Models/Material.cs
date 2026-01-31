@@ -56,8 +56,8 @@ namespace XR50TrainingAssetRepo.Models
         Quiz,
         [EnumMember(Value = "default")]
         Default,
-        [EnumMember(Value = "voice")]
-        Voice
+        [EnumMember(Value = "ai_assistant")]
+        AIAssistant
     }
 
     public class ChecklistMaterial : Material
@@ -202,10 +202,11 @@ namespace XR50TrainingAssetRepo.Models
     }
 
     /// <summary>
-    /// Voice material for AI-processed voice/document extraction.
+    /// AI Assistant material for AI-processed document extraction.
     /// Supports multiple assets and tracks processing status via Chatbot API.
+    /// Sessions are created on first /ask call and reused for subsequent calls.
     /// </summary>
-    public class VoiceMaterial : Material
+    public class AIAssistantMaterial : Material
     {
         /// <summary>
         /// Chatbot service job ID for tracking the overall processing job
@@ -215,17 +216,23 @@ namespace XR50TrainingAssetRepo.Models
         /// <summary>
         /// Processing status: "ready", "process", "notready"
         /// </summary>
-        public string VoiceStatus { get; set; } = "notready";
+        public string AIAssistantStatus { get; set; } = "notready";
 
         /// <summary>
-        /// JSON array of asset IDs associated with this voice material.
+        /// JSON array of asset IDs associated with this AI Assistant material.
         /// Example: "[1, 3, 5]"
         /// </summary>
-        public string? VoiceAssetIds { get; set; }
+        public string? AIAssistantAssetIds { get; set; }
 
-        public VoiceMaterial()
+        /// <summary>
+        /// Current active session for this AI Assistant material
+        /// </summary>
+        [JsonIgnore]
+        public AIAssistantSession? CurrentSession { get; set; }
+
+        public AIAssistantMaterial()
         {
-            Type = Type.Voice;
+            Type = Type.AIAssistant;
         }
 
         /// <summary>
@@ -233,12 +240,12 @@ namespace XR50TrainingAssetRepo.Models
         /// </summary>
         public List<int> GetAssetIdsList()
         {
-            if (string.IsNullOrEmpty(VoiceAssetIds))
+            if (string.IsNullOrEmpty(AIAssistantAssetIds))
                 return new List<int>();
 
             try
             {
-                return System.Text.Json.JsonSerializer.Deserialize<List<int>>(VoiceAssetIds) ?? new List<int>();
+                return System.Text.Json.JsonSerializer.Deserialize<List<int>>(AIAssistantAssetIds) ?? new List<int>();
             }
             catch
             {
@@ -251,8 +258,53 @@ namespace XR50TrainingAssetRepo.Models
         /// </summary>
         public void SetAssetIdsList(List<int> assetIds)
         {
-            VoiceAssetIds = System.Text.Json.JsonSerializer.Serialize(assetIds);
+            AIAssistantAssetIds = System.Text.Json.JsonSerializer.Serialize(assetIds);
         }
+    }
+
+    /// <summary>
+    /// Stores the Siemens API session for an AIAssistantMaterial.
+    /// One active session per material. Session is invalidated when assets change.
+    /// </summary>
+    public class AIAssistantSession
+    {
+        [Key]
+        public int Id { get; set; }
+
+        /// <summary>
+        /// Foreign key to the parent AIAssistantMaterial
+        /// </summary>
+        public int AIAssistantMaterialId { get; set; }
+
+        /// <summary>
+        /// The session_id returned by the Siemens API
+        /// </summary>
+        [Required]
+        [StringLength(500)]
+        public string SessionId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Status: "active", "invalidated"
+        /// </summary>
+        [StringLength(20)]
+        public string Status { get; set; } = "active";
+
+        /// <summary>
+        /// When the session was created
+        /// </summary>
+        public DateTime CreatedAt { get; set; }
+
+        /// <summary>
+        /// Hash of asset filenames to detect changes
+        /// </summary>
+        [StringLength(64)]
+        public string? AssetHash { get; set; }
+
+        /// <summary>
+        /// Navigation property back to parent
+        /// </summary>
+        [JsonIgnore]
+        public AIAssistantMaterial? AIAssistantMaterial { get; set; }
     }
 
     public class QuizMaterial : Material

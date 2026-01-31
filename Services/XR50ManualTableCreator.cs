@@ -339,10 +339,10 @@ namespace XR50TrainingAssetRepo.Services
             `UnitySceneName` varchar(255) DEFAULT NULL,
             `UnityJson` text DEFAULT NULL,
 
-            -- Voice Material specific columns
+            -- AI Assistant Material specific columns
             `ServiceJobId` varchar(255) DEFAULT NULL,
-            `VoiceStatus` varchar(20) DEFAULT 'notready',
-            `VoiceAssetIds` text DEFAULT NULL,
+            `AIAssistantStatus` varchar(20) DEFAULT 'notready',
+            `AIAssistantAssetIds` text DEFAULT NULL,
 
             PRIMARY KEY (`id`),
             INDEX `idx_discriminator` (`Discriminator`),
@@ -1007,9 +1007,9 @@ namespace XR50TrainingAssetRepo.Services
         }
 
         /// <summary>
-        /// Migrates existing databases to add Voice Material and Asset AI processing columns.
+        /// Migrates existing databases to add AI Assistant Material and Asset AI processing columns.
         /// </summary>
-        public async Task<bool> MigrateVoiceAndAiColumnsAsync(string tenantName)
+        public async Task<bool> MigrateAIAssistantAndAiColumnsAsync(string tenantName)
         {
             try
             {
@@ -1019,20 +1019,20 @@ namespace XR50TrainingAssetRepo.Services
 
                 var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
 
-                _logger.LogInformation("=== Starting Voice/AI columns migration for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== Starting AI Assistant/AI columns migration for tenant: {TenantName} ===", tenantName);
 
                 using var connection = new MySqlConnection(connectionString);
                 await connection.OpenAsync();
 
-                // Add Voice Material columns to Materials table
-                var voiceColumns = new Dictionary<string, string>
+                // Add AI Assistant Material columns to Materials table
+                var aiAssistantColumns = new Dictionary<string, string>
                 {
                     { "ServiceJobId", "ALTER TABLE `Materials` ADD COLUMN `ServiceJobId` varchar(255) DEFAULT NULL" },
-                    { "VoiceStatus", "ALTER TABLE `Materials` ADD COLUMN `VoiceStatus` varchar(20) DEFAULT 'notready'" },
-                    { "VoiceAssetIds", "ALTER TABLE `Materials` ADD COLUMN `VoiceAssetIds` text DEFAULT NULL" }
+                    { "AIAssistantStatus", "ALTER TABLE `Materials` ADD COLUMN `AIAssistantStatus` varchar(20) DEFAULT 'notready'" },
+                    { "AIAssistantAssetIds", "ALTER TABLE `Materials` ADD COLUMN `AIAssistantAssetIds` text DEFAULT NULL" }
                 };
 
-                foreach (var column in voiceColumns)
+                foreach (var column in aiAssistantColumns)
                 {
                     var checkQuery = @"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
                         WHERE TABLE_SCHEMA = @dbName
@@ -1111,13 +1111,57 @@ namespace XR50TrainingAssetRepo.Services
                     }
                 }
 
-                _logger.LogInformation("=== Voice/AI columns migration completed for tenant: {TenantName} ===", tenantName);
+                // Create AIAssistantSessions table for session management
+                await CreateAIAssistantSessionsTableAsync(connection, tenantDbName);
+
+                _logger.LogInformation("=== AI Assistant/AI columns migration completed for tenant: {TenantName} ===", tenantName);
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error migrating Voice/AI columns for tenant: {TenantName}", tenantName);
+                _logger.LogError(ex, "Error migrating AI Assistant/AI columns for tenant: {TenantName}", tenantName);
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Creates the AIAssistantSessions table for storing Siemens API sessions.
+        /// </summary>
+        private async Task CreateAIAssistantSessionsTableAsync(MySqlConnection connection, string tenantDbName)
+        {
+            // Check if table exists
+            var tableCheckQuery = @"SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = @dbName AND TABLE_NAME = 'AIAssistantSessions'";
+
+            using (var checkCmd = new MySqlCommand(tableCheckQuery, connection))
+            {
+                checkCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                var tableExists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+
+                if (!tableExists)
+                {
+                    _logger.LogInformation("Creating AIAssistantSessions table...");
+
+                    var createTableSql = @"
+                        CREATE TABLE `AIAssistantSessions` (
+                            `Id` int NOT NULL AUTO_INCREMENT,
+                            `AIAssistantMaterialId` int NOT NULL,
+                            `SessionId` varchar(500) NOT NULL,
+                            `Status` varchar(20) NOT NULL DEFAULT 'active',
+                            `CreatedAt` datetime(6) NOT NULL,
+                            `AssetHash` varchar(64) DEFAULT NULL,
+                            PRIMARY KEY (`Id`),
+                            UNIQUE KEY `IX_AIAssistantSessions_AIAssistantMaterialId` (`AIAssistantMaterialId`),
+                            CONSTRAINT `FK_AIAssistantSessions_Materials_AIAssistantMaterialId`
+                                FOREIGN KEY (`AIAssistantMaterialId`) REFERENCES `Materials` (`id`) ON DELETE CASCADE
+                        )";
+
+                    using (var createCmd = new MySqlCommand(createTableSql, connection))
+                    {
+                        await createCmd.ExecuteNonQueryAsync();
+                        _logger.LogInformation("Successfully created AIAssistantSessions table");
+                    }
+                }
             }
         }
 

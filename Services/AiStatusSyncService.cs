@@ -187,32 +187,32 @@ namespace XR50TrainingAssetRepo.Services
             {
                 await context.SaveChangesAsync();
 
-                // Update any voice materials that reference these assets
-                await UpdateVoiceMaterialStatusesAsync(context, updatedAssetIds);
+                // Update any AI assistant materials that reference these assets
+                await UpdateAIAssistantMaterialStatusesAsync(context, updatedAssetIds);
             }
 
             return stillProcessingCount;
         }
 
-        private async Task UpdateVoiceMaterialStatusesAsync(XR50TrainingContext context, List<int> updatedAssetIds)
+        private async Task UpdateAIAssistantMaterialStatusesAsync(XR50TrainingContext context, List<int> updatedAssetIds)
         {
-            // Get all voice materials in process state
-            var voiceMaterials = await context.Materials
-                .OfType<VoiceMaterial>()
-                .Where(v => v.VoiceStatus == "process")
+            // Get all AI assistant materials in process state
+            var aiAssistantMaterials = await context.Materials
+                .OfType<AIAssistantMaterial>()
+                .Where(a => a.AIAssistantStatus == "process")
                 .ToListAsync();
 
-            foreach (var voice in voiceMaterials)
+            foreach (var aiAssistant in aiAssistantMaterials)
             {
-                var assetIds = voice.GetAssetIdsList();
+                var assetIds = aiAssistant.GetAssetIdsList();
 
-                // Check if any of the updated assets are in this voice material
+                // Check if any of the updated assets are in this AI assistant material
                 if (!assetIds.Intersect(updatedAssetIds).Any())
                 {
                     continue;
                 }
 
-                // Check the status of all assets for this voice material
+                // Check the status of all assets for this AI assistant material
                 var assetStatuses = await context.Assets
                     .Where(a => assetIds.Contains(a.Id))
                     .Select(a => a.AiAvailable)
@@ -238,13 +238,13 @@ namespace XR50TrainingAssetRepo.Services
                     newStatus = "notready";
                 }
 
-                if (voice.VoiceStatus != newStatus)
+                if (aiAssistant.AIAssistantStatus != newStatus)
                 {
-                    voice.VoiceStatus = newStatus;
-                    voice.Updated_at = DateTime.UtcNow;
+                    aiAssistant.AIAssistantStatus = newStatus;
+                    aiAssistant.Updated_at = DateTime.UtcNow;
 
-                    _logger.LogInformation("Updated voice material {VoiceId} status to {Status}",
-                        voice.id, newStatus);
+                    _logger.LogInformation("Updated AI assistant material {AIAssistantId} status to {Status}",
+                        aiAssistant.id, newStatus);
                 }
             }
 

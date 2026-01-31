@@ -290,7 +290,7 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("assets", new OpenApiInfo { Title = "5. Asset Management", Version = "v1" });
     c.SwaggerDoc("users", new OpenApiInfo   { Title = "6. User Management", Version = "v1" });
     c.SwaggerDoc("chat", new OpenApiInfo { Title = "7. Chat API", Version = "v1", Description = "Chatbot conversation endpoints" });
-    c.SwaggerDoc("voice", new OpenApiInfo { Title = "8. Voice Assistant API", Version = "v1", Description = "Voice assistant conversation and document upload endpoints" });
+    c.SwaggerDoc("ai-assistant", new OpenApiInfo { Title = "8. AI Assistant API", Version = "v1", Description = "AI assistant conversation and document upload endpoints" });
 
     c.SwaggerDoc("all", new OpenApiInfo { 
         Title = "Complete XR50 Training Asset Repository API", 
@@ -315,7 +315,7 @@ builder.Services.AddSwaggerGen(c =>
             "assets" => controllerName.Contains("Assets"),
             "users" => controllerName.Contains("Users"),
             "chat" => controllerName.Equals("Chat", StringComparison.OrdinalIgnoreCase),
-            "voice" => controllerName.Equals("VoiceAssistant", StringComparison.OrdinalIgnoreCase),
+            "ai-assistant" => controllerName.Equals("AIAssistant", StringComparison.OrdinalIgnoreCase),
             "test" => controllerName.Contains("test"),
             _ => false
         };
@@ -425,7 +425,7 @@ if (app.Environment.IsDevelopment())
           c.SwaggerEndpoint("/swagger/users/swagger.json", "6. User Management");
           c.SwaggerEndpoint("/swagger/v1/swagger.json", "Default");
           c.SwaggerEndpoint("/swagger/chat/swagger.json", "7. Chat API");
-          c.SwaggerEndpoint("/swagger/voice/swagger.json", "8. Voice Assistant API");
+          c.SwaggerEndpoint("/swagger/ai-assistant/swagger.json", "8. AI Assistant API");
           // OAuth2 configuration for Swagger UI
           c.OAuthClientId("xr50-swagger");
           c.OAuthAppName("XR50 Training API - Swagger");
@@ -506,7 +506,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IQuestionnaireMaterialService, XR50TrainingAssetRepo.Services.Materials.QuestionnaireMaterialService>();
         services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IImageMaterialService, XR50TrainingAssetRepo.Services.Materials.ImageMaterialService>();
         services.AddScoped<XR50TrainingAssetRepo.Services.Materials.ISimpleMaterialService, XR50TrainingAssetRepo.Services.Materials.SimpleMaterialService>();
-        services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IVoiceMaterialService, XR50TrainingAssetRepo.Services.Materials.VoiceMaterialService>();
+        services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IAIAssistantMaterialService, XR50TrainingAssetRepo.Services.Materials.AIAssistantMaterialService>();
         services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IUserMaterialService, XR50TrainingAssetRepo.Services.Materials.UserMaterialService>();
         services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IQuizProgressService, XR50TrainingAssetRepo.Services.Materials.QuizProgressService>();
 
@@ -516,8 +516,8 @@ public static class ServiceCollectionExtensions
         // Chat Service for chatbot conversations
         services.AddHttpClient<IChatService, ChatService>();
 
-        // Voice Assistant Service (HttpClient-based)
-        services.AddHttpClient<IVoiceAssistantService, VoiceAssistantService>();
+        // AI Assistant Service (HttpClient-based)
+        services.AddHttpClient<IAIAssistantService, AIAssistantService>();
 
         // Background service for AI status synchronization (database-driven, adaptive polling)
         services.AddHostedService<AiStatusSyncService>();

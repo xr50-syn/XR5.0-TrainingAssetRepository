@@ -217,4 +217,54 @@ public static class MaterialFactory
             pdfPageCount = 10
         };
     }
+
+    /// <summary>
+    /// Creates an AI Assistant material with optional asset IDs.
+    /// </summary>
+    public static object CreateAIAssistantRequest(
+        string? name = null,
+        List<int>? assetIds = null)
+    {
+        return new
+        {
+            name = name ?? $"Test AI Assistant {Guid.NewGuid():N}",
+            description = "Test AI assistant material for document Q&A",
+            type = "ai_assistant",
+            assetIds = assetIds ?? new List<int>()
+        };
+    }
+
+    /// <summary>
+    /// Creates an AI Assistant material with specific asset IDs for testing session behavior.
+    /// </summary>
+    public static object CreateAIAssistantWithAssetsRequest(
+        string name,
+        List<int> assetIds)
+    {
+        return new
+        {
+            name,
+            description = "AI assistant with pre-configured assets",
+            type = "ai_assistant",
+            assetIds
+        };
+    }
+
+    /// <summary>
+    /// Creates a chatbot material (for comparison with AI Assistant).
+    /// </summary>
+    public static object CreateChatbotRequest(
+        string? name = null,
+        string? endpoint = null)
+    {
+        return new
+        {
+            name = name ?? $"Test Chatbot {Guid.NewGuid():N}",
+            description = "Test chatbot material",
+            type = "chatbot",
+            chatbotConfig = endpoint ?? "https://api.example.com/chat",
+            chatbotModel = "default",
+            chatbotPrompt = "You are a helpful assistant."
+        };
+    }
 }

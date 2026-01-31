@@ -59,7 +59,7 @@ namespace XR50TrainingAssetRepo.Controllers
         private readonly IMaterialRelationshipService _materialRelationshipService;
         private readonly IAssetService _assetService;
         private readonly ILearningPathService _learningPathService;
-        private readonly IVoiceMaterialService _voiceMaterialService;
+        private readonly IAIAssistantMaterialService _aiAssistantMaterialService;
         private readonly IUserMaterialService _userMaterialService;
         private readonly IConfiguration _configuration;
         private readonly IWebHostEnvironment _environment;
@@ -77,7 +77,7 @@ namespace XR50TrainingAssetRepo.Controllers
             IMaterialRelationshipService materialRelationshipService,
             IAssetService assetService,
             ILearningPathService learningPathService,
-            IVoiceMaterialService voiceMaterialService,
+            IAIAssistantMaterialService aiAssistantMaterialService,
             IUserMaterialService userMaterialService,
             IConfiguration configuration,
             IWebHostEnvironment environment,
@@ -94,7 +94,7 @@ namespace XR50TrainingAssetRepo.Controllers
             _materialRelationshipService = materialRelationshipService;
             _assetService = assetService;
             _learningPathService = learningPathService;
-            _voiceMaterialService = voiceMaterialService;
+            _aiAssistantMaterialService = aiAssistantMaterialService;
             _userMaterialService = userMaterialService;
             _configuration = configuration;
             _environment = environment;
@@ -272,7 +272,7 @@ public async Task<ActionResult<object>> GetCompleteMaterialDetails(string tenant
             MaterialType.Unity => await GetUnityDetails(id),
             MaterialType.Chatbot => await GetChatbotDetails(id),
             MaterialType.MQTT_Template => await GetMQTTTemplateDetails(id),
-            MaterialType.Voice => await GetVoiceDetails(id),
+            MaterialType.AIAssistant => await GetAIAssistantDetails(id),
             _ => await GetBasicMaterialDetails(id)
         };
 
@@ -758,13 +758,13 @@ private async Task<object?> GetMQTTTemplateDetails(int materialId)
     };
 }
 
-private async Task<object?> GetVoiceDetails(int materialId)
+private async Task<object?> GetAIAssistantDetails(int materialId)
 {
-    var voice = await _voiceMaterialService.GetByIdAsync(materialId);
-    if (voice == null) return null;
+    var aiAssistant = await _aiAssistantMaterialService.GetByIdAsync(materialId);
+    if (aiAssistant == null) return null;
 
-    // Get all assets for this voice material
-    var assetIds = voice.GetAssetIdsList();
+    // Get all assets for this AI assistant material
+    var assetIds = aiAssistant.GetAssetIdsList();
     var assets = new List<object>();
 
     foreach (var assetId in assetIds)
@@ -788,17 +788,22 @@ private async Task<object?> GetVoiceDetails(int materialId)
 
     var related = await GetRelatedMaterialsAsync(materialId);
 
+    // Get active session info
+    var activeSession = await _aiAssistantMaterialService.GetActiveSessionAsync(materialId);
+
     return new
     {
-        id = voice.id.ToString(),
-        Name = voice.Name,
-        Description = voice.Description,
-        Type = GetLowercaseType(voice.Type),
-        Unique_id = voice.Unique_id,
-        Created_at = voice.Created_at,
-        Updated_at = voice.Updated_at,
-        ServiceJobId = voice.ServiceJobId,
-        VoiceStatus = voice.VoiceStatus,
+        id = aiAssistant.id.ToString(),
+        Name = aiAssistant.Name,
+        Description = aiAssistant.Description,
+        Type = GetLowercaseType(aiAssistant.Type),
+        Unique_id = aiAssistant.Unique_id,
+        Created_at = aiAssistant.Created_at,
+        Updated_at = aiAssistant.Updated_at,
+        ServiceJobId = aiAssistant.ServiceJobId,
+        AIAssistantStatus = aiAssistant.AIAssistantStatus,
+        HasActiveSession = activeSession != null,
+        SessionCreatedAt = activeSession?.CreatedAt,
         Assets = assets,
         Related = related
     };
@@ -1609,7 +1614,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     "checklist" => await CreateChecklistFromJson(tenantName, materialData),
                     "questionnaire" => await CreateQuestionnaireFromJson(tenantName, materialData),
                     "quiz" => await CreateQuizFromJson(tenantName, materialData),
-                    "voice" => await CreateVoiceFromJson(tenantName, materialData),
+                    "ai_assistant" => await CreateAIAssistantFromJson(tenantName, materialData),
                     _ => await CreateBasicMaterialFromJson(tenantName, materialData)
                 };
             }
@@ -1666,7 +1671,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     "checklist" => await CreateChecklistFromJson(tenantName, materialData),
                     "questionnaire" => await CreateQuestionnaireFromJson(tenantName, materialData),
                     "quiz" => await CreateQuizFromJson(tenantName, materialData),
-                    "voice" => await CreateVoiceFromJson(tenantName, materialData),
+                    "ai_assistant" => await CreateAIAssistantFromJson(tenantName, materialData),
                     _ => await CreateBasicMaterialFromJson(tenantName, materialData)
                 };
             }
@@ -2443,22 +2448,22 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
         }
 
-        private async Task<ActionResult<CreateMaterialResponse>> CreateVoiceFromJson(string tenantName, JsonElement jsonElement)
+        private async Task<ActionResult<CreateMaterialResponse>> CreateAIAssistantFromJson(string tenantName, JsonElement jsonElement)
         {
             try
             {
-                _logger.LogInformation("Creating voice material from JSON");
+                _logger.LogInformation("Creating AI assistant material from JSON");
 
-                var voice = new VoiceMaterial();
+                var aiAssistant = new AIAssistantMaterial();
 
                 if (TryGetPropertyCaseInsensitive(jsonElement, "name", out var nameProp))
-                    voice.Name = nameProp.GetString();
+                    aiAssistant.Name = nameProp.GetString();
 
                 if (TryGetPropertyCaseInsensitive(jsonElement, "description", out var descProp))
-                    voice.Description = descProp.GetString();
+                    aiAssistant.Description = descProp.GetString();
 
                 if (TryGetPropertyCaseInsensitive(jsonElement, "unique_id", out var uniqueIdProp) && uniqueIdProp.ValueKind == JsonValueKind.Number)
-                    voice.Unique_id = uniqueIdProp.GetInt32();
+                    aiAssistant.Unique_id = uniqueIdProp.GetInt32();
 
                 // Parse asset IDs from JSON
                 var assetIds = new List<int>();
@@ -2492,18 +2497,18 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     }
                 }
 
-                // Create the voice material
-                VoiceMaterial createdMaterial;
+                // Create the AI assistant material
+                AIAssistantMaterial createdMaterial;
                 if (assetIds.Any())
                 {
-                    createdMaterial = await _voiceMaterialService.CreateWithAssetsAsync(voice, assetIds);
+                    createdMaterial = await _aiAssistantMaterialService.CreateWithAssetsAsync(aiAssistant, assetIds);
                 }
                 else
                 {
-                    createdMaterial = await _voiceMaterialService.CreateAsync(voice);
+                    createdMaterial = await _aiAssistantMaterialService.CreateAsync(aiAssistant);
                 }
 
-                _logger.LogInformation("Created voice material {Name} with ID {Id} and {AssetCount} assets",
+                _logger.LogInformation("Created AI assistant material {Name} with ID {Id} and {AssetCount} assets",
                     createdMaterial.Name, createdMaterial.id, assetIds.Count);
 
                 // Process related materials if provided
@@ -2512,7 +2517,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var response = new CreateMaterialResponse
                 {
                     Status = "success",
-                    Message = "Voice material created successfully",
+                    Message = "AI assistant material created successfully",
                     id = createdMaterial.id,
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
@@ -2527,7 +2532,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error creating voice material from JSON");
+                _logger.LogError(ex, "Error creating AI assistant material from JSON");
                 throw;
             }
         }
@@ -5226,38 +5231,40 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 MaterialType.Unity => typeof(UnityMaterial),
                 MaterialType.Chatbot => typeof(ChatbotMaterial),
                 MaterialType.MQTT_Template => typeof(MQTT_TemplateMaterial),
-                MaterialType.Voice => typeof(VoiceMaterial),
+                MaterialType.AIAssistant => typeof(AIAssistantMaterial),
                 _ => typeof(Material)
             };
         }
 
-        #region Voice Material Endpoints
+        #region AI Assistant Material Endpoints
 
         /// <summary>
-        /// Get all voice materials
+        /// Get all AI assistant materials
         /// </summary>
-        [HttpGet("voice")]
-        public async Task<ActionResult<IEnumerable<object>>> GetVoiceMaterials(string tenantName)
+        [HttpGet("ai-assistant")]
+        public async Task<ActionResult<IEnumerable<object>>> GetAIAssistantMaterials(string tenantName)
         {
-            _logger.LogInformation("Getting voice materials for tenant: {TenantName}", tenantName);
+            _logger.LogInformation("Getting AI assistant materials for tenant: {TenantName}", tenantName);
 
             try
             {
-                var voiceMaterials = await _voiceMaterialService.GetAllAsync();
+                var aiAssistantMaterials = await _aiAssistantMaterialService.GetAllAsync();
                 var result = new List<object>();
 
-                foreach (var voice in voiceMaterials)
+                foreach (var aiAssistant in aiAssistantMaterials)
                 {
+                    var activeSession = await _aiAssistantMaterialService.GetActiveSessionAsync(aiAssistant.id);
                     result.Add(new
                     {
-                        id = voice.id,
-                        Name = voice.Name,
-                        Description = voice.Description,
-                        Type = GetLowercaseType(voice.Type),
-                        VoiceStatus = voice.VoiceStatus,
-                        AssetIds = voice.GetAssetIdsList(),
-                        Created_at = voice.Created_at,
-                        Updated_at = voice.Updated_at
+                        id = aiAssistant.id,
+                        Name = aiAssistant.Name,
+                        Description = aiAssistant.Description,
+                        Type = GetLowercaseType(aiAssistant.Type),
+                        AIAssistantStatus = aiAssistant.AIAssistantStatus,
+                        AssetIds = aiAssistant.GetAssetIdsList(),
+                        HasActiveSession = activeSession != null,
+                        Created_at = aiAssistant.Created_at,
+                        Updated_at = aiAssistant.Updated_at
                     });
                 }
 
@@ -5265,35 +5272,35 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting voice materials");
-                return StatusCode(500, new { Error = "Failed to get voice materials", Details = ex.Message });
+                _logger.LogError(ex, "Error getting AI assistant materials");
+                return StatusCode(500, new { Error = "Failed to get AI assistant materials", Details = ex.Message });
             }
         }
 
         /// <summary>
-        /// Submit a voice material for AI processing
+        /// Submit an AI assistant material for AI processing
         /// </summary>
-        [HttpPost("{id}/voice/submit")]
-        public async Task<ActionResult<object>> SubmitVoiceForProcessing(string tenantName, int id)
+        [HttpPost("{id}/ai-assistant/submit")]
+        public async Task<ActionResult<object>> SubmitAIAssistantForProcessing(string tenantName, int id)
         {
-            _logger.LogInformation("Submitting voice material {Id} for AI processing in tenant {TenantName}", id, tenantName);
+            _logger.LogInformation("Submitting AI assistant material {Id} for AI processing in tenant {TenantName}", id, tenantName);
 
             try
             {
-                var voice = await _voiceMaterialService.SubmitForProcessingAsync(id);
+                var aiAssistant = await _aiAssistantMaterialService.SubmitForProcessingAsync(id);
 
                 return Ok(new
                 {
                     Status = "success",
-                    Message = "Voice material submitted for AI processing",
-                    MaterialId = voice.id,
-                    VoiceStatus = voice.VoiceStatus,
-                    AssetIds = voice.GetAssetIdsList()
+                    Message = "AI assistant material submitted for AI processing",
+                    MaterialId = aiAssistant.id,
+                    AIAssistantStatus = aiAssistant.AIAssistantStatus,
+                    AssetIds = aiAssistant.GetAssetIdsList()
                 });
             }
             catch (KeyNotFoundException)
             {
-                return NotFound(new { Error = $"Voice material {id} not found" });
+                return NotFound(new { Error = $"AI assistant material {id} not found" });
             }
             catch (InvalidOperationException ex)
             {
@@ -5301,98 +5308,98 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error submitting voice material {Id} for AI processing", id);
-                return StatusCode(500, new { Error = "Failed to submit voice material for AI processing", Details = ex.Message });
+                _logger.LogError(ex, "Error submitting AI assistant material {Id} for AI processing", id);
+                return StatusCode(500, new { Error = "Failed to submit AI assistant material for AI processing", Details = ex.Message });
             }
         }
 
         /// <summary>
-        /// Refresh the status of a voice material based on its assets
+        /// Refresh the status of an AI assistant material based on its assets
         /// </summary>
-        [HttpPost("{id}/voice/refresh-status")]
-        public async Task<ActionResult<object>> RefreshVoiceStatus(string tenantName, int id)
+        [HttpPost("{id}/ai-assistant/refresh-status")]
+        public async Task<ActionResult<object>> RefreshAIAssistantStatus(string tenantName, int id)
         {
-            _logger.LogInformation("Refreshing voice material {Id} status in tenant {TenantName}", id, tenantName);
+            _logger.LogInformation("Refreshing AI assistant material {Id} status in tenant {TenantName}", id, tenantName);
 
             try
             {
-                var voice = await _voiceMaterialService.UpdateStatusFromAssetsAsync(id);
+                var aiAssistant = await _aiAssistantMaterialService.UpdateStatusFromAssetsAsync(id);
 
                 return Ok(new
                 {
                     Status = "success",
-                    MaterialId = voice.id,
-                    VoiceStatus = voice.VoiceStatus
+                    MaterialId = aiAssistant.id,
+                    AIAssistantStatus = aiAssistant.AIAssistantStatus
                 });
             }
             catch (KeyNotFoundException)
             {
-                return NotFound(new { Error = $"Voice material {id} not found" });
+                return NotFound(new { Error = $"AI assistant material {id} not found" });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error refreshing voice material {Id} status", id);
-                return StatusCode(500, new { Error = "Failed to refresh voice material status", Details = ex.Message });
+                _logger.LogError(ex, "Error refreshing AI assistant material {Id} status", id);
+                return StatusCode(500, new { Error = "Failed to refresh AI assistant material status", Details = ex.Message });
             }
         }
 
         /// <summary>
-        /// Add an asset to a voice material
+        /// Add an asset to an AI assistant material
         /// </summary>
-        [HttpPost("{id}/voice/assets/{assetId}")]
-        public async Task<ActionResult<object>> AddAssetToVoice(string tenantName, int id, int assetId)
+        [HttpPost("{id}/ai-assistant/assets/{assetId}")]
+        public async Task<ActionResult<object>> AddAssetToAIAssistant(string tenantName, int id, int assetId)
         {
-            _logger.LogInformation("Adding asset {AssetId} to voice material {Id} in tenant {TenantName}", assetId, id, tenantName);
+            _logger.LogInformation("Adding asset {AssetId} to AI assistant material {Id} in tenant {TenantName}", assetId, id, tenantName);
 
             try
             {
-                var result = await _voiceMaterialService.AddAssetAsync(id, assetId);
+                var result = await _aiAssistantMaterialService.AddAssetAsync(id, assetId);
 
                 if (!result)
                 {
-                    return NotFound(new { Error = $"Voice material {id} not found" });
+                    return NotFound(new { Error = $"AI assistant material {id} not found" });
                 }
 
                 return Ok(new
                 {
                     Status = "success",
-                    Message = $"Asset {assetId} added to voice material {id}"
+                    Message = $"Asset {assetId} added to AI assistant material {id}. Session invalidated - next /ask will re-establish context."
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error adding asset {AssetId} to voice material {Id}", assetId, id);
-                return StatusCode(500, new { Error = "Failed to add asset to voice material", Details = ex.Message });
+                _logger.LogError(ex, "Error adding asset {AssetId} to AI assistant material {Id}", assetId, id);
+                return StatusCode(500, new { Error = "Failed to add asset to AI assistant material", Details = ex.Message });
             }
         }
 
         /// <summary>
-        /// Remove an asset from a voice material
+        /// Remove an asset from an AI assistant material
         /// </summary>
-        [HttpDelete("{id}/voice/assets/{assetId}")]
-        public async Task<ActionResult<object>> RemoveAssetFromVoice(string tenantName, int id, int assetId)
+        [HttpDelete("{id}/ai-assistant/assets/{assetId}")]
+        public async Task<ActionResult<object>> RemoveAssetFromAIAssistant(string tenantName, int id, int assetId)
         {
-            _logger.LogInformation("Removing asset {AssetId} from voice material {Id} in tenant {TenantName}", assetId, id, tenantName);
+            _logger.LogInformation("Removing asset {AssetId} from AI assistant material {Id} in tenant {TenantName}", assetId, id, tenantName);
 
             try
             {
-                var result = await _voiceMaterialService.RemoveAssetAsync(id, assetId);
+                var result = await _aiAssistantMaterialService.RemoveAssetAsync(id, assetId);
 
                 if (!result)
                 {
-                    return NotFound(new { Error = $"Voice material {id} not found or asset not in list" });
+                    return NotFound(new { Error = $"AI assistant material {id} not found or asset not in list" });
                 }
 
                 return Ok(new
                 {
                     Status = "success",
-                    Message = $"Asset {assetId} removed from voice material {id}"
+                    Message = $"Asset {assetId} removed from AI assistant material {id}. Session invalidated - next /ask will re-establish context."
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error removing asset {AssetId} from voice material {Id}", assetId, id);
-                return StatusCode(500, new { Error = "Failed to remove asset from voice material", Details = ex.Message });
+                _logger.LogError(ex, "Error removing asset {AssetId} from AI assistant material {Id}", assetId, id);
+                return StatusCode(500, new { Error = "Failed to remove asset from AI assistant material", Details = ex.Message });
             }
         }
 

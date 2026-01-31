@@ -1,12 +1,12 @@
 namespace XR50TrainingAssetRepo.Models.DTOs
 {
     /// <summary>
-    /// Request DTO for asking a question to the voice assistant.
+    /// Request DTO for asking a question to the AI assistant.
     /// </summary>
-    public class VoiceAskRequest
+    public class AIAssistantAskRequest
     {
         /// <summary>
-        /// The query/question to ask the voice assistant.
+        /// The query/question to ask the AI assistant.
         /// </summary>
         public string Query { get; set; } = string.Empty;
 
@@ -17,9 +17,9 @@ namespace XR50TrainingAssetRepo.Models.DTOs
     }
 
     /// <summary>
-    /// Response DTO from the voice assistant API.
+    /// Response DTO from the AI assistant API.
     /// </summary>
-    public class VoiceAskResponse
+    public class AIAssistantAskResponse
     {
         /// <summary>
         /// Session ID for conversation continuity.
@@ -55,7 +55,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
     /// <summary>
     /// Response DTO for document upload.
     /// </summary>
-    public class VoiceDocumentUploadResponse
+    public class AIAssistantDocumentUploadResponse
     {
         /// <summary>
         /// Job ID for tracking the document processing.
@@ -81,7 +81,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
     /// <summary>
     /// DTO for document information.
     /// </summary>
-    public class VoiceDocumentInfo
+    public class AIAssistantDocumentInfo
     {
         public int AssetId { get; set; }
         public string? FileName { get; set; }

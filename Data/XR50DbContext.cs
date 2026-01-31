@@ -53,6 +53,7 @@ namespace XR50TrainingAssetRepo.Data
         public DbSet<ImageAnnotation> ImageAnnotations { get; set; } = null!;
         public DbSet<UserMaterialData> UserMaterialData { get; set; } = null!;
         public DbSet<UserMaterialScore> UserMaterialScores { get; set; } = null!;
+        public DbSet<AIAssistantSession> AIAssistantSessions { get; set; } = null!;
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured && _tenantService != null && _configuration != null)
@@ -137,7 +138,7 @@ namespace XR50TrainingAssetRepo.Data
                 .HasValue<QuestionnaireMaterial>("QuestionnaireMaterial")
                 .HasValue<MQTT_TemplateMaterial>("MQTT_TemplateMaterial")
                 .HasValue<DefaultMaterial>("DefaultMaterial")
-                .HasValue<VoiceMaterial>("VoiceMaterial");
+                .HasValue<AIAssistantMaterial>("AIAssistantMaterial");
 
             // Configure specific properties for MQTT_TemplateMaterial
             modelBuilder.Entity<MQTT_TemplateMaterial>()
@@ -240,6 +241,31 @@ namespace XR50TrainingAssetRepo.Data
             modelBuilder.Entity<DefaultMaterial>()
                 .Property(m => m.AssetId)
                 .HasColumnName("AssetId");
+
+            // AIAssistantMaterial configuration
+            modelBuilder.Entity<AIAssistantMaterial>()
+                .Property(m => m.ServiceJobId)
+                .HasColumnName("ServiceJobId");
+            modelBuilder.Entity<AIAssistantMaterial>()
+                .Property(m => m.AIAssistantStatus)
+                .HasColumnName("AIAssistantStatus");
+            modelBuilder.Entity<AIAssistantMaterial>()
+                .Property(m => m.AIAssistantAssetIds)
+                .HasColumnName("AIAssistantAssetIds");
+
+            // AIAssistantSession configuration - one-to-one with AIAssistantMaterial
+            modelBuilder.Entity<AIAssistantSession>()
+                .HasKey(s => s.Id);
+
+            modelBuilder.Entity<AIAssistantSession>()
+                .HasOne(s => s.AIAssistantMaterial)
+                .WithOne(m => m.CurrentSession)
+                .HasForeignKey<AIAssistantSession>(s => s.AIAssistantMaterialId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<AIAssistantSession>()
+                .HasIndex(s => s.AIAssistantMaterialId)
+                .IsUnique();
 
             modelBuilder.Entity<QuestionnaireMaterial>()
                 .HasMany(q => q.QuestionnaireEntries)
