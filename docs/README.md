@@ -16,6 +16,7 @@ This documentation is organized for **frontend developers** integrating with the
 | [Authentication](guides/authentication.md) | Keycloak JWT authentication setup and token usage |
 | [Usage Examples](guides/usage-examples.md) | Complete workflow examples for common scenarios |
 | [AI Voice Processing](guides/ai-voice-processing.md) | Voice material and asset AI processing integration |
+| [Testing](guides/testing.md) | Running and writing unit and functional tests |
 
 ## Setup
 
