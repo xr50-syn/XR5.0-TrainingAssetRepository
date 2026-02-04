@@ -136,7 +136,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 // Re-add entries if present
                 if (checklist.Entries?.Any() == true)
                 {
-                    foreach (var entry in checklist.Entries)
+                    foreach (var entry in checklist.Entries.ToList())
                     {
                         var newEntry = new ChecklistEntry
                         {

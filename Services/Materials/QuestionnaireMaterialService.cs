@@ -133,7 +133,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
 
                 if (questionnaire.QuestionnaireEntries?.Any() == true)
                 {
-                    foreach (var entry in questionnaire.QuestionnaireEntries)
+                    foreach (var entry in questionnaire.QuestionnaireEntries.ToList())
                     {
                         var newEntry = new QuestionnaireEntry
                         {

@@ -160,7 +160,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 // Re-add questions and answers if present
                 if (quiz.Questions?.Any() == true)
                 {
-                    foreach (var question in quiz.Questions)
+                    foreach (var question in quiz.Questions.ToList())
                     {
                         var newQuestion = new QuizQuestion
                         {
@@ -179,7 +179,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
 
                         if (question.Answers?.Any() == true)
                         {
-                            foreach (var answer in question.Answers)
+                            foreach (var answer in question.Answers.ToList())
                             {
                                 var newAnswer = new QuizAnswer
                                 {

@@ -143,7 +143,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 // Re-add timestamps if present
                 if (video.Timestamps?.Any() == true)
                 {
-                    foreach (var timestamp in video.Timestamps)
+                    foreach (var timestamp in video.Timestamps.ToList())
                     {
                         var newTimestamp = new VideoTimestamp
                         {
