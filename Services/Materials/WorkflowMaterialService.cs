@@ -136,7 +136,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 // Re-add steps if present
                 if (workflow.WorkflowSteps?.Any() == true)
                 {
-                    foreach (var step in workflow.WorkflowSteps)
+                    foreach (var step in workflow.WorkflowSteps.ToList())
                     {
                         var newStep = new WorkflowStep
                         {

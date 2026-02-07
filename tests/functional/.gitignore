@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Test state (created during test runs)
+.test-state.json
+
+# Coverage
+coverage/
+
+# Logs
+*.log
+npm-debug.log*

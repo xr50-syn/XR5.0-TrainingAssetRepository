@@ -139,7 +139,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
 
                 if (image.ImageAnnotations?.Any() == true)
                 {
-                    foreach (var annotation in image.ImageAnnotations)
+                    foreach (var annotation in image.ImageAnnotations.ToList())
                     {
                         var newAnnotation = new ImageAnnotation
                         {

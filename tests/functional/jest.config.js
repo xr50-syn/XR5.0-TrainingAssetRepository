@@ -8,5 +8,7 @@ module.exports = {
   globalSetup: './setup.js',
   globalTeardown: './teardown.js',
   // Run tests in order (not parallel) to ensure proper sequencing
-  maxWorkers: 1
+  maxWorkers: 1,
+  // Force alphabetical order so tenant creation runs before dependent tests
+  testSequencer: './testSequencer.js'
 };

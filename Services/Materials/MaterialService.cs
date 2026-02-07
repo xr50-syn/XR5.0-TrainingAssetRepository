@@ -538,7 +538,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
             switch (material)
             {
                 case WorkflowMaterial workflow when workflow.WorkflowSteps?.Any() == true:
-                    foreach (var step in workflow.WorkflowSteps)
+                    foreach (var step in workflow.WorkflowSteps.ToList())
                     {
                         var newStep = new WorkflowStep
                         {
@@ -552,7 +552,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     break;
 
                 case ChecklistMaterial checklist when checklist.Entries?.Any() == true:
-                    foreach (var entry in checklist.Entries)
+                    foreach (var entry in checklist.Entries.ToList())
                     {
                         var newEntry = new ChecklistEntry
                         {
@@ -571,7 +571,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     break;
 
                 case QuestionnaireMaterial questionnaire when questionnaire.QuestionnaireEntries?.Any() == true:
-                    foreach (var entry in questionnaire.QuestionnaireEntries)
+                    foreach (var entry in questionnaire.QuestionnaireEntries.ToList())
                     {
                         var newEntry = new QuestionnaireEntry
                         {
@@ -585,7 +585,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     break;
 
                 case QuizMaterial quiz when quiz.Questions?.Any() == true:
-                    foreach (var question in quiz.Questions)
+                    foreach (var question in quiz.Questions.ToList())
                     {
                         var newQuestion = new QuizQuestion
                         {
@@ -604,7 +604,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
 
                         if (question.Answers?.Any() == true)
                         {
-                            foreach (var answer in question.Answers)
+                            foreach (var answer in question.Answers.ToList())
                             {
                                 var newAnswer = new QuizAnswer
                                 {
