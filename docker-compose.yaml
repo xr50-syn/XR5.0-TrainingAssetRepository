@@ -13,9 +13,6 @@ volumes:
   # MinIO volumes (for S3 testing)
   minio_data:
     driver: local
-  # LocalStack volume (for sandbox S3 testing)
-  localstack_data:
-    driver: local
   # Keycloak volume (for auth testing)
   keycloak_data:
     driver: local
@@ -54,8 +51,6 @@ services:
     image: training-repo-image
     depends_on:
       mariadb:
-        condition: service_healthy
-      keycloak:
         condition: service_healthy
     build:
       context: .
@@ -223,43 +218,6 @@ services:
       - sandbox  # Sandbox testing (used instead of LocalStack for reliable persistence)
       - minio    # Can also be started with --profile minio
 
-  # LocalStack - Alternative AWS emulator (NOTE: Free version has limited S3 persistence)
-  # Currently NOT used for sandbox profile - MinIO is used instead for better persistence
-  # Uncomment the 'localstack' profile below if you want to use LocalStack
-  localstack:
-    image: localstack/localstack:latest
-    container_name: localstack
-    ports:
-      - "4566:4566"            # LocalStack Gateway
-      - "4510-4559:4510-4559"  # External services port range
-    environment:
-      # Core LocalStack configuration
-      - SERVICES=${LOCALSTACK_SERVICES:-s3,dynamodb,sqs,sns,lambda}
-      - DEBUG=${LOCALSTACK_DEBUG:-0}
-      # IMPORTANT: DATA_DIR must match the volume mount location for persistence
-      - DATA_DIR=/var/lib/localstack
-      - DOCKER_HOST=unix:///var/run/docker.sock
-      # AWS-compatible credentials (can be any value for LocalStack)
-      - AWS_DEFAULT_REGION=${AWS_REGION:-eu-west-1}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
-      # Enable persistence (requires DATA_DIR to match volume mount)
-      - PERSISTENCE=${LOCALSTACK_PERSISTENCE:-1}
-    volumes:
-      # Use named volume for better persistence (data survives container removal)
-      - localstack_data:/var/lib/localstack
-      - "/var/run/docker.sock:/var/run/docker.sock"
-      # Mount init scripts to create sample buckets on startup
-      - "./localstack-init:/etc/localstack/init/ready.d"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    profiles:
-      - localstack  # Use --profile localstack to start (not included in sandbox)
-
   # Keycloak for authentication testing
   keycloak:
     image: quay.io/keycloak/keycloak:23.0
@@ -298,7 +256,4 @@ services:
       retries: 5
       start_period: 60s
     profiles:
-      - auth       # Start with --profile auth
-      - lab        # Include in lab environment
       - sandbox    # Include in sandbox environment
-      - default    # Include by default for testing
