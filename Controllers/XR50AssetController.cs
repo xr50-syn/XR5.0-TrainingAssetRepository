@@ -263,49 +263,15 @@ namespace XR50TrainingAssetRepo.Controllers
 
         // POST: api/{tenantName}/assets/upload
         [HttpPost("upload")]
-        public async Task<ActionResult<CreateAssetResponse>> UploadAsset(
+        [ApiExplorerSettings(IgnoreApi = true)]
+        public Task<ActionResult<CreateAssetResponse>> UploadAsset(
             string tenantName,
             IFormFile file,
             [FromForm] string? description = null)
         {
-            if (file == null || file.Length == 0)
-            {
-                return BadRequest("No file provided");
-            }
-
-            _logger.LogInformation("Upload request for file {Filename} ({Size} bytes) for tenant: {TenantName}",
-                file.FileName, file.Length, tenantName);
-
-            try
-            {
-                using var stream = file.OpenReadStream();
-                var asset = await _assetService.UploadAssetAsync(file, file.FileName, description);
-
-                _logger.LogInformation("TODO: File uploaded as asset {Id} for tenant: {TenantName}",
-                    asset.Id, tenantName);
-
-                var response = new CreateAssetResponse
-                {
-                    Status = "success",
-                    Message = $"Asset '{asset.Filename}' uploaded successfully",
-                    Id = asset.Id,
-                    Filename = asset.Filename,
-                    Description = asset.Description,
-                    Filetype = asset.Filetype,
-                    Src = asset.Src,
-                    URL = asset.URL
-                };
-
-                return CreatedAtAction(nameof(GetAsset),
-                    new { tenantName, id = asset.Id },
-                    response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to upload file {Filename} for tenant: {TenantName}",
-                    file.FileName, tenantName);
-                return StatusCode(500, "Upload failed: " + ex.Message);
-            }
+            _logger.LogWarning("Upload endpoint disabled. Use POST /api/{tenantName}/assets instead.");
+            return Task.FromResult<ActionResult<CreateAssetResponse>>(
+                StatusCode(StatusCodes.Status410Gone, new { Error = "Endpoint disabled. Use POST /api/{tenantName}/assets instead." }));
         }
 
         // GET: api/{tenantName}/assets/5/file-info
