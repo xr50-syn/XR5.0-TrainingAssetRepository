@@ -71,6 +71,11 @@ namespace XR50TrainingAssetRepo.Services
 
         public async Task<bool> DeleteTenantStorageAsync(string tenantName)
         {
+            var allowDestructiveDelete = _configuration.GetValue<bool>("TenantSettings:AllowDestructiveStorageDelete");
+            if (!allowDestructiveDelete) 
+            {
+               return false;
+            }    
             try
             {
                 _logger.LogWarning("Deleting OwnCloud storage for tenant: {TenantName}", tenantName);

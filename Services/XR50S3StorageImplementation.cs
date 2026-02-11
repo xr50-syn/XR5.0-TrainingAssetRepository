@@ -105,6 +105,11 @@ namespace XR50TrainingAssetRepo.Services
 
         public async Task<bool> DeleteTenantStorageAsync(string tenantName)
         {
+            var allowDestructiveDelete = _configuration.GetValue<bool>("TenantSettings:AllowDestructiveStorageDelete");
+            if (!allowDestructiveDelete) 
+            {
+               return false;
+            }    
             try
             {
                 _logger.LogWarning("Deleting S3 storage for tenant: {TenantName}", tenantName);
@@ -158,7 +163,7 @@ namespace XR50TrainingAssetRepo.Services
             try
             {
                 var bucketName = await GetTenantBucketName(tenantName);
-                var key = fileName;
+                var key = $"{tenantName}/{fileName}";
                 
                 // Create clean byte array directly from IFormFile
                 byte[] fileBytes;
@@ -214,7 +219,7 @@ namespace XR50TrainingAssetRepo.Services
             try
             {
                 var bucketName = await GetTenantBucketName(tenantName);
-                var key = fileName;
+                var key = $"{tenantName}/{fileName}";
 
                 var request = new GetObjectRequest
                 {
@@ -255,7 +260,7 @@ namespace XR50TrainingAssetRepo.Services
             try
             {
                 var bucketName = await  GetTenantBucketName(tenantName);
-                var key = fileName;
+                var key = $"{tenantName}/{fileName}";
                 var expires = expiration ?? TimeSpan.FromHours(1);
 
                 var request = new GetPreSignedUrlRequest
@@ -281,7 +286,7 @@ namespace XR50TrainingAssetRepo.Services
             try
             {
                 var bucketName = await  GetTenantBucketName(tenantName);
-                var key = fileName;
+                var key = $"{tenantName}/{fileName}";
 
                 var request = new DeleteObjectRequest
                 {
@@ -304,7 +309,7 @@ namespace XR50TrainingAssetRepo.Services
             try
             {
                 var bucketName = await  GetTenantBucketName(tenantName);
-                var key = fileName;
+                var key = $"{tenantName}/{fileName}";
 
                 var request = new GetObjectMetadataRequest
                 {
@@ -331,7 +336,7 @@ namespace XR50TrainingAssetRepo.Services
             try
             {
                 var bucketName = await  GetTenantBucketName(tenantName);
-                var key = fileName;
+                var key = $"{tenantName}/{fileName}";
 
                 var request = new GetObjectMetadataRequest
                 {

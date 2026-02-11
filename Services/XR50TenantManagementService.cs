@@ -263,7 +263,7 @@ namespace XR50TrainingAssetRepo.Services
         public async Task DeleteTenantAsync(string tenantName)
         {
             //Storage First or otherwise we will nuke db
-            await DeleteTenantStorageAsync(tenantName);
+            //await DeleteTenantStorageAsync(tenantName);
             await DeleteTenantCompletelyAsync(tenantName);
            /* var connectionString = _configuration.GetConnectionString("DefaultConnection");
              using var connection = new MySqlConnection(connectionString);
@@ -393,6 +393,11 @@ namespace XR50TrainingAssetRepo.Services
 
         public async Task DeleteTenantStorageAsync(string tenantName)
         {
+            var allowDestructiveDelete = _configuration.GetValue<bool>("TenantSettings:AllowDestructiveStorageDelete");
+            if (!allowDestructiveDelete) 
+            {
+               return;
+            }     
             var tenant = await GetTenantAsync(tenantName);
             if (tenant == null){
                 Console.WriteLine($"Did not find Tenant with name: {tenantName}");
