@@ -84,9 +84,9 @@ namespace XR50TrainingAssetRepo.Services
                 // In a real scenario, you'd need to get tenant details first
 
                 // Delete directory (using curl command for simplicity)
-                var tenantDirectory = tenantName; // Simplified
-                var tenant = GetTenantWithOwner(tenantName);
-                var success = await ExecuteWebDAVAsAdmin("DELETE", $"{tenantName}");
+                var tenant = await GetTenantWithOwner(tenantName);
+                var tenantDirectory = tenant.TenantDirectory;
+                var success = await ExecuteWebDAVAsAdmin("DELETE", $"{tenantDirectory}");
 
                 _logger.LogInformation("Deleted OwnCloud storage for tenant: {TenantName}", tenantName);
                 return true;
@@ -103,8 +103,9 @@ namespace XR50TrainingAssetRepo.Services
             try
             {
                 // Check if tenant directory exists by trying to access it
-                var result = await ExecuteWebDAVAsAdmin("HEAD", tenantName);
-                return result;
+                var tenant = await GetTenantWithOwner(tenantName);
+                var dirl = System.Web.HttpUtility.UrlEncode(tenant.TenantDirectory);
+                return await ExecuteWebDAVAsUser("HEAD", $"{dirl}/", null, tenant.Owner);
             }
             catch (Exception ex)
             {
@@ -185,12 +186,14 @@ namespace XR50TrainingAssetRepo.Services
             {
                 _logger.LogInformation("Downloading file from OwnCloud: {TenantName}/{FileName}", tenantName, fileName);
 
-                // For OwnCloud, we'd need to implement proper WebDAV download
-                // This is a simplified placeholder
+                var tenant = await GetTenantWithOwner(tenantName);
                 var webdavBase = _configuration.GetValue<string>("TenantSettings:BaseWebDAV");
-                var url = $"{webdavBase}/{tenantName}/{fileName}";
+                var dirl = System.Web.HttpUtility.UrlEncode(tenant.TenantDirectory);
+                var url = $"{webdavBase}/{dirl}/{fileName}";
 
-                var response = await _httpClient.GetAsync(url);
+                var request = new HttpRequestMessage(HttpMethod.Get, url);
+                AddBasicAuthHeader(request, tenant.Owner);
+                var response = await _httpClient.SendAsync(request);
                 if (response.IsSuccessStatusCode)
                 {
                     return await response.Content.ReadAsStreamAsync();
@@ -211,8 +214,10 @@ namespace XR50TrainingAssetRepo.Services
             {
                 // For OwnCloud, generate a direct WebDAV URL
                 // Note: This doesn't implement actual expiration - that would require OwnCloud share API
+                var tenant = await GetTenantWithOwner(tenantName);
                 var webdavBase = _configuration.GetValue<string>("TenantSettings:BaseWebDAV");
-                var url = $"{webdavBase}/{tenantName}/{fileName}";
+                var dirl = System.Web.HttpUtility.UrlEncode(tenant.TenantDirectory);
+                var url = $"{webdavBase}/{dirl}/{fileName}";
 
                 _logger.LogInformation("Generated OwnCloud download URL: {TenantName}/{FileName}", tenantName, fileName);
                 return url;
@@ -579,7 +584,8 @@ namespace XR50TrainingAssetRepo.Services
                 {
                     var content = await result.Content.ReadAsStringAsync();
                     var baseUrl = _configuration.GetValue<string>("TenantSettings:BaseAPI") ?? "http://owncloud:8080";
-                    var shareUrl = $"{baseUrl}/remote.php/webdav/{asset.Filename}";
+                    var dirl = System.Web.HttpUtility.UrlEncode(tenant.TenantDirectory);
+                    var shareUrl = $"{baseUrl}/remote.php/webdav/{dirl}/{asset.Filename}";
                     return shareUrl;
                 }
                 else

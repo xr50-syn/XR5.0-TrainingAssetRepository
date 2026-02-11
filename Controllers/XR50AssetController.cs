@@ -274,6 +274,56 @@ namespace XR50TrainingAssetRepo.Controllers
                 StatusCode(StatusCodes.Status410Gone, new { Error = "Endpoint disabled. Use POST /api/{tenantName}/assets instead." }));
         }
 
+        // POST: api/{tenantName}/assets/{id}/upload
+        [HttpPost("{id}/upload")]
+        [ApiExplorerSettings(IgnoreApi = true)]
+        public async Task<ActionResult<CreateAssetResponse>> UploadAssetToExisting(
+            string tenantName,
+            int id,
+            IFormFile file,
+            [FromForm] string? filename = null,
+            [FromForm] string? description = null)
+        {
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest("No file provided");
+            }
+
+            _logger.LogInformation("Upload file to existing asset {Id} for tenant: {TenantName}", id, tenantName);
+
+            try
+            {
+                var asset = await _assetService.UploadAssetToExistingAsync(id, file, tenantName, filename, description);
+
+                var response = new CreateAssetResponse
+                {
+                    Status = "success",
+                    Message = $"File uploaded for asset '{asset.Filename}'",
+                    Id = asset.Id,
+                    Filename = asset.Filename,
+                    Description = asset.Description,
+                    Filetype = asset.Filetype,
+                    Src = asset.Src,
+                    URL = asset.URL
+                };
+
+                return Ok(response);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { Error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { Error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to upload file for asset {Id} in tenant: {TenantName}", id, tenantName);
+                return StatusCode(500, "Upload failed: " + ex.Message);
+            }
+        }
+
         // GET: api/{tenantName}/assets/5/file-info
         [HttpGet("{id}/file-info")]
         public async Task<ActionResult<object>> GetAssetFileInfo(string tenantName, int id)
