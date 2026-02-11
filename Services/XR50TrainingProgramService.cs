@@ -883,19 +883,31 @@ namespace XR50TrainingAssetRepo.Services
         public async Task<bool> DeleteTrainingProgramAsync(int id)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            var program = await context.TrainingPrograms.FindAsync(id);
-            if (program == null)
+            try
             {
-                return false;
+                var program = await context.TrainingPrograms.FindAsync(id);
+                if (program == null)
+                {
+                    return false;
+                }
+
+                context.TrainingPrograms.Remove(program);
+                await context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                _logger.LogInformation("Deleted training program: {Id}", id);
+
+                return true;
             }
-
-            context.TrainingPrograms.Remove(program);
-            await context.SaveChangesAsync();
-
-            _logger.LogInformation("Deleted training program: {Id}", id);
-
-            return true;
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Failed to delete training program {Id} - Transaction rolled back", id);
+                throw;
+            }
         }
 
         public async Task<bool> TrainingProgramExistsAsync(int id)
@@ -913,48 +925,61 @@ namespace XR50TrainingAssetRepo.Services
         public async Task<bool> AssignMaterialToTrainingProgramAsync(int trainingProgramId, int materialId)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            // Check if relationship already exists
-            var exists = await context.ProgramMaterials
-                .AnyAsync(pm => pm.MaterialId == materialId && pm.TrainingProgramId == trainingProgramId);
-
-            if (exists)
+            try
             {
-                _logger.LogWarning("Material {MaterialId} already assigned to training program {ProgramId}",
+                // Check if relationship already exists
+                var exists = await context.ProgramMaterials
+                    .AnyAsync(pm => pm.MaterialId == materialId && pm.TrainingProgramId == trainingProgramId);
+
+                if (exists)
+                {
+                    _logger.LogWarning("Material {MaterialId} already assigned to training program {ProgramId}",
+                        materialId, trainingProgramId);
+                    return false; // Already exists
+                }
+
+                // Verify both entities exist
+                var materialExists = await context.Materials.AnyAsync(m => m.id == materialId);
+                var programExists = await context.TrainingPrograms.AnyAsync(tp => tp.id == trainingProgramId);
+
+                if (!materialExists)
+                {
+                    _logger.LogError("Material {MaterialId} not found", materialId);
+                    throw new ArgumentException($"Material with ID {materialId} not found");
+                }
+
+                if (!programExists)
+                {
+                    _logger.LogError("Training program {ProgramId} not found", trainingProgramId);
+                    throw new ArgumentException($"Training program with ID {trainingProgramId} not found");
+                }
+
+                // Create the relationship
+                var programMaterial = new ProgramMaterial
+                {
+                    MaterialId = materialId,
+                    TrainingProgramId = trainingProgramId
+                };
+
+                context.ProgramMaterials.Add(programMaterial);
+                await context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                _logger.LogInformation("Successfully assigned material {MaterialId} to training program {ProgramId}",
                     materialId, trainingProgramId);
-                return false; // Already exists
+
+                return true;
             }
-
-            // Verify both entities exist
-            var materialExists = await context.Materials.AnyAsync(m => m.id == materialId);
-            var programExists = await context.TrainingPrograms.AnyAsync(tp => tp.id == trainingProgramId);
-
-            if (!materialExists)
+            catch (Exception ex)
             {
-                _logger.LogError("Material {MaterialId} not found", materialId);
-                throw new ArgumentException($"Material with ID {materialId} not found");
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Failed to assign material {MaterialId} to training program {ProgramId} - Transaction rolled back",
+                    materialId, trainingProgramId);
+                throw;
             }
-
-            if (!programExists)
-            {
-                _logger.LogError("Training program {ProgramId} not found", trainingProgramId);
-                throw new ArgumentException($"Training program with ID {trainingProgramId} not found");
-            }
-
-            // Create the relationship
-            var programMaterial = new ProgramMaterial
-            {
-                MaterialId = materialId,
-                TrainingProgramId = trainingProgramId
-            };
-
-            context.ProgramMaterials.Add(programMaterial);
-            await context.SaveChangesAsync();
-
-            _logger.LogInformation("Successfully assigned material {MaterialId} to training program {ProgramId}",
-                materialId, trainingProgramId);
-
-            return true;
         }
 
        
@@ -963,24 +988,37 @@ namespace XR50TrainingAssetRepo.Services
         public async Task<bool> RemoveMaterialFromTrainingProgramAsync(int trainingProgramId, int materialId)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            var programMaterial = await context.ProgramMaterials
-                .FirstOrDefaultAsync(pm => pm.MaterialId == materialId && pm.TrainingProgramId == trainingProgramId);
-
-            if (programMaterial == null)
+            try
             {
-                _logger.LogWarning("Material {MaterialId} not assigned to training program {ProgramId}",
+                var programMaterial = await context.ProgramMaterials
+                    .FirstOrDefaultAsync(pm => pm.MaterialId == materialId && pm.TrainingProgramId == trainingProgramId);
+
+                if (programMaterial == null)
+                {
+                    _logger.LogWarning("Material {MaterialId} not assigned to training program {ProgramId}",
+                        materialId, trainingProgramId);
+                    return false;
+                }
+
+                context.ProgramMaterials.Remove(programMaterial);
+                await context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                _logger.LogInformation("Successfully removed material {MaterialId} from training program {ProgramId}",
                     materialId, trainingProgramId);
-                return false;
+
+                return true;
             }
-
-            context.ProgramMaterials.Remove(programMaterial);
-            await context.SaveChangesAsync();
-
-            _logger.LogInformation("Successfully removed material {MaterialId} from training program {ProgramId}",
-                materialId, trainingProgramId);
-
-            return true;
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Failed to remove material {MaterialId} from training program {ProgramId} - Transaction rolled back",
+                    materialId, trainingProgramId);
+                throw;
+            }
         }
 
        

@@ -11,7 +11,9 @@ namespace XR50TrainingAssetRepo.Models
         public int Id { get; set; }
         public string Title { get; set; } = null!;
         public string? Content { get; set; }
-        public int? WorkflowMaterialId { get; set; }
+
+        [Required]
+        public int WorkflowMaterialId { get; set; }
         public WorkflowStep()
         {
           

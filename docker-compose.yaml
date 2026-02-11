@@ -100,6 +100,12 @@ services:
       IAM__Audience: ${KEYCLOAK_AUDIENCE:-xr50-training-api}
       IAM__RequireHttpsMetadata: ${KEYCLOAK_REQUIRE_HTTPS:-false}
       IAM__AllowAnonymousInDevelopment: ${IAM_ALLOW_ANONYMOUS:-false}
+      IAM__SkipCertificateValidation: ${IAM_SKIP_CERT_VALIDATION:-false}
+
+      # CORS Configuration (comma-separated origins, empty = permissive in dev only)
+      Cors__AllowedOrigins__0: ${CORS_ORIGIN_0:-}
+      Cors__AllowedOrigins__1: ${CORS_ORIGIN_1:-}
+      Cors__AllowedOrigins__2: ${CORS_ORIGIN_2:-}
 
     ports:
       - "5286:5286"

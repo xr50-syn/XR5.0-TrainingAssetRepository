@@ -83,10 +83,15 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
 
         // Configure backchannel for internal Docker networking
-        options.BackchannelHttpHandler = new HttpClientHandler
+        // Only skip certificate validation in Development or when explicitly configured
+        var skipCertValidation = builder.Configuration.GetValue<bool>("IAM:SkipCertificateValidation", false);
+        if (builder.Environment.IsDevelopment() || skipCertValidation)
         {
-            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-        };
+            options.BackchannelHttpHandler = new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            };
+        }
 
         // Optional: Configure events for logging
         options.Events = new JwtBearerEvents
@@ -392,16 +397,39 @@ builder.Services.AddSwaggerGen(c =>
 // Re-add environment variables to ensure they take precedence
 builder.Configuration.AddEnvironmentVariables();
 
-builder.Services.AddCors(options =>{
-            options.AddDefaultPolicy(
-                builder =>
-                {
-                    builder
-                        .AllowAnyHeader()
-                        .AllowAnyMethod()
-                        .AllowAnyOrigin();
-                });
-        });
+// CORS configuration - reads from Cors:AllowedOrigins, falls back to permissive only in Development
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        if (allowedOrigins != null && allowedOrigins.Length > 0)
+        {
+            // Production: Use configured origins
+            policy
+                .WithOrigins(allowedOrigins)
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowCredentials();
+        }
+        else if (builder.Environment.IsDevelopment())
+        {
+            // Development fallback: Allow any origin
+            policy
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowAnyOrigin();
+        }
+        else
+        {
+            // Production without config: Restrictive default (no origins allowed)
+            policy
+                .WithOrigins("https://placeholder-configure-cors.example.com")
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        }
+    });
+});
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

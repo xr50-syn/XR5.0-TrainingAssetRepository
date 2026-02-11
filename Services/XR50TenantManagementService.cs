@@ -339,8 +339,8 @@ namespace XR50TrainingAssetRepo.Services
             request.Headers.Authorization = new AuthenticationHeaderValue("Basic", base64EncodedAuthenticationString);
             _httpClient.BaseAddress = new Uri(uri_base);
         // _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", $"Basic {base64EncodedAuthenticationString}");
-            var result = _httpClient.SendAsync(request).Result;
-            string resultContent = result.Content.ReadAsStringAsync().Result;
+            var result = await _httpClient.SendAsync(request);
+            string resultContent = await result.Content.ReadAsStringAsync();
             User adminUser = tenant.Owner;
 
             //Console.WriteLine($"Response content: {resultContent}");
@@ -362,8 +362,8 @@ namespace XR50TrainingAssetRepo.Services
             requestAdmin.Headers.Authorization = new AuthenticationHeaderValue("Basic", base64EncodedAuthenticationString);
         
             // _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", $"Basic {base64EncodedAuthenticationString}");
-            var resultAdmin = _httpClient.SendAsync(requestAdmin).Result;
-            string resultAdminContent = resultAdmin.Content.ReadAsStringAsync().Result;
+            var resultAdmin = await _httpClient.SendAsync(requestAdmin);
+            string resultAdminContent = await resultAdmin.Content.ReadAsStringAsync();
             Console.WriteLine($"Response content: {resultAdminContent}");
 
             // Create root dir for the Tenant, owned by Admin
@@ -384,7 +384,7 @@ namespace XR50TrainingAssetRepo.Services
             {
                 string output = process.StandardOutput.ReadToEnd();
                 string error = process.StandardError.ReadToEnd();
-                process.WaitForExit();
+                process.WaitForExit(30000); // 30 second timeout
                 Console.WriteLine("Output: " + output);
                 Console.WriteLine("Error: " + error);
             }
@@ -432,8 +432,8 @@ namespace XR50TrainingAssetRepo.Services
             request.Headers.Authorization = new AuthenticationHeaderValue("Basic", base64EncodedAuthenticationString);
             _httpClient.BaseAddress = new Uri(uri_base);
             //_httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", $"Basic {base64EncodedAuthenticationString}");
-            var result = _httpClient.SendAsync(request).Result;
-            string resultContent = result.Content.ReadAsStringAsync().Result;
+            var result = await _httpClient.SendAsync(request);
+            string resultContent = await result.Content.ReadAsStringAsync();
             // Delete root dir for the Tenant
             string cmd= "curl";
             string dirl=System.Web.HttpUtility.UrlEncode(tenant.TenantDirectory);
@@ -450,7 +450,7 @@ namespace XR50TrainingAssetRepo.Services
             {
                 string output = process.StandardOutput.ReadToEnd();
                 string error = process.StandardError.ReadToEnd();
-                process.WaitForExit();
+                process.WaitForExit(30000); // 30 second timeout
                 Console.WriteLine("Output: " + output);
                 Console.WriteLine("Error: " + error);
             }
@@ -460,8 +460,8 @@ namespace XR50TrainingAssetRepo.Services
             };
             request.Headers.Authorization = new AuthenticationHeaderValue("Basic", base64EncodedAuthenticationString);
             // _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", $"Basic {base64EncodedAuthenticationString}");
-            result = _httpClient.SendAsync(request).Result;
-            resultContent = result.Content.ReadAsStringAsync().Result;    
+            result = await _httpClient.SendAsync(request);
+            resultContent = await result.Content.ReadAsStringAsync();    
                     }
 
 

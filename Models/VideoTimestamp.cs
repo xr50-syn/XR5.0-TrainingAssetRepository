@@ -16,8 +16,9 @@ namespace XR50TrainingAssetRepo.Models
         public string? Description { get; set; } = null!;
         [Column("type")]
         public string? Type {get;set;} = null!;
-        // Foreign key property (shadow property alternative)
-        public int? VideoMaterialId { get; set; }
+        // Foreign key to parent VideoMaterial
+        [Required]
+        public int VideoMaterialId { get; set; }
 
         public VideoTimestamp()
         {

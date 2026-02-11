@@ -61,100 +61,139 @@ namespace XR50TrainingAssetRepo.Services
         public async Task<bool> AssignLearningPathToTrainingProgramAsync(int trainingProgramId, int learningPathId)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            // Check if association already exists
-            var existingAssociation = await context.ProgramLearningPaths
-                .AnyAsync(plp => plp.TrainingProgramId == trainingProgramId && plp.LearningPathId == learningPathId);
-
-            if (existingAssociation)
-            {
-                _logger.LogWarning("Association between training program {TrainingProgramId} and learning path {LearningPathId} already exists",
-                    trainingProgramId, learningPathId);
-                return false;
-            }
-
-            var programLearningPath = new ProgramLearningPath
-            {
-                TrainingProgramId = trainingProgramId,
-                LearningPathId = learningPathId
-            };
-
-            context.ProgramLearningPaths.Add(programLearningPath);
-            await context.SaveChangesAsync();
-
-            _logger.LogInformation("Associated learning path {LearningPathId} with training program {TrainingProgramId}",
-                learningPathId, trainingProgramId);
-
-            return true;
-        }
-
-        public async Task<int> AssignMultipleLearningPathsToTrainingProgramAsync(int trainingProgramId, IEnumerable<int> LearningPaths)
-        {
-            using var context = _dbContextFactory.CreateDbContext();
-
-            var associationsToAdd = new List<ProgramLearningPath>();
-
-            foreach (var learningPathId in LearningPaths)
+            try
             {
                 // Check if association already exists
                 var existingAssociation = await context.ProgramLearningPaths
                     .AnyAsync(plp => plp.TrainingProgramId == trainingProgramId && plp.LearningPathId == learningPathId);
 
-                if (!existingAssociation)
+                if (existingAssociation)
                 {
-                    // Verify learning path exists
-                    var learningPathExists = await context.LearningPaths.AnyAsync(lp => lp.id == learningPathId);
-                    if (learningPathExists)
+                    _logger.LogWarning("Association between training program {TrainingProgramId} and learning path {LearningPathId} already exists",
+                        trainingProgramId, learningPathId);
+                    return false;
+                }
+
+                var programLearningPath = new ProgramLearningPath
+                {
+                    TrainingProgramId = trainingProgramId,
+                    LearningPathId = learningPathId
+                };
+
+                context.ProgramLearningPaths.Add(programLearningPath);
+                await context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                _logger.LogInformation("Associated learning path {LearningPathId} with training program {TrainingProgramId}",
+                    learningPathId, trainingProgramId);
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Failed to assign learning path {LearningPathId} to training program {TrainingProgramId} - Transaction rolled back",
+                    learningPathId, trainingProgramId);
+                throw;
+            }
+        }
+
+        public async Task<int> AssignMultipleLearningPathsToTrainingProgramAsync(int trainingProgramId, IEnumerable<int> LearningPaths)
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
+
+            try
+            {
+                var associationsToAdd = new List<ProgramLearningPath>();
+
+                foreach (var learningPathId in LearningPaths)
+                {
+                    // Check if association already exists
+                    var existingAssociation = await context.ProgramLearningPaths
+                        .AnyAsync(plp => plp.TrainingProgramId == trainingProgramId && plp.LearningPathId == learningPathId);
+
+                    if (!existingAssociation)
                     {
-                        associationsToAdd.Add(new ProgramLearningPath
+                        // Verify learning path exists
+                        var learningPathExists = await context.LearningPaths.AnyAsync(lp => lp.id == learningPathId);
+                        if (learningPathExists)
                         {
-                            TrainingProgramId = trainingProgramId,
-                            LearningPathId = learningPathId
-                        });
+                            associationsToAdd.Add(new ProgramLearningPath
+                            {
+                                TrainingProgramId = trainingProgramId,
+                                LearningPathId = learningPathId
+                            });
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Learning path {LearningPathId} not found, skipping association", learningPathId);
+                        }
                     }
                     else
                     {
-                        _logger.LogWarning("Learning path {LearningPathId} not found, skipping association", learningPathId);
+                        _logger.LogDebug("Association between training program {TrainingProgramId} and learning path {LearningPathId} already exists",
+                            trainingProgramId, learningPathId);
                     }
                 }
-                else
+
+                if (associationsToAdd.Any())
                 {
-                    _logger.LogDebug("Association between training program {TrainingProgramId} and learning path {LearningPathId} already exists",
-                        trainingProgramId, learningPathId);
+                    context.ProgramLearningPaths.AddRange(associationsToAdd);
+                    await context.SaveChangesAsync();
+
+                    _logger.LogInformation("Created {Count} new associations for training program {TrainingProgramId}",
+                        associationsToAdd.Count, trainingProgramId);
                 }
-            }
 
-            if (associationsToAdd.Any())
+                await transaction.CommitAsync();
+
+                return associationsToAdd.Count;
+            }
+            catch (Exception ex)
             {
-                context.ProgramLearningPaths.AddRange(associationsToAdd);
-                await context.SaveChangesAsync();
-
-                _logger.LogInformation("Created {Count} new associations for training program {TrainingProgramId}",
-                    associationsToAdd.Count, trainingProgramId);
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Failed to assign multiple learning paths to training program {TrainingProgramId} - Transaction rolled back",
+                    trainingProgramId);
+                throw;
             }
-
-            return associationsToAdd.Count;
         }
 
         public async Task<bool> RemoveLearningPathFromTrainingProgramAsync(int trainingProgramId, int learningPathId)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            var programLearningPath = await context.ProgramLearningPaths
-                .FirstOrDefaultAsync(plp => plp.TrainingProgramId == trainingProgramId && plp.LearningPathId == learningPathId);
-
-            if (programLearningPath == null)
+            try
             {
-                return false;
+                var programLearningPath = await context.ProgramLearningPaths
+                    .FirstOrDefaultAsync(plp => plp.TrainingProgramId == trainingProgramId && plp.LearningPathId == learningPathId);
+
+                if (programLearningPath == null)
+                {
+                    return false;
+                }
+
+                context.ProgramLearningPaths.Remove(programLearningPath);
+                await context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                _logger.LogInformation("Removed learning path {LearningPathId} from training program {TrainingProgramId}",
+                    learningPathId, trainingProgramId);
+
+                return true;
             }
-
-            context.ProgramLearningPaths.Remove(programLearningPath);
-            await context.SaveChangesAsync();
-
-            _logger.LogInformation("Removed learning path {LearningPathId} from training program {TrainingProgramId}",
-                learningPathId, trainingProgramId);
-
-            return true;
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Failed to remove learning path {LearningPathId} from training program {TrainingProgramId} - Transaction rolled back",
+                    learningPathId, trainingProgramId);
+                throw;
+            }
         }
 
         public async Task<LearningPath?> GetLearningPathAsync(int id)
@@ -183,47 +222,58 @@ namespace XR50TrainingAssetRepo.Services
         public async Task<LearningPath> CreateLearningPathAsync(LearningPath learningPath, IEnumerable<int>? trainingProgramIds = null)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            // Create the learning path first
-            context.LearningPaths.Add(learningPath);
-            await context.SaveChangesAsync();
-
-            _logger.LogInformation("Created learning path: {Name} with ID: {Id}",
-                learningPath.LearningPathName, learningPath.id);
-
-            // If training program IDs are provided, create associations
-            if (trainingProgramIds != null && trainingProgramIds.Any())
+            try
             {
-                var associations = new List<ProgramLearningPath>();
-                foreach (var trainingProgramId in trainingProgramIds)
+                // Create the learning path first
+                context.LearningPaths.Add(learningPath);
+                await context.SaveChangesAsync();
+
+                _logger.LogInformation("Created learning path: {Name} with ID: {Id}",
+                    learningPath.LearningPathName, learningPath.id);
+
+                // If training program IDs are provided, create associations
+                if (trainingProgramIds != null && trainingProgramIds.Any())
                 {
-                    // Verify training program exists
-                    var programExists = await context.TrainingPrograms.AnyAsync(tp => tp.id == trainingProgramId);
-                    if (programExists)
+                    var associations = new List<ProgramLearningPath>();
+                    foreach (var trainingProgramId in trainingProgramIds)
                     {
-                        associations.Add(new ProgramLearningPath
+                        // Verify training program exists
+                        var programExists = await context.TrainingPrograms.AnyAsync(tp => tp.id == trainingProgramId);
+                        if (programExists)
                         {
-                            TrainingProgramId = trainingProgramId,
-                            LearningPathId = learningPath.id
-                        });
+                            associations.Add(new ProgramLearningPath
+                            {
+                                TrainingProgramId = trainingProgramId,
+                                LearningPathId = learningPath.id
+                            });
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Training program {TrainingProgramId} not found, skipping association", trainingProgramId);
+                        }
                     }
-                    else
+
+                    if (associations.Any())
                     {
-                        _logger.LogWarning("Training program {TrainingProgramId} not found, skipping association", trainingProgramId);
+                        context.ProgramLearningPaths.AddRange(associations);
+                        await context.SaveChangesAsync();
+
+                        _logger.LogInformation("Created {Count} associations for learning path {LearningPathId}",
+                            associations.Count, learningPath.id);
                     }
                 }
 
-                if (associations.Any())
-                {
-                    context.ProgramLearningPaths.AddRange(associations);
-                    await context.SaveChangesAsync();
-
-                    _logger.LogInformation("Created {Count} associations for learning path {LearningPathId}",
-                        associations.Count, learningPath.id);
-                }
+                await transaction.CommitAsync();
+                return learningPath;
             }
-
-            return learningPath;
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Failed to create learning path {Name} - Transaction rolled back", learningPath.LearningPathName);
+                throw;
+            }
         }
 
         public async Task<LearningPath> UpdateLearningPathAsync(LearningPath learningPath)
@@ -265,19 +315,31 @@ namespace XR50TrainingAssetRepo.Services
         public async Task<bool> DeleteLearningPathAsync(int id)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            var learningPath = await context.LearningPaths.FindAsync(id);
-            if (learningPath == null)
+            try
             {
-                return false;
+                var learningPath = await context.LearningPaths.FindAsync(id);
+                if (learningPath == null)
+                {
+                    return false;
+                }
+
+                context.LearningPaths.Remove(learningPath);
+                await context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                _logger.LogInformation("Deleted learning path: {Id}", id);
+
+                return true;
             }
-
-            context.LearningPaths.Remove(learningPath);
-            await context.SaveChangesAsync();
-
-            _logger.LogInformation("Deleted learning path: {Id}", id);
-
-            return true;
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Failed to delete learning path {Id} - Transaction rolled back", id);
+                throw;
+            }
         }
 
         public async Task<bool> LearningPathExistsAsync(int id)

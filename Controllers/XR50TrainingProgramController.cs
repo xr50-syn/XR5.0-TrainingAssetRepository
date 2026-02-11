@@ -153,7 +153,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Requires authentication - user ID is extracted from JWT token claims
         /// </summary>
         [HttpPost("{programId}/submit")]
-        // [Authorize(Policy = "RequireAuthenticatedUser")] - Disabled for development
+        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<BulkMaterialCompleteResponse>> BulkSubmitMaterials(
             string tenantName,
             int programId,

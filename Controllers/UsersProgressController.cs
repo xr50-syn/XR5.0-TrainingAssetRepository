@@ -26,7 +26,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// GET /api/{tenantName}/users/{userId}/progress
         /// </summary>
         [HttpGet("~/api/{tenantName}/users/{userId}/progress")]
-        // [Authorize] - Disabled for development
+        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<UserProgressResponse>> GetUserProgressByUserId(
             string tenantName,
             string userId)
@@ -58,7 +58,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// GET /api/{tenantName}/users/progress
         /// </summary>
         [HttpGet("~/api/{tenantName}/users/progress")]
-        // [Authorize] - Disabled for development
+        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<List<UserProgressResponse>>> GetAllUsersProgress(
             string tenantName)
         {
@@ -79,7 +79,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// GET /api/{tenantName}/users/{userId}/materials/{materialId}
         /// </summary>
         [HttpGet("~/api/{tenantName}/users/{userId}/materials/{materialId}")]
-        // [Authorize] - Disabled for development
+        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<UserMaterialDetailResponse>> GetUserMaterialDetail(
             string tenantName,
             string userId,
@@ -108,7 +108,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// GET /api/{tenantName}/users/{userId}/programs/{programId}/materials
         /// </summary>
         [HttpGet("~/api/{tenantName}/users/{userId}/programs/{programId}/materials")]
-        // [Authorize] - Disabled for development
+        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<UserProgramMaterialsResponse>> GetUserProgramMaterials(
             string tenantName,
             string userId,

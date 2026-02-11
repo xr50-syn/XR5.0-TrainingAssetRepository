@@ -33,7 +33,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Admins see all users' progress, regular users see only their own.
         /// </summary>
         [HttpGet("program/{programId}")]
-        // [Authorize] - Disabled for development
+        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<ProgramProgressResponse>> GetProgramProgress(
             string tenantName,
             int programId)
@@ -90,8 +90,7 @@ namespace XR50TrainingAssetRepo.Controllers
             using var context = _dbContextFactory.CreateDbContext();
             var user = await context.Users.FirstOrDefaultAsync(u => u.UserName == userId);
 
-            // Authorization disabled - treat all authenticated users as admin
-            var isAdmin = true; // user?.admin ?? false;
+            var isAdmin = user?.admin ?? false;
 
             _logger.LogDebug("User {UserId} admin status: {IsAdmin}", userId, isAdmin);
 

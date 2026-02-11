@@ -34,6 +34,18 @@ namespace XR50TrainingAssetRepo.Services
 
         public string GetStorageType() => "S3";
 
+        /// <summary>
+        /// Sanitizes fileName to prevent path traversal attacks (e.g., "../other-tenant/secret.txt")
+        /// </summary>
+        private static string SanitizeFileName(string fileName)
+        {
+            // Remove any directory components - only keep the filename
+            var sanitized = Path.GetFileName(fileName);
+            // Additional safety: remove any remaining path separators
+            sanitized = sanitized.Replace("..", "").Replace("/", "").Replace("\\", "");
+            return string.IsNullOrEmpty(sanitized) ? "unnamed_file" : sanitized;
+        }
+
         private async Task<string> GetTenantBucketName(string tenantName, XR50Tenant? tenant = null){
             if (tenant == null)
             {
@@ -163,7 +175,7 @@ namespace XR50TrainingAssetRepo.Services
             try
             {
                 var bucketName = await GetTenantBucketName(tenantName);
-                var key = $"{tenantName}/{fileName}";
+                var key = $"{tenantName}/{SanitizeFileName(fileName)}";
                 
                 // Create clean byte array directly from IFormFile
                 byte[] fileBytes;
@@ -219,7 +231,7 @@ namespace XR50TrainingAssetRepo.Services
             try
             {
                 var bucketName = await GetTenantBucketName(tenantName);
-                var key = $"{tenantName}/{fileName}";
+                var key = $"{tenantName}/{SanitizeFileName(fileName)}";
 
                 var request = new GetObjectRequest
                 {
@@ -260,7 +272,7 @@ namespace XR50TrainingAssetRepo.Services
             try
             {
                 var bucketName = await  GetTenantBucketName(tenantName);
-                var key = $"{tenantName}/{fileName}";
+                var key = $"{tenantName}/{SanitizeFileName(fileName)}";
                 var expires = expiration ?? TimeSpan.FromHours(1);
 
                 var request = new GetPreSignedUrlRequest
@@ -286,7 +298,7 @@ namespace XR50TrainingAssetRepo.Services
             try
             {
                 var bucketName = await  GetTenantBucketName(tenantName);
-                var key = $"{tenantName}/{fileName}";
+                var key = $"{tenantName}/{SanitizeFileName(fileName)}";
 
                 var request = new DeleteObjectRequest
                 {
@@ -309,7 +321,7 @@ namespace XR50TrainingAssetRepo.Services
             try
             {
                 var bucketName = await  GetTenantBucketName(tenantName);
-                var key = $"{tenantName}/{fileName}";
+                var key = $"{tenantName}/{SanitizeFileName(fileName)}";
 
                 var request = new GetObjectMetadataRequest
                 {
@@ -336,7 +348,7 @@ namespace XR50TrainingAssetRepo.Services
             try
             {
                 var bucketName = await  GetTenantBucketName(tenantName);
-                var key = $"{tenantName}/{fileName}";
+                var key = $"{tenantName}/{SanitizeFileName(fileName)}";
 
                 var request = new GetObjectMetadataRequest
                 {

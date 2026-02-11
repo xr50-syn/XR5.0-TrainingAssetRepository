@@ -298,6 +298,9 @@ namespace XR50TrainingAssetRepo.Services
         public async Task<Asset> CreateAssetAsync(Asset asset, string tenantName, IFormFile file)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
+
+            string? uploadedFilePath = null; // Track for cleanup on failure
 
             try
             {
@@ -329,6 +332,7 @@ namespace XR50TrainingAssetRepo.Services
                 // Upload file to storage
                 stream.Seek(0, SeekOrigin.Begin); // Reset stream position after detection
                 var uploadUrl = await _storageService.UploadFileAsync(tenantName, asset.Filename, file);
+                uploadedFilePath = asset.Filename; // Mark for potential cleanup
 
                 // Update asset with storage URL
                 asset.URL = uploadUrl;
@@ -355,14 +359,14 @@ namespace XR50TrainingAssetRepo.Services
                         if (tenant != null)
                         {
                             var shareUrl = await _storageService.CreateShareAsync(tenantName, tenant, asset);
-                            
+
                             if (!string.IsNullOrEmpty(shareUrl))
                             {
                                 // Update asset URL with share URL and create share record
                                 asset.URL = shareUrl;
                                 await CreateShareRecord(context, asset.Id.ToString(), tenant.TenantGroup ?? "");
                                 await context.SaveChangesAsync();
-                                
+
                                 _logger.LogInformation("Automatically shared asset {AssetId} with tenant group", asset.Id);
                             }
                         }
@@ -373,12 +377,31 @@ namespace XR50TrainingAssetRepo.Services
                         _logger.LogWarning(shareEx, "Failed to auto-share asset {AssetId}, but asset creation succeeded", asset.Id);
                     }
                 }
-                
+
+                await transaction.CommitAsync();
+                uploadedFilePath = null; // Success - don't cleanup
+
                 return asset;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to create asset {Filename} for tenant {TenantName}", 
+                await transaction.RollbackAsync();
+
+                // Compensating action: cleanup orphaned storage file
+                if (uploadedFilePath != null)
+                {
+                    try
+                    {
+                        await _storageService.DeleteFileAsync(tenantName, uploadedFilePath);
+                        _logger.LogInformation("Cleaned up orphaned file {Filename} after failed asset creation", uploadedFilePath);
+                    }
+                    catch (Exception cleanupEx)
+                    {
+                        _logger.LogWarning(cleanupEx, "Failed to cleanup orphaned file {Filename} after failed asset creation", uploadedFilePath);
+                    }
+                }
+
+                _logger.LogError(ex, "Failed to create asset {Filename} for tenant {TenantName} - Transaction rolled back",
                     asset.Filename, tenantName);
                 throw;
             }
@@ -557,73 +580,103 @@ namespace XR50TrainingAssetRepo.Services
         public async Task<Asset> UploadAssetToExistingAsync(int assetId, IFormFile file, string tenantName, string? filename = null, string? description = null)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            var existing = await context.Assets.FindAsync(assetId);
-            if (existing == null)
+            string? uploadedFilePath = null; // Track for cleanup on failure
+
+            try
             {
-                throw new KeyNotFoundException($"Asset {assetId} not found");
-            }
-
-            if (!string.IsNullOrEmpty(existing.URL) || !string.IsNullOrEmpty(existing.Src))
-            {
-                throw new InvalidOperationException($"Asset {assetId} already has a file attached");
-            }
-
-            var resolvedFilename = !string.IsNullOrEmpty(filename)
-                ? filename
-                : (!string.IsNullOrEmpty(existing.Filename) ? existing.Filename : file.FileName);
-
-            // Detect file type from binary stream (magic bytes)
-            using var stream = file.OpenReadStream();
-            var (detectedFiletype, detectedType) = await DetectFileTypeFromStream(stream);
-
-            if (detectedFiletype == "unknown")
-            {
-                var extensionFiletype = GetFiletypeFromFilename(resolvedFilename);
-                var extensionType = InferAssetTypeFromFiletype(extensionFiletype);
-                _logger.LogInformation("Binary detection failed, using extension-based detection for {Filename}: {Filetype} -> {Type}",
-                    resolvedFilename, extensionFiletype, extensionType);
-                detectedFiletype = extensionFiletype;
-                detectedType = extensionType;
-            }
-
-            stream.Seek(0, SeekOrigin.Begin);
-            var uploadUrl = await _storageService.UploadFileAsync(tenantName, resolvedFilename, file);
-
-            existing.Filename = resolvedFilename;
-            existing.Description = description ?? existing.Description;
-            existing.Filetype = detectedFiletype;
-            existing.Type = detectedType;
-            existing.Src = uploadUrl;
-            existing.URL = uploadUrl;
-
-            if (_storageService.SupportsSharing())
-            {
-                try
+                var existing = await context.Assets.FindAsync(assetId);
+                if (existing == null)
                 {
-                    var tenant = await _tenantManagementService.GetTenantAsync(tenantName);
-                    if (tenant != null)
+                    throw new KeyNotFoundException($"Asset {assetId} not found");
+                }
+
+                if (!string.IsNullOrEmpty(existing.URL) || !string.IsNullOrEmpty(existing.Src))
+                {
+                    throw new InvalidOperationException($"Asset {assetId} already has a file attached");
+                }
+
+                var resolvedFilename = !string.IsNullOrEmpty(filename)
+                    ? filename
+                    : (!string.IsNullOrEmpty(existing.Filename) ? existing.Filename : file.FileName);
+
+                // Detect file type from binary stream (magic bytes)
+                using var stream = file.OpenReadStream();
+                var (detectedFiletype, detectedType) = await DetectFileTypeFromStream(stream);
+
+                if (detectedFiletype == "unknown")
+                {
+                    var extensionFiletype = GetFiletypeFromFilename(resolvedFilename);
+                    var extensionType = InferAssetTypeFromFiletype(extensionFiletype);
+                    _logger.LogInformation("Binary detection failed, using extension-based detection for {Filename}: {Filetype} -> {Type}",
+                        resolvedFilename, extensionFiletype, extensionType);
+                    detectedFiletype = extensionFiletype;
+                    detectedType = extensionType;
+                }
+
+                stream.Seek(0, SeekOrigin.Begin);
+                var uploadUrl = await _storageService.UploadFileAsync(tenantName, resolvedFilename, file);
+                uploadedFilePath = resolvedFilename; // Mark for potential cleanup
+
+                existing.Filename = resolvedFilename;
+                existing.Description = description ?? existing.Description;
+                existing.Filetype = detectedFiletype;
+                existing.Type = detectedType;
+                existing.Src = uploadUrl;
+                existing.URL = uploadUrl;
+
+                if (_storageService.SupportsSharing())
+                {
+                    try
                     {
-                        var shareUrl = await _storageService.CreateShareAsync(tenantName, tenant, existing);
-                        if (!string.IsNullOrEmpty(shareUrl))
+                        var tenant = await _tenantManagementService.GetTenantAsync(tenantName);
+                        if (tenant != null)
                         {
-                            existing.URL = shareUrl;
-                            await CreateShareRecord(context, existing.Id.ToString(), tenant.TenantGroup ?? "");
+                            var shareUrl = await _storageService.CreateShareAsync(tenantName, tenant, existing);
+                            if (!string.IsNullOrEmpty(shareUrl))
+                            {
+                                existing.URL = shareUrl;
+                                await CreateShareRecord(context, existing.Id.ToString(), tenant.TenantGroup ?? "");
+                            }
                         }
                     }
+                    catch (Exception shareEx)
+                    {
+                        _logger.LogWarning(shareEx, "Failed to auto-share asset {AssetId} after upload", existing.Id);
+                    }
                 }
-                catch (Exception shareEx)
-                {
-                    _logger.LogWarning(shareEx, "Failed to auto-share asset {AssetId} after upload", existing.Id);
-                }
+
+                await context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                uploadedFilePath = null; // Success - don't cleanup
+
+                _logger.LogInformation("Uploaded file for existing asset {AssetId} ({Filename}) to {StorageType} storage",
+                    existing.Id, existing.Filename, _storageService.GetStorageType());
+
+                return existing;
             }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
 
-            await context.SaveChangesAsync();
+                // Compensating action: cleanup orphaned storage file
+                if (uploadedFilePath != null)
+                {
+                    try
+                    {
+                        await _storageService.DeleteFileAsync(tenantName, uploadedFilePath);
+                        _logger.LogInformation("Cleaned up orphaned file {Filename} after failed upload to existing asset", uploadedFilePath);
+                    }
+                    catch (Exception cleanupEx)
+                    {
+                        _logger.LogWarning(cleanupEx, "Failed to cleanup orphaned file {Filename} after failed upload to existing asset", uploadedFilePath);
+                    }
+                }
 
-            _logger.LogInformation("Uploaded file for existing asset {AssetId} ({Filename}) to {StorageType} storage",
-                existing.Id, existing.Filename, _storageService.GetStorageType());
-
-            return existing;
+                _logger.LogError(ex, "Failed to upload file to existing asset {AssetId} - Transaction rolled back", assetId);
+                throw;
+            }
         }
 
         public async Task<bool> DeleteAssetFileAsync(int assetId)

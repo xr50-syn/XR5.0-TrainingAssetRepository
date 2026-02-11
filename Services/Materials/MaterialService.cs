@@ -352,26 +352,38 @@ namespace XR50TrainingAssetRepo.Services.Materials
         public async Task<bool> DeleteAsync(int id)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            var material = await context.Materials.FindAsync(id);
-            if (material == null)
+            try
             {
-                return false;
+                var material = await context.Materials.FindAsync(id);
+                if (material == null)
+                {
+                    return false;
+                }
+
+                var relationships = await context.MaterialRelationships
+                    .Where(mr => mr.MaterialId == id ||
+                                (mr.RelatedEntityType == "Material" && mr.RelatedEntityId == id.ToString()))
+                    .ToListAsync();
+
+                context.MaterialRelationships.RemoveRange(relationships);
+                context.Materials.Remove(material);
+                await context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                _logger.LogInformation("Deleted material: {Id} (Type: {Type}) and {RelationshipCount} relationships",
+                    id, material.GetType().Name, relationships.Count);
+
+                return true;
             }
-
-            var relationships = await context.MaterialRelationships
-                .Where(mr => mr.MaterialId == id ||
-                            (mr.RelatedEntityType == "Material" && mr.RelatedEntityId == id.ToString()))
-                .ToListAsync();
-
-            context.MaterialRelationships.RemoveRange(relationships);
-            context.Materials.Remove(material);
-            await context.SaveChangesAsync();
-
-            _logger.LogInformation("Deleted material: {Id} (Type: {Type}) and {RelationshipCount} relationships",
-                id, material.GetType().Name, relationships.Count);
-
-            return true;
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Failed to delete material {Id} - Transaction rolled back", id);
+                throw;
+            }
         }
 
         public async Task<bool> ExistsAsync(int id)

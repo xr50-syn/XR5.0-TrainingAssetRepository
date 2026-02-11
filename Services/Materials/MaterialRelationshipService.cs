@@ -308,56 +308,69 @@ namespace XR50TrainingAssetRepo.Services.Materials
             string relationshipType = "contains", int? displayOrder = null)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            // Validate both materials exist
-            var parentMaterial = await context.Materials.FindAsync(parentMaterialId);
-            var childMaterial = await context.Materials.FindAsync(childMaterialId);
-
-            if (parentMaterial == null)
-                throw new ArgumentException($"Parent material with ID {parentMaterialId} not found");
-            if (childMaterial == null)
-                throw new ArgumentException($"Child material with ID {childMaterialId} not found");
-
-            // Check for circular reference
-            if (await WouldCreateCircularReferenceAsync(parentMaterialId, childMaterialId))
-                throw new InvalidOperationException("Assignment would create a circular reference");
-
-            // Check if relationship already exists
-            var existingRelationship = await context.MaterialRelationships
-                .FirstOrDefaultAsync(mr => mr.MaterialId == parentMaterialId &&
-                                         mr.RelatedEntityType == "Material" &&
-                                         mr.RelatedEntityId == childMaterialId.ToString() &&
-                                         mr.RelationshipType == relationshipType);
-
-            if (existingRelationship != null)
-                throw new InvalidOperationException("Relationship already exists");
-
-            // If no display order specified, set to next available
-            if (displayOrder == null)
+            try
             {
-                var maxOrder = await context.MaterialRelationships
-                    .Where(mr => mr.MaterialId == parentMaterialId &&
-                               mr.RelatedEntityType == "Material")
-                    .MaxAsync(mr => (int?)mr.DisplayOrder) ?? 0;
-                displayOrder = maxOrder + 1;
+                // Validate both materials exist
+                var parentMaterial = await context.Materials.FindAsync(parentMaterialId);
+                var childMaterial = await context.Materials.FindAsync(childMaterialId);
+
+                if (parentMaterial == null)
+                    throw new ArgumentException($"Parent material with ID {parentMaterialId} not found");
+                if (childMaterial == null)
+                    throw new ArgumentException($"Child material with ID {childMaterialId} not found");
+
+                // Check for circular reference
+                if (await WouldCreateCircularReferenceAsync(parentMaterialId, childMaterialId))
+                    throw new InvalidOperationException("Assignment would create a circular reference");
+
+                // Check if relationship already exists
+                var existingRelationship = await context.MaterialRelationships
+                    .FirstOrDefaultAsync(mr => mr.MaterialId == parentMaterialId &&
+                                             mr.RelatedEntityType == "Material" &&
+                                             mr.RelatedEntityId == childMaterialId.ToString() &&
+                                             mr.RelationshipType == relationshipType);
+
+                if (existingRelationship != null)
+                    throw new InvalidOperationException("Relationship already exists");
+
+                // If no display order specified, set to next available
+                if (displayOrder == null)
+                {
+                    var maxOrder = await context.MaterialRelationships
+                        .Where(mr => mr.MaterialId == parentMaterialId &&
+                                   mr.RelatedEntityType == "Material")
+                        .MaxAsync(mr => (int?)mr.DisplayOrder) ?? 0;
+                    displayOrder = maxOrder + 1;
+                }
+
+                var relationship = new MaterialRelationship
+                {
+                    MaterialId = parentMaterialId,
+                    RelatedEntityId = childMaterialId.ToString(),
+                    RelatedEntityType = "Material",
+                    RelationshipType = relationshipType,
+                    DisplayOrder = displayOrder
+                };
+
+                context.MaterialRelationships.Add(relationship);
+                await context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                _logger.LogInformation("Assigned material {ChildId} to material {ParentId} with relationship {RelationshipType} (ID: {RelationshipId})",
+                    childMaterialId, parentMaterialId, relationshipType, relationship.Id);
+
+                return relationship.Id;
             }
-
-            var relationship = new MaterialRelationship
+            catch (Exception ex)
             {
-                MaterialId = parentMaterialId,
-                RelatedEntityId = childMaterialId.ToString(),
-                RelatedEntityType = "Material",
-                RelationshipType = relationshipType,
-                DisplayOrder = displayOrder
-            };
-
-            context.MaterialRelationships.Add(relationship);
-            await context.SaveChangesAsync();
-
-            _logger.LogInformation("Assigned material {ChildId} to material {ParentId} with relationship {RelationshipType} (ID: {RelationshipId})",
-                childMaterialId, parentMaterialId, relationshipType, relationship.Id);
-
-            return relationship.Id;
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Failed to assign material {ChildId} to material {ParentId} - Transaction rolled back",
+                    childMaterialId, parentMaterialId);
+                throw;
+            }
         }
 
         public async Task<bool> RemoveMaterialFromMaterialAsync(int parentMaterialId, int childMaterialId)

@@ -139,7 +139,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// In development mode with AllowAnonymousInDevelopment=true, uses DevelopmentUserId fallback
         /// </summary>
         [HttpPost("{materialId}/submit")]
-        // [Authorize(Policy = "RequireAuthenticatedUser")] - Disabled for development
+        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<SubmitQuizAnswersResponse>> SubmitAnswers(
             string tenantName,
             int materialId,
@@ -196,7 +196,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Requires authentication - user ID is extracted from JWT token claims
         /// </summary>
         [HttpPost("{materialId}/complete")]
-        // [Authorize(Policy = "RequireAuthenticatedUser")] - Disabled for development
+        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<MarkMaterialCompleteResponse>> MarkComplete(
             string tenantName,
             int materialId,

@@ -11,7 +11,9 @@ namespace XR50TrainingAssetRepo.Models
 
         public string Text { get; set; } = null!;
         public string? Description { get; set; }
-        public int? QuestionnaireMaterialId { get; set; }
+
+        [Required]
+        public int QuestionnaireMaterialId { get; set; }
         public QuestionnaireEntry()
         {
            
