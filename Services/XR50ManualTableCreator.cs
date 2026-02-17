@@ -363,7 +363,7 @@ namespace XR50TrainingAssetRepo.Services
                     `Duration` int DEFAULT NULL,
                     `Description` varchar(1000) DEFAULT NULL,
                     `type` varchar(255) DEFAULT NULL,
-                    `VideoMaterialId` int DEFAULT NULL,
+                    `VideoMaterialId` int NOT NULL,
                     PRIMARY KEY (`id`),
                     INDEX `idx_video_material` (`VideoMaterialId`)
                 )",
@@ -372,7 +372,7 @@ namespace XR50TrainingAssetRepo.Services
                     `ChecklistEntryId` int NOT NULL AUTO_INCREMENT,
                     `Text` varchar(1000) NOT NULL,
                     `Description` varchar(1000) DEFAULT NULL,
-                    `ChecklistMaterialId` int DEFAULT NULL,
+                    `ChecklistMaterialId` int NOT NULL,
                     PRIMARY KEY (`ChecklistEntryId`),
                     INDEX `idx_checklist_material` (`ChecklistMaterialId`)
                 )",
@@ -381,7 +381,7 @@ namespace XR50TrainingAssetRepo.Services
                     `Id` int NOT NULL AUTO_INCREMENT,
                     `Title` varchar(255) NOT NULL,
                     `Content` text DEFAULT NULL,
-                    `WorkflowMaterialId` int DEFAULT NULL,
+                    `WorkflowMaterialId` int NOT NULL,
                     PRIMARY KEY (`Id`),
                     INDEX `idx_workflow_material` (`WorkflowMaterialId`)
                 )",
@@ -1512,7 +1512,7 @@ CREATE TABLE IF NOT EXISTS `Timestamps` (
     `Duration` int DEFAULT NULL,
     `Description` varchar(1000) DEFAULT NULL,
     `type` varchar(255) DEFAULT NULL,
-    `VideoMaterialId` int DEFAULT NULL,
+    `VideoMaterialId` int NOT NULL,
     PRIMARY KEY (`id`),
     INDEX `idx_video_material` (`VideoMaterialId`)
 )
@@ -1521,7 +1521,7 @@ CREATE TABLE IF NOT EXISTS `Entries` (
     `ChecklistEntryId` int NOT NULL AUTO_INCREMENT,
     `Text` varchar(1000) NOT NULL,
     `Description` varchar(1000) DEFAULT NULL,
-    `ChecklistMaterialId` int DEFAULT NULL,
+    `ChecklistMaterialId` int NOT NULL,
     PRIMARY KEY (`ChecklistEntryId`),
     INDEX `idx_checklist_material` (`ChecklistMaterialId`)
 )
@@ -1556,7 +1556,7 @@ CREATE TABLE IF NOT EXISTS `WorkflowSteps` (
     `Id` int NOT NULL AUTO_INCREMENT,
     `Title` varchar(255) NOT NULL,
     `Content` text DEFAULT NULL,
-    `WorkflowMaterialId` int DEFAULT NULL,
+    `WorkflowMaterialId` int NOT NULL,
     PRIMARY KEY (`Id`),
     INDEX `idx_workflow_material` (`WorkflowMaterialId`)
 )

@@ -346,13 +346,13 @@ namespace XR50TrainingAssetRepo.Data
                 .IsUnique();
 
             modelBuilder.Entity<VideoTimestamp>()
-                .Property<int?>("VideoMaterialId");
+                .Property<int>("VideoMaterialId");
 
             modelBuilder.Entity<ChecklistEntry>()
-                .Property<int?>("ChecklistMaterialId");
+                .Property<int>("ChecklistMaterialId");
 
             modelBuilder.Entity<WorkflowStep>()
-                .Property<int?>("WorkflowMaterialId");
+                .Property<int>("WorkflowMaterialId");
 
             // UserMaterialData configuration
             modelBuilder.Entity<UserMaterialData>()
