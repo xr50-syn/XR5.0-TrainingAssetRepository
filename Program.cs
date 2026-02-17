@@ -398,7 +398,8 @@ builder.Services.AddSwaggerGen(c =>
 builder.Configuration.AddEnvironmentVariables();
 
 // CORS configuration - reads from Cors:AllowedOrigins, falls back to permissive only in Development
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?.Where(o => !string.IsNullOrWhiteSpace(o)).ToArray();
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
