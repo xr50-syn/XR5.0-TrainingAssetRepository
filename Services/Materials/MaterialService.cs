@@ -582,6 +582,25 @@ namespace XR50TrainingAssetRepo.Services.Materials
                         video.Timestamps?.Count ?? 0);
                     break;
 
+                case ImageMaterial image when image.ImageAnnotations?.Any() == true:
+                    foreach (var annotation in image.ImageAnnotations.ToList())
+                    {
+                        var newAnnotation = new ImageAnnotation
+                        {
+                            ClientId = annotation.ClientId,
+                            Text = annotation.Text,
+                            FontSize = annotation.FontSize,
+                            X = annotation.X,
+                            Y = annotation.Y,
+                            ImageMaterialId = material.id
+                        };
+                        context.ImageAnnotations.Add(newAnnotation);
+                    }
+                    await context.SaveChangesAsync();
+                    _logger.LogInformation("Added {Count} annotations to image material {Id}",
+                        image.ImageAnnotations.Count, material.id);
+                    break;
+
                 case QuestionnaireMaterial questionnaire when questionnaire.QuestionnaireEntries?.Any() == true:
                     foreach (var entry in questionnaire.QuestionnaireEntries.ToList())
                     {

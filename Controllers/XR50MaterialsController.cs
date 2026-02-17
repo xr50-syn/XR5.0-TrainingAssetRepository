@@ -3324,9 +3324,28 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         image.ImageHeight = height.GetInt32();
                     if (TryGetPropertyCaseInsensitive(jsonElement, "imageFormat", out var format) && format.ValueKind == JsonValueKind.String)
                         image.ImageFormat = format.GetString();
-                    // Parse annotations array
-                    if (TryGetPropertyCaseInsensitive(jsonElement, "annotations", out var annotationsElement) &&
+                    // Parse annotations array - check "config" object first, then direct "annotations" array
+                    JsonElement annotationsElement = default;
+                    bool hasAnnotations = false;
+
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var imageConfigElement))
+                    {
+                        if (TryGetPropertyCaseInsensitive(imageConfigElement, "annotations", out annotationsElement) &&
+                            annotationsElement.ValueKind == JsonValueKind.Array)
+                        {
+                            hasAnnotations = true;
+                            _logger.LogInformation("Found annotations in config object");
+                        }
+                    }
+
+                    if (!hasAnnotations && TryGetPropertyCaseInsensitive(jsonElement, "annotations", out annotationsElement) &&
                         annotationsElement.ValueKind == JsonValueKind.Array)
+                    {
+                        hasAnnotations = true;
+                        _logger.LogInformation("Found annotations directly");
+                    }
+
+                    if (hasAnnotations)
                     {
                         var imageAnnotations = new List<ImageAnnotation>();
                         foreach (var annotationElement in annotationsElement.EnumerateArray())
@@ -4678,8 +4697,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 case ImageMaterial image:
                     // Re-fetch the image with annotations to ensure we have the database-assigned annotation IDs
                     // (the original material may not have the navigation property populated after save)
-                    _logger.LogInformation("🖼️ Processing ImageMaterial {Id} - checking for annotations", image.id);
-                    var freshImage = await _imageMaterialService.GetByIdAsync(image.id);
+                    _logger.LogInformation("Processing ImageMaterial {Id} - checking for annotations", image.id);
+                    var freshImage = await _imageMaterialService.GetWithAnnotationsAsync(image.id);
                     _logger.LogInformation("🖼️ Fresh image has {Count} annotations", freshImage?.ImageAnnotations?.Count ?? 0);
                     if (freshImage?.ImageAnnotations?.Any() == true)
                     {
