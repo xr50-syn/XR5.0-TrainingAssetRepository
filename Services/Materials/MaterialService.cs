@@ -547,34 +547,19 @@ namespace XR50TrainingAssetRepo.Services.Materials
 
         protected async Task ProcessChildEntitiesAsync(XR50TrainingContext context, Material material)
         {
+            // Child entities are saved via EF Core navigation property cascading
+            // when context.Materials.Add(material) is called before this method.
+            // This method logs the child entity counts for diagnostics.
             switch (material)
             {
-                case WorkflowMaterial workflow when workflow.WorkflowSteps?.Any() == true:
-                    foreach (var step in workflow.WorkflowSteps.ToList())
-                    {
-                        var newStep = new WorkflowStep
-                        {
-                            Title = step.Title,
-                            Content = step.Content,
-                            WorkflowMaterialId = material.id
-                        };
-                        context.WorkflowSteps.Add(newStep);
-                    }
-                    await context.SaveChangesAsync();
+                case WorkflowMaterial workflow:
+                    _logger.LogInformation("Workflow material has {Count} steps (saved via navigation property)",
+                        workflow.WorkflowSteps?.Count ?? 0);
                     break;
 
-                case ChecklistMaterial checklist when checklist.Entries?.Any() == true:
-                    foreach (var entry in checklist.Entries.ToList())
-                    {
-                        var newEntry = new ChecklistEntry
-                        {
-                            Text = entry.Text,
-                            Description = entry.Description,
-                            ChecklistMaterialId = material.id
-                        };
-                        context.Entries.Add(newEntry);
-                    }
-                    await context.SaveChangesAsync();
+                case ChecklistMaterial checklist:
+                    _logger.LogInformation("Checklist material has {Count} entries (saved via navigation property)",
+                        checklist.Entries?.Count ?? 0);
                     break;
 
                 case VideoMaterial video:
@@ -582,74 +567,19 @@ namespace XR50TrainingAssetRepo.Services.Materials
                         video.Timestamps?.Count ?? 0);
                     break;
 
-                case ImageMaterial image when image.ImageAnnotations?.Any() == true:
-                    foreach (var annotation in image.ImageAnnotations.ToList())
-                    {
-                        var newAnnotation = new ImageAnnotation
-                        {
-                            ClientId = annotation.ClientId,
-                            Text = annotation.Text,
-                            FontSize = annotation.FontSize,
-                            X = annotation.X,
-                            Y = annotation.Y,
-                            ImageMaterialId = material.id
-                        };
-                        context.ImageAnnotations.Add(newAnnotation);
-                    }
-                    await context.SaveChangesAsync();
-                    _logger.LogInformation("Added {Count} annotations to image material {Id}",
-                        image.ImageAnnotations.Count, material.id);
+                case ImageMaterial image:
+                    _logger.LogInformation("Image material has {Count} annotations (saved via navigation property)",
+                        image.ImageAnnotations?.Count ?? 0);
                     break;
 
-                case QuestionnaireMaterial questionnaire when questionnaire.QuestionnaireEntries?.Any() == true:
-                    foreach (var entry in questionnaire.QuestionnaireEntries.ToList())
-                    {
-                        var newEntry = new QuestionnaireEntry
-                        {
-                            Text = entry.Text,
-                            Description = entry.Description,
-                            QuestionnaireMaterialId = material.id
-                        };
-                        context.QuestionnaireEntries.Add(newEntry);
-                    }
-                    await context.SaveChangesAsync();
+                case QuestionnaireMaterial questionnaire:
+                    _logger.LogInformation("Questionnaire material has {Count} entries (saved via navigation property)",
+                        questionnaire.QuestionnaireEntries?.Count ?? 0);
                     break;
 
-                case QuizMaterial quiz when quiz.Questions?.Any() == true:
-                    foreach (var question in quiz.Questions.ToList())
-                    {
-                        var newQuestion = new QuizQuestion
-                        {
-                            QuestionNumber = question.QuestionNumber,
-                            QuestionType = question.QuestionType,
-                            Text = question.Text,
-                            Description = question.Description,
-                            Score = question.Score,
-                            HelpText = question.HelpText,
-                            AllowMultiple = question.AllowMultiple,
-                            ScaleConfig = question.ScaleConfig,
-                            QuizMaterialId = material.id
-                        };
-                        context.QuizQuestions.Add(newQuestion);
-                        await context.SaveChangesAsync();
-
-                        if (question.Answers?.Any() == true)
-                        {
-                            foreach (var answer in question.Answers.ToList())
-                            {
-                                var newAnswer = new QuizAnswer
-                                {
-                                    Text = answer.Text,
-                                    CorrectAnswer = answer.CorrectAnswer,
-                                    DisplayOrder = answer.DisplayOrder,
-                                    Extra = answer.Extra,
-                                    QuizQuestionId = newQuestion.QuizQuestionId
-                                };
-                                context.QuizAnswers.Add(newAnswer);
-                            }
-                            await context.SaveChangesAsync();
-                        }
-                    }
+                case QuizMaterial quiz:
+                    _logger.LogInformation("Quiz material has {Count} questions (saved via navigation property)",
+                        quiz.Questions?.Count ?? 0);
                     break;
             }
         }

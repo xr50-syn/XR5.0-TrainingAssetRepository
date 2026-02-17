@@ -309,6 +309,8 @@ namespace XR50TrainingAssetRepo.Models
 
     public class QuizMaterial : Material
     {
+        public bool EvaluationMode { get; set; } = false;
+        public int? MinScore { get; set; }
         public List<QuizQuestion> Questions { get; set; }
 
         public QuizMaterial()

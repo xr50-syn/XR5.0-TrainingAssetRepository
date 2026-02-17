@@ -422,5 +422,36 @@ namespace XR50TrainingAssetRepo.Controllers
                 return StatusCode(500, $"Error migrating QuizAnswers table: {ex.Message}");
             }
         }
+
+        /// <summary>
+        /// Migrate Materials table to add EvaluationMode and MinScore columns for Quiz materials
+        /// </summary>
+        [HttpPost("migrate-quiz-evaluation/{tenantName}")]
+        public async Task<ActionResult> MigrateQuizEvaluationColumns(string tenantName)
+        {
+            try
+            {
+                _logger.LogInformation("Running Quiz evaluation columns migration for tenant: {TenantName}", tenantName);
+
+                var success = await _tableCreator.MigrateQuizEvaluationColumnsAsync(tenantName);
+
+                if (success)
+                {
+                    return Ok(new {
+                        Message = $"Quiz evaluation columns migrated successfully for tenant {tenantName}",
+                        Details = "Added 'EvaluationMode' and 'MinScore' columns to Materials table"
+                    });
+                }
+                else
+                {
+                    return BadRequest(new { Message = $"Failed to migrate Quiz evaluation columns for tenant {tenantName}" });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating Quiz evaluation columns for tenant {TenantName}", tenantName);
+                return StatusCode(500, $"Error migrating Quiz evaluation columns: {ex.Message}");
+            }
+        }
     }
 }

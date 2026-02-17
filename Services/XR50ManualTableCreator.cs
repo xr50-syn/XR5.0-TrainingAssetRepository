@@ -23,6 +23,7 @@ namespace XR50TrainingAssetRepo.Services
         Task<bool> MigrateUserMaterialTablesAsync(string tenantName);
         Task<bool> MigrateMaterialRelationshipRanksAsync(string tenantName);
         Task<bool> MigrateUserMaterialProgramKeyAsync(string tenantName);
+        Task<bool> MigrateQuizEvaluationColumnsAsync(string tenantName);
     }
 
     public class XR50ManualTableCreator : IXR50ManualTableCreator
@@ -343,6 +344,10 @@ namespace XR50TrainingAssetRepo.Services
             `ServiceJobId` varchar(255) DEFAULT NULL,
             `AIAssistantStatus` varchar(20) DEFAULT 'notready',
             `AIAssistantAssetIds` text DEFAULT NULL,
+
+            -- Quiz-specific columns
+            `EvaluationMode` tinyint(1) NOT NULL DEFAULT 0,
+            `MinScore` int DEFAULT NULL,
 
             PRIMARY KEY (`id`),
             INDEX `idx_discriminator` (`Discriminator`),
@@ -1443,6 +1448,70 @@ namespace XR50TrainingAssetRepo.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error migrating UserMaterial program keys for tenant: {TenantName}", tenantName);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Migrates existing tenant databases to add EvaluationMode and MinScore columns to the Materials table
+        /// for QuizMaterial support.
+        /// </summary>
+        public async Task<bool> MigrateQuizEvaluationColumnsAsync(string tenantName)
+        {
+            try
+            {
+                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
+                var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
+
+                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+
+                _logger.LogInformation("=== Migrating Quiz evaluation columns for tenant: {TenantName} ===", tenantName);
+
+                using var connection = new MySqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                var quizColumns = new Dictionary<string, string>
+                {
+                    { "EvaluationMode", "ALTER TABLE `Materials` ADD COLUMN `EvaluationMode` tinyint(1) NOT NULL DEFAULT 0" },
+                    { "MinScore", "ALTER TABLE `Materials` ADD COLUMN `MinScore` int DEFAULT NULL" }
+                };
+
+                foreach (var column in quizColumns)
+                {
+                    var checkQuery = @"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_SCHEMA = @dbName
+                        AND TABLE_NAME = 'Materials'
+                        AND COLUMN_NAME = @columnName";
+
+                    using (var checkCmd = new MySqlCommand(checkQuery, connection))
+                    {
+                        checkCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                        checkCmd.Parameters.AddWithValue("@columnName", column.Key);
+                        var exists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+
+                        if (!exists)
+                        {
+                            _logger.LogInformation("Adding {Column} column to Materials table...", column.Key);
+                            using (var addCmd = new MySqlCommand(column.Value, connection))
+                            {
+                                await addCmd.ExecuteNonQueryAsync();
+                                _logger.LogInformation("Successfully added {Column} column to Materials", column.Key);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogInformation("{Column} column already exists in Materials", column.Key);
+                        }
+                    }
+                }
+
+                _logger.LogInformation("=== Quiz evaluation columns migration completed for tenant: {TenantName} ===", tenantName);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating Quiz evaluation columns for tenant: {TenantName}", tenantName);
                 return false;
             }
         }

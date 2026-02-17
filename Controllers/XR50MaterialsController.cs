@@ -547,6 +547,8 @@ private async Task<object?> GetQuizDetails(int materialId)
         Description = quiz.Description,
         Type = GetLowercaseType(quiz.Type),
         Unique_id = quiz.Unique_id,
+        EvaluationMode = quiz.EvaluationMode,
+        MinScore = quiz.MinScore,
         Created_at = quiz.Created_at,
         Updated_at = quiz.Updated_at,
         Config = new
@@ -559,7 +561,7 @@ private async Task<object?> GetQuizDetails(int materialId)
 
 private async Task<object?> GetImageDetails(int materialId)
 {
-    var image = await _imageMaterialService.GetByIdAsync(materialId);
+    var image = await _imageMaterialService.GetWithAnnotationsAsync(materialId);
     if (image == null) return null;
 
     // Fetch full asset if AssetId exists
@@ -2330,6 +2332,22 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 if (TryGetPropertyCaseInsensitive(jsonElement, "unique_id", out var uniqueIdProp) && uniqueIdProp.ValueKind == JsonValueKind.Number)
                     quiz.Unique_id = uniqueIdProp.GetInt32();
 
+                if (TryGetPropertyCaseInsensitive(jsonElement, "evaluationMode", out var evalModeProp))
+                {
+                    if (evalModeProp.ValueKind == JsonValueKind.True || evalModeProp.ValueKind == JsonValueKind.False)
+                        quiz.EvaluationMode = evalModeProp.GetBoolean();
+                    else if (evalModeProp.ValueKind == JsonValueKind.String)
+                        quiz.EvaluationMode = bool.TryParse(evalModeProp.GetString(), out var evalVal) && evalVal;
+                }
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "minScore", out var minScoreProp))
+                {
+                    if (minScoreProp.ValueKind == JsonValueKind.Number)
+                        quiz.MinScore = minScoreProp.GetInt32();
+                    else if (minScoreProp.ValueKind == JsonValueKind.String && int.TryParse(minScoreProp.GetString(), out var minScoreVal))
+                        quiz.MinScore = minScoreVal;
+                }
+
                 // Parse the questions - try to get from "config" object first, then direct "questions" array
                 var questions = new List<QuizQuestion>();
                 var questionRelatedMaterials = new Dictionary<int, List<int>>();
@@ -3077,6 +3095,22 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 case QuizMaterial quiz:
                     _logger.LogInformation("Processing quiz material...");
+
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "evaluationMode", out var evalModePropQ))
+                    {
+                        if (evalModePropQ.ValueKind == JsonValueKind.True || evalModePropQ.ValueKind == JsonValueKind.False)
+                            quiz.EvaluationMode = evalModePropQ.GetBoolean();
+                        else if (evalModePropQ.ValueKind == JsonValueKind.String)
+                            quiz.EvaluationMode = bool.TryParse(evalModePropQ.GetString(), out var evalValQ) && evalValQ;
+                    }
+
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "minScore", out var minScorePropQ))
+                    {
+                        if (minScorePropQ.ValueKind == JsonValueKind.Number)
+                            quiz.MinScore = minScorePropQ.GetInt32();
+                        else if (minScorePropQ.ValueKind == JsonValueKind.String && int.TryParse(minScorePropQ.GetString(), out var minScoreValQ))
+                            quiz.MinScore = minScoreValQ;
+                    }
 
                     // Try to get questions from "config" object first, then try direct "questions" array
                     JsonElement questionsElement;

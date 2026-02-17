@@ -115,13 +115,17 @@ public static class MaterialFactory
     /// </summary>
     public static object CreateQuizRequest(
         string? name = null,
-        List<object>? questions = null)
+        List<object>? questions = null,
+        bool evaluationMode = false,
+        int? minScore = null)
     {
         return new
         {
             name = name ?? $"Test Quiz {Guid.NewGuid():N}",
             description = "Test quiz material",
             type = "quiz",
+            evaluationMode,
+            minScore,
             config = new
             {
                 questions = questions ?? new List<object>
