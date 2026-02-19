@@ -3117,7 +3117,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     }
 
                     // Try to get questions from "config" object first, then try direct "questions" array
-                    JsonElement questionsElement;
+                    JsonElement questionsElement = default;
                     bool hasQuestions = false;
 
                     if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var configElement))
