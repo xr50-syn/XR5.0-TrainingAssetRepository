@@ -3007,7 +3007,9 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                     if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var workflowConfigElement))
                     {
-                        if (TryGetPropertyCaseInsensitive(workflowConfigElement, "steps", out stepsElement))
+                        if (TryGetPropertyCaseInsensitive(workflowConfigElement, "steps", out stepsElement) &&
+                            stepsElement.ValueKind == JsonValueKind.Array &&
+                            stepsElement.GetArrayLength() > 0)
                         {
                             hasSteps = true;
                             _logger.LogInformation("Found steps in config object");
@@ -3060,7 +3062,9 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                     if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var checklistConfigElement))
                     {
-                        if (TryGetPropertyCaseInsensitive(checklistConfigElement, "entries", out entriesElement))
+                        if (TryGetPropertyCaseInsensitive(checklistConfigElement, "entries", out entriesElement) &&
+                            entriesElement.ValueKind == JsonValueKind.Array &&
+                            entriesElement.GetArrayLength() > 0)
                         {
                             hasEntries = true;
                             _logger.LogInformation("Found entries in config object");
@@ -3118,13 +3122,16 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                     if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var configElement))
                     {
-                        if (TryGetPropertyCaseInsensitive(configElement, "questions", out questionsElement))
+                        if (TryGetPropertyCaseInsensitive(configElement, "questions", out questionsElement) &&
+                            questionsElement.ValueKind == JsonValueKind.Array &&
+                            questionsElement.GetArrayLength() > 0)
                         {
                             hasQuestions = true;
                             _logger.LogInformation("Found questions in config object");
                         }
                     }
-                    else if (TryGetPropertyCaseInsensitive(jsonElement, "questions", out questionsElement))
+
+                    if (!hasQuestions && TryGetPropertyCaseInsensitive(jsonElement, "questions", out questionsElement))
                     {
                         hasQuestions = true;
                         _logger.LogInformation("Found questions directly");
@@ -3365,7 +3372,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var imageConfigElement))
                     {
                         if (TryGetPropertyCaseInsensitive(imageConfigElement, "annotations", out annotationsElement) &&
-                            annotationsElement.ValueKind == JsonValueKind.Array)
+                            annotationsElement.ValueKind == JsonValueKind.Array &&
+                            annotationsElement.GetArrayLength() > 0)
                         {
                             hasAnnotations = true;
                             _logger.LogInformation("Found annotations in config object");
@@ -3463,7 +3471,9 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                     if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var qConfigElement))
                     {
-                        if (TryGetPropertyCaseInsensitive(qConfigElement, "entries", out qEntriesElement))
+                        if (TryGetPropertyCaseInsensitive(qConfigElement, "entries", out qEntriesElement) &&
+                            qEntriesElement.ValueKind == JsonValueKind.Array &&
+                            qEntriesElement.GetArrayLength() > 0)
                         {
                             hasQEntries = true;
                             _logger.LogInformation("Found questionnaire entries in config object");
