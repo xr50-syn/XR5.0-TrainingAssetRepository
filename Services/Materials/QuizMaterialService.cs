@@ -303,6 +303,12 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 return false;
             }
 
+            var orphanedRelationships = await context.SubcomponentMaterialRelationships
+                .Where(smr => smr.SubcomponentId == questionId && smr.SubcomponentType == "QuizQuestion")
+                .ToListAsync();
+            if (orphanedRelationships.Count > 0)
+                context.SubcomponentMaterialRelationships.RemoveRange(orphanedRelationships);
+
             // Remove answers first
             context.QuizAnswers.RemoveRange(question.Answers);
             context.QuizQuestions.Remove(question);

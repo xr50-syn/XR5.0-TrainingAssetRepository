@@ -258,6 +258,12 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 return false;
             }
 
+            var orphanedRelationships = await context.SubcomponentMaterialRelationships
+                .Where(smr => smr.SubcomponentId == timestampId && smr.SubcomponentType == "VideoTimestamp")
+                .ToListAsync();
+            if (orphanedRelationships.Count > 0)
+                context.SubcomponentMaterialRelationships.RemoveRange(orphanedRelationships);
+
             context.Timestamps.Remove(timestamp);
             await context.SaveChangesAsync();
 

@@ -247,6 +247,12 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 return false;
             }
 
+            var orphanedRelationships = await context.SubcomponentMaterialRelationships
+                .Where(smr => smr.SubcomponentId == entryId && smr.SubcomponentType == "ChecklistEntry")
+                .ToListAsync();
+            if (orphanedRelationships.Count > 0)
+                context.SubcomponentMaterialRelationships.RemoveRange(orphanedRelationships);
+
             context.Entries.Remove(entry);
             await context.SaveChangesAsync();
 

@@ -637,21 +637,41 @@ namespace XR50TrainingAssetRepo.Services.Materials
             }
         }
 
+        protected async Task RemoveSubcomponentRelationshipsAsync(XR50TrainingContext context, int subcomponentId, string subcomponentType)
+        {
+            var orphanedRows = await context.SubcomponentMaterialRelationships
+                .Where(smr => smr.SubcomponentId == subcomponentId && smr.SubcomponentType == subcomponentType)
+                .ToListAsync();
+
+            if (orphanedRows.Count > 0)
+            {
+                context.SubcomponentMaterialRelationships.RemoveRange(orphanedRows);
+                _logger.LogInformation("Removed {Count} subcomponent relationship rows for {Type} {Id}",
+                    orphanedRows.Count, subcomponentType, subcomponentId);
+            }
+        }
+
         protected async Task DeleteChildEntriesAsync(XR50TrainingContext context, int materialId, System.Type materialType)
         {
             if (materialType == typeof(ChecklistMaterial))
             {
                 var entries = await context.Entries.Where(e => e.ChecklistMaterialId == materialId).ToListAsync();
+                foreach (var entry in entries)
+                    await RemoveSubcomponentRelationshipsAsync(context, entry.ChecklistEntryId, "ChecklistEntry");
                 context.Entries.RemoveRange(entries);
             }
             else if (materialType == typeof(WorkflowMaterial))
             {
                 var steps = await context.WorkflowSteps.Where(s => s.WorkflowMaterialId == materialId).ToListAsync();
+                foreach (var step in steps)
+                    await RemoveSubcomponentRelationshipsAsync(context, step.Id, "WorkflowStep");
                 context.WorkflowSteps.RemoveRange(steps);
             }
             else if (materialType == typeof(VideoMaterial))
             {
                 var timestamps = await context.Timestamps.Where(t => t.VideoMaterialId == materialId).ToListAsync();
+                foreach (var ts in timestamps)
+                    await RemoveSubcomponentRelationshipsAsync(context, ts.id, "VideoTimestamp");
                 context.Timestamps.RemoveRange(timestamps);
             }
             else if (materialType == typeof(QuestionnaireMaterial))
@@ -667,6 +687,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     .ToListAsync();
                 foreach (var question in questions)
                 {
+                    await RemoveSubcomponentRelationshipsAsync(context, question.QuizQuestionId, "QuizQuestion");
                     context.QuizAnswers.RemoveRange(question.Answers);
                 }
                 context.QuizQuestions.RemoveRange(questions);
@@ -674,6 +695,8 @@ namespace XR50TrainingAssetRepo.Services.Materials
             else if (materialType == typeof(ImageMaterial))
             {
                 var annotations = await context.ImageAnnotations.Where(a => a.ImageMaterialId == materialId).ToListAsync();
+                foreach (var annotation in annotations)
+                    await RemoveSubcomponentRelationshipsAsync(context, annotation.ImageAnnotationId, "ImageAnnotation");
                 context.ImageAnnotations.RemoveRange(annotations);
             }
 

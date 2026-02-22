@@ -2718,6 +2718,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         9 => "answers",
                         10 => "quiz",
                         11 => "default",
+                        12 => "ai_assistant",
                         _ => "default"
                     };
                     _logger.LogInformation("Found type (numeric {NumericType}), converted to: {Type}", numericType, typeValue);
@@ -2748,6 +2749,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         9 => "answers",
                         10 => "quiz",
                         11 => "default",
+                        12 => "ai_assistant",
                         _ => "default"
                     };
                     _logger.LogInformation("Found materialType (numeric {NumericType}), converted to: {Type}", numericType, typeValue);
@@ -2767,6 +2769,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 ("questionnairematerial", _) or (_, "questionnaire") => new QuestionnaireMaterial(),
                 ("quizmaterial", _) or (_, "quiz") => new QuizMaterial(),
                 ("mqtt_templatematerial", _) or (_, "mqtt_template") => new MQTT_TemplateMaterial(),
+                ("aiassistantmaterial", _) or (_, "ai_assistant") or (_, "aiassistant") => new AIAssistantMaterial(),
                 ("defaultmaterial", _) or (_, "default") => new DefaultMaterial(),
                 _ => new DefaultMaterial() // Default fallback
             };
@@ -2833,6 +2836,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 QuestionnaireMaterial => new QuestionnaireMaterial(),
                 QuizMaterial => new QuizMaterial(),
                 MQTT_TemplateMaterial => new MQTT_TemplateMaterial(),
+                AIAssistantMaterial => new AIAssistantMaterial(),
                 DefaultMaterial => new DefaultMaterial(),
                 _ => new DefaultMaterial()
             };
@@ -3455,6 +3459,20 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         chatbot.ChatbotModel = model.GetString();
                     if (TryGetPropertyCaseInsensitive(jsonElement, "chatbotPrompt", out var prompt))
                         chatbot.ChatbotPrompt = prompt.GetString();
+                    break;
+
+                case AIAssistantMaterial aiAssistant:
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "serviceJobId", out var jobIdProp) && jobIdProp.ValueKind == JsonValueKind.String)
+                        aiAssistant.ServiceJobId = jobIdProp.GetString();
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "aiAssistantStatus", out var statusProp) && statusProp.ValueKind == JsonValueKind.String)
+                        aiAssistant.AIAssistantStatus = statusProp.GetString() ?? "notready";
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "aiAssistantAssetIds", out var assetIdsProp))
+                    {
+                        if (assetIdsProp.ValueKind == JsonValueKind.String)
+                            aiAssistant.AIAssistantAssetIds = assetIdsProp.GetString();
+                        else if (assetIdsProp.ValueKind == JsonValueKind.Array)
+                            aiAssistant.AIAssistantAssetIds = assetIdsProp.GetRawText();
+                    }
                     break;
 
                 case QuestionnaireMaterial questionnaire:

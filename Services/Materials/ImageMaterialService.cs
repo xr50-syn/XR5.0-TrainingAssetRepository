@@ -250,6 +250,12 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 return false;
             }
 
+            var orphanedRelationships = await context.SubcomponentMaterialRelationships
+                .Where(smr => smr.SubcomponentId == annotationId && smr.SubcomponentType == "ImageAnnotation")
+                .ToListAsync();
+            if (orphanedRelationships.Count > 0)
+                context.SubcomponentMaterialRelationships.RemoveRange(orphanedRelationships);
+
             context.ImageAnnotations.Remove(annotation);
             await context.SaveChangesAsync();
 

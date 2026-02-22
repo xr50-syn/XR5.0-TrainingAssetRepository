@@ -531,7 +531,7 @@ namespace XR50TrainingAssetRepo.Services
                 {
                     MaterialId = materialId,
                     MaterialName = material.Name,
-                    MaterialType = GetMaterialTypeString((int)material.Type),
+                    MaterialType = GetMaterialTypeString(material.Type),
                     AssignmentSuccessful = true,
                     AssignmentNote = "Successfully assigned",
                     RelationshipType = relationshipType,
@@ -548,7 +548,7 @@ namespace XR50TrainingAssetRepo.Services
                 {
                     MaterialId = materialId,
                     MaterialName = material.Name,
-                    MaterialType = GetMaterialTypeString((int)material.Type),
+                    MaterialType = GetMaterialTypeString(material.Type),
                     AssignmentSuccessful = false,
                     AssignmentNote = $"Assignment failed: {ex.Message}",
                     RelationshipType = relationshipType,
@@ -652,7 +652,7 @@ namespace XR50TrainingAssetRepo.Services
                 id = r.Material.id,
                 Name = r.Material.Name,
                 Description = r.Material.Description,
-                Type = GetMaterialTypeString((int)r.Material.Type),
+                Type = GetMaterialTypeString(r.Material.Type),
                 Unique_id = r.Material.Unique_id,
                 Created_at = r.Material.Created_at,
                 Updated_at = r.Material.Updated_at,
@@ -668,25 +668,10 @@ namespace XR50TrainingAssetRepo.Services
 
        
         /// Helper method to get material type string
-        
-        private string GetMaterialTypeString(int typeId)
+
+        private string GetMaterialTypeString(Models.Type materialType)
         {
-            // This should match the Type enum from Material.cs
-            return typeId switch
-            {
-                0 => "Image",
-                1 => "Video", 
-                2 => "PDF",
-                3 => "Unity",
-                4 => "Chatbot",
-                5 => "Questionnaire",
-                6 => "Checklist",
-                7 => "Workflow",
-                8 => "MQTT_Template",
-                9 => "Answers",
-                10 => "Default",
-                _ => "Unknown"
-            };
+            return Enum.GetName(materialType) ?? "Unknown";
         }
     }
 }
