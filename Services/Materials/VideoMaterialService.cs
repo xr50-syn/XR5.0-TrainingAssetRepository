@@ -67,31 +67,42 @@ namespace XR50TrainingAssetRepo.Services.Materials
         public async Task<VideoMaterial> CreateWithTimestampsAsync(VideoMaterial video, IEnumerable<VideoTimestamp>? timestamps = null)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            video.Created_at = DateTime.UtcNow;
-            video.Updated_at = DateTime.UtcNow;
-            video.Type = MaterialType.Video;
-
-            context.Materials.Add(video);
-            await context.SaveChangesAsync();
-
-            if (timestamps != null && timestamps.Any())
+            try
             {
-                foreach (var timestamp in timestamps)
-                {
-                    timestamp.id = 0; // Reset ID for new record
-                    timestamp.VideoMaterialId = video.id;
-                    context.Timestamps.Add(timestamp);
-                }
+                video.Created_at = DateTime.UtcNow;
+                video.Updated_at = DateTime.UtcNow;
+                video.Type = MaterialType.Video;
+
+                context.Materials.Add(video);
                 await context.SaveChangesAsync();
 
-                _logger.LogInformation("Added {TimestampCount} initial timestamps to video {VideoId}",
-                    timestamps.Count(), video.id);
+                if (timestamps != null && timestamps.Any())
+                {
+                    foreach (var timestamp in timestamps)
+                    {
+                        timestamp.id = 0; // Reset ID for new record
+                        timestamp.VideoMaterialId = video.id;
+                        context.Timestamps.Add(timestamp);
+                    }
+                    await context.SaveChangesAsync();
+
+                    _logger.LogInformation("Added {TimestampCount} initial timestamps to video {VideoId}",
+                        timestamps.Count(), video.id);
+                }
+
+                await transaction.CommitAsync();
+                _logger.LogInformation("Created video material: {Name} with ID: {Id}", video.Name, video.id);
+
+                return video;
             }
-
-            _logger.LogInformation("Created video material: {Name} with ID: {Id}", video.Name, video.id);
-
-            return video;
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Failed to create video material {Name} - Transaction rolled back", video.Name);
+                throw;
+            }
         }
 
         public async Task<VideoMaterial> UpdateAsync(VideoMaterial video)
@@ -163,7 +174,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 await transaction.CommitAsync();
                 _logger.LogInformation("Updated video material: {Id} ({Name})", video.id, video.Name);
 
-                return video;
+                return await GetWithTimestampsAsync(video.id) ?? video;
             }
             catch (Exception ex)
             {

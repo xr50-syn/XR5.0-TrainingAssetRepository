@@ -1139,7 +1139,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         private bool ShouldCreateAsset(JsonElement materialData, string materialType, IFormFile? assetFile, JsonElement? assetData)
         {
             // Only create assets for material types that support them
-            var assetSupportingTypes = new[] { "video", "image", "pdf", "unitydemo", "default" };
+            var assetSupportingTypes = new[] { "video", "image", "pdf", "unity", "unitydemo", "default" };
             
             if (!assetSupportingTypes.Contains(materialType.ToLower()))
             {
@@ -1905,7 +1905,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         {
             try
             {
-                _logger.LogInformation("🎥 Creating video material from JSON");
+                _logger.LogInformation("Creating video material from JSON");
                 
                 // Parse the video material properties
                 var video = new VideoMaterial();
@@ -2027,7 +2027,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     }
                 }
 
-                _logger.LogInformation("🎬 Parsed video: {Name} with {TimestampCount} timestamps, {RelatedCount} timestamps have related materials",
+                _logger.LogInformation("Parsed video: {Name} with {TimestampCount} timestamps, {RelatedCount} timestamps have related materials",
                     video.Name, timestamps.Count, timestampRelatedMaterials.Count);
 
                 // Use the service method directly instead of the controller method
@@ -2200,7 +2200,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         {
             try
             {
-                _logger.LogInformation("❓ Creating questionnaire material from JSON");
+                _logger.LogInformation("Creating questionnaire material from JSON");
                 
                 // Parse the questionnaire material properties
                 var questionnaire = new QuestionnaireMaterial();
@@ -2629,7 +2629,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         {
             try
             {
-                _logger.LogInformation("📄 Creating basic material from JSON");
+                _logger.LogInformation("Creating basic material from JSON");
                 
                 // Parse the basic material using the existing logic
                 var material = ParseMaterialFromJson(jsonElement);
@@ -3796,7 +3796,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         [HttpGet("videos")]
         public async Task<ActionResult<IEnumerable<VideoMaterial>>> GetVideoMaterials(string tenantName)
         {
-            _logger.LogInformation("🎥 Getting video materials for tenant: {TenantName}", tenantName);
+            _logger.LogInformation("Getting video materials for tenant: {TenantName}", tenantName);
 
             var videos = await _videoMaterialService.GetAllAsync();
 
@@ -3852,7 +3852,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         [HttpGet("pdfs")]
         public async Task<ActionResult<IEnumerable<PDFMaterial>>> GetPDFMaterials(string tenantName)
         {
-            _logger.LogInformation("📄 Getting PDF materials for tenant: {TenantName}", tenantName);
+            _logger.LogInformation("Getting PDF materials for tenant: {TenantName}", tenantName);
 
             var pdfs = await _simpleMaterialService.GetAllPDFAsync();
 
@@ -3866,7 +3866,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         [HttpGet("chatbots")]
         public async Task<ActionResult<IEnumerable<ChatbotMaterial>>> GetChatbotMaterials(string tenantName)
         {
-            _logger.LogInformation("🤖 Getting chatbot materials for tenant: {TenantName}", tenantName);
+            _logger.LogInformation("Getting chatbot materials for tenant: {TenantName}", tenantName);
 
             var chatbots = await _simpleMaterialService.GetAllChatbotAsync();
 
@@ -3880,7 +3880,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         [HttpGet("questionnaires")]
         public async Task<ActionResult<IEnumerable<QuestionnaireMaterial>>> GetQuestionnaireMaterials(string tenantName)
         {
-            _logger.LogInformation("❓ Getting questionnaire materials for tenant: {TenantName}", tenantName);
+            _logger.LogInformation("Getting questionnaire materials for tenant: {TenantName}", tenantName);
 
             var questionnaires = await _questionnaireMaterialService.GetAllAsync();
 
@@ -3894,7 +3894,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         [HttpGet("mqtt-templates")]
         public async Task<ActionResult<IEnumerable<MQTT_TemplateMaterial>>> GetMQTTTemplateMaterials(string tenantName)
         {
-            _logger.LogInformation("📡 Getting MQTT template materials for tenant: {TenantName}", tenantName);
+            _logger.LogInformation("Getting MQTT template materials for tenant: {TenantName}", tenantName);
 
             var templates = await _simpleMaterialService.GetAllMQTTAsync();
 
@@ -3908,7 +3908,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         [HttpGet("unity-demos")]
         public async Task<ActionResult<IEnumerable<UnityMaterial>>> GetUnityMaterials(string tenantName)
         {
-            _logger.LogInformation("🎮 Getting Unity demo materials for tenant: {TenantName}", tenantName);
+            _logger.LogInformation("Getting Unity demo materials for tenant: {TenantName}", tenantName);
 
             var unitys = await _simpleMaterialService.GetAllUnityAsync();
 
@@ -3950,7 +3950,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             string tenantName,
             [FromBody] CompleteVideoRequest request)
         {
-            _logger.LogInformation("🎥 Creating complete video {Name} with {TimestampCount} timestamps for tenant: {TenantName}",
+            _logger.LogInformation("Creating complete video {Name} with {TimestampCount} timestamps for tenant: {TenantName}",
                 request.Video.Name, request.Timestamps?.Count ?? 0, tenantName);
 
             try
@@ -4011,7 +4011,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         [HttpGet("videos/{id}/with-timestamps")]
         public async Task<ActionResult<VideoMaterial>> GetVideoWithTimestamps(string tenantName, int id)
         {
-            _logger.LogInformation("🎥 Getting video material {Id} with timestamps for tenant: {TenantName}",
+            _logger.LogInformation("Getting video material {Id} with timestamps for tenant: {TenantName}",
                 id, tenantName);
 
             var video = await _videoMaterialService.GetWithTimestampsAsync(id);
@@ -4161,7 +4161,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         [HttpPost("workflows/{workflowId}/steps")]
         public async Task<ActionResult<WorkflowMaterial>> AddStepToWorkflow(string tenantName, int workflowId, WorkflowStep step)
         {
-            _logger.LogInformation("➕ Adding step '{Title}' to workflow {WorkflowId} for tenant: {TenantName}",
+            _logger.LogInformation("Adding step '{Title}' to workflow {WorkflowId} for tenant: {TenantName}",
                 step.Title, workflowId, tenantName);
 
             try
@@ -4743,7 +4743,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     // (the original material may not have the navigation property populated after save)
                     _logger.LogInformation("Processing ImageMaterial {Id} - checking for annotations", image.id);
                     var freshImage = await _imageMaterialService.GetWithAnnotationsAsync(image.id);
-                    _logger.LogInformation("🖼️ Fresh image has {Count} annotations", freshImage?.ImageAnnotations?.Count ?? 0);
+                    _logger.LogInformation("Fresh image has {Count} annotations", freshImage?.ImageAnnotations?.Count ?? 0);
                     if (freshImage?.ImageAnnotations?.Any() == true)
                     {
                         await ProcessImageAnnotationRelatedMaterialsAsync(jsonElement, freshImage.ImageAnnotations.ToList());
@@ -4943,7 +4943,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         /// </summary>
         private async Task ProcessImageAnnotationRelatedMaterialsAsync(JsonElement jsonElement, List<ImageAnnotation> savedAnnotations)
         {
-            _logger.LogInformation("🖼️ ProcessImageAnnotationRelatedMaterialsAsync called with {Count} saved annotations", savedAnnotations.Count);
+            _logger.LogInformation("ProcessImageAnnotationRelatedMaterialsAsync called with {Count} saved annotations", savedAnnotations.Count);
 
             // Find annotations in JSON
             JsonElement? annotationsElement = null;
@@ -4951,20 +4951,20 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             if (TryGetPropertyCaseInsensitive(jsonElement, "annotations", out var rootAnnotations) &&
                 rootAnnotations.ValueKind == JsonValueKind.Array)
             {
-                _logger.LogInformation("🖼️ Found annotations at root level");
+                _logger.LogInformation("Found annotations at root level");
                 annotationsElement = rootAnnotations;
             }
             else if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var configElement) &&
                      TryGetPropertyCaseInsensitive(configElement, "annotations", out var configAnnotations) &&
                      configAnnotations.ValueKind == JsonValueKind.Array)
             {
-                _logger.LogInformation("🖼️ Found annotations in config object");
+                _logger.LogInformation("Found annotations in config object");
                 annotationsElement = configAnnotations;
             }
 
             if (!annotationsElement.HasValue)
             {
-                _logger.LogWarning("🖼️ No annotations element found in JSON");
+                _logger.LogWarning("No annotations element found in JSON");
                 return;
             }
 
@@ -4974,7 +4974,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             foreach (var annotationElement in annotationsElement.Value.EnumerateArray())
             {
                 var relatedIds = ParseRelatedMaterialIds(annotationElement);
-                _logger.LogInformation("🖼️ Annotation {Index}: found {Count} related material IDs: [{Ids}]",
+                _logger.LogInformation("Annotation {Index}: found {Count} related material IDs: [{Ids}]",
                     annotationIndex, relatedIds.Count, string.Join(", ", relatedIds));
 
                 if (relatedIds.Any())
@@ -4986,26 +4986,26 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     {
                         clientId = clientIdProp.GetString();
                     }
-                    _logger.LogInformation("🖼️ Looking for annotation with ClientId: {ClientId}", clientId);
+                    _logger.LogInformation("Looking for annotation with ClientId: {ClientId}", clientId);
 
                     // Find matching saved annotation
                     ImageAnnotation? matchedAnnotation = null;
                     if (!string.IsNullOrEmpty(clientId))
                     {
                         matchedAnnotation = savedAnnotations.FirstOrDefault(a => a.ClientId == clientId);
-                        _logger.LogInformation("🖼️ ClientId match result: {Found}", matchedAnnotation != null);
+                        _logger.LogInformation("ClientId match result: {Found}", matchedAnnotation != null);
                     }
 
                     // Fall back to index matching
                     if (matchedAnnotation == null && annotationIndex < savedAnnotations.Count)
                     {
                         matchedAnnotation = savedAnnotations[annotationIndex];
-                        _logger.LogInformation("🖼️ Using index fallback, matched annotation {Id}", matchedAnnotation?.ImageAnnotationId);
+                        _logger.LogInformation("Using index fallback, matched annotation {Id}", matchedAnnotation?.ImageAnnotationId);
                     }
 
                     if (matchedAnnotation != null)
                     {
-                        _logger.LogInformation("🖼️ Matched annotation: Id={Id}, ClientId={ClientId}",
+                        _logger.LogInformation("Matched annotation: Id={Id}, ClientId={ClientId}",
                             matchedAnnotation.ImageAnnotationId, matchedAnnotation.ClientId);
 
                         int displayOrder = 1;

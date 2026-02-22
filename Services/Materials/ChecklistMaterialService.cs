@@ -67,31 +67,42 @@ namespace XR50TrainingAssetRepo.Services.Materials
         public async Task<ChecklistMaterial> CreateWithEntriesAsync(ChecklistMaterial checklist, IEnumerable<ChecklistEntry>? entries = null)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            checklist.Created_at = DateTime.UtcNow;
-            checklist.Updated_at = DateTime.UtcNow;
-            checklist.Type = MaterialType.Checklist;
-
-            context.Materials.Add(checklist);
-            await context.SaveChangesAsync();
-
-            if (entries != null && entries.Any())
+            try
             {
-                foreach (var entry in entries)
-                {
-                    entry.ChecklistEntryId = 0; // Reset ID for new record
-                    entry.ChecklistMaterialId = checklist.id;
-                    context.Entries.Add(entry);
-                }
+                checklist.Created_at = DateTime.UtcNow;
+                checklist.Updated_at = DateTime.UtcNow;
+                checklist.Type = MaterialType.Checklist;
+
+                context.Materials.Add(checklist);
                 await context.SaveChangesAsync();
 
-                _logger.LogInformation("Added {EntryCount} initial entries to checklist {ChecklistId}",
-                    entries.Count(), checklist.id);
+                if (entries != null && entries.Any())
+                {
+                    foreach (var entry in entries)
+                    {
+                        entry.ChecklistEntryId = 0; // Reset ID for new record
+                        entry.ChecklistMaterialId = checklist.id;
+                        context.Entries.Add(entry);
+                    }
+                    await context.SaveChangesAsync();
+
+                    _logger.LogInformation("Added {EntryCount} initial entries to checklist {ChecklistId}",
+                        entries.Count(), checklist.id);
+                }
+
+                await transaction.CommitAsync();
+                _logger.LogInformation("Created checklist material: {Name} with ID: {Id}", checklist.Name, checklist.id);
+
+                return checklist;
             }
-
-            _logger.LogInformation("Created checklist material: {Name} with ID: {Id}", checklist.Name, checklist.id);
-
-            return checklist;
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Failed to create checklist material {Name} - Transaction rolled back", checklist.Name);
+                throw;
+            }
         }
 
         public async Task<ChecklistMaterial> UpdateAsync(ChecklistMaterial checklist)
@@ -152,7 +163,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 await transaction.CommitAsync();
                 _logger.LogInformation("Updated checklist material: {Id} ({Name})", checklist.id, checklist.Name);
 
-                return checklist;
+                return await GetWithEntriesAsync(checklist.id) ?? checklist;
             }
             catch (Exception ex)
             {

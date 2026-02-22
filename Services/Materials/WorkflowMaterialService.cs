@@ -67,31 +67,42 @@ namespace XR50TrainingAssetRepo.Services.Materials
         public async Task<WorkflowMaterial> CreateWithStepsAsync(WorkflowMaterial workflow, IEnumerable<WorkflowStep>? steps = null)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            workflow.Created_at = DateTime.UtcNow;
-            workflow.Updated_at = DateTime.UtcNow;
-            workflow.Type = MaterialType.Workflow;
-
-            context.Materials.Add(workflow);
-            await context.SaveChangesAsync();
-
-            if (steps != null && steps.Any())
+            try
             {
-                foreach (var step in steps)
-                {
-                    step.Id = 0; // Reset ID for new record
-                    step.WorkflowMaterialId = workflow.id;
-                    context.WorkflowSteps.Add(step);
-                }
+                workflow.Created_at = DateTime.UtcNow;
+                workflow.Updated_at = DateTime.UtcNow;
+                workflow.Type = MaterialType.Workflow;
+
+                context.Materials.Add(workflow);
                 await context.SaveChangesAsync();
 
-                _logger.LogInformation("Added {StepCount} initial steps to workflow {WorkflowId}",
-                    steps.Count(), workflow.id);
+                if (steps != null && steps.Any())
+                {
+                    foreach (var step in steps)
+                    {
+                        step.Id = 0; // Reset ID for new record
+                        step.WorkflowMaterialId = workflow.id;
+                        context.WorkflowSteps.Add(step);
+                    }
+                    await context.SaveChangesAsync();
+
+                    _logger.LogInformation("Added {StepCount} initial steps to workflow {WorkflowId}",
+                        steps.Count(), workflow.id);
+                }
+
+                await transaction.CommitAsync();
+                _logger.LogInformation("Created workflow material: {Name} with ID: {Id}", workflow.Name, workflow.id);
+
+                return workflow;
             }
-
-            _logger.LogInformation("Created workflow material: {Name} with ID: {Id}", workflow.Name, workflow.id);
-
-            return workflow;
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Failed to create workflow material {Name} - Transaction rolled back", workflow.Name);
+                throw;
+            }
         }
 
         public async Task<WorkflowMaterial> UpdateAsync(WorkflowMaterial workflow)
@@ -152,7 +163,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 await transaction.CommitAsync();
                 _logger.LogInformation("Updated workflow material: {Id} ({Name})", workflow.id, workflow.Name);
 
-                return workflow;
+                return await GetWithStepsAsync(workflow.id) ?? workflow;
             }
             catch (Exception ex)
             {

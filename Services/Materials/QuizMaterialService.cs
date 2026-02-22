@@ -68,48 +68,59 @@ namespace XR50TrainingAssetRepo.Services.Materials
         public async Task<QuizMaterial> CreateWithQuestionsAsync(QuizMaterial quiz, IEnumerable<QuizQuestion>? questions = null)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            quiz.Created_at = DateTime.UtcNow;
-            quiz.Updated_at = DateTime.UtcNow;
-            quiz.Type = MaterialType.Quiz;
-
-            context.Materials.Add(quiz);
-            await context.SaveChangesAsync();
-
-            if (questions != null && questions.Any())
+            try
             {
-                foreach (var question in questions)
+                quiz.Created_at = DateTime.UtcNow;
+                quiz.Updated_at = DateTime.UtcNow;
+                quiz.Type = MaterialType.Quiz;
+
+                context.Materials.Add(quiz);
+                await context.SaveChangesAsync();
+
+                if (questions != null && questions.Any())
                 {
-                    question.QuizQuestionId = 0; // Reset ID for new record
-                    question.QuizMaterialId = quiz.id;
-
-                    // Temporarily store answers
-                    var answers = question.Answers?.ToList();
-                    question.Answers = new List<QuizAnswer>();
-
-                    context.QuizQuestions.Add(question);
-                    await context.SaveChangesAsync();
-
-                    // Add answers if present
-                    if (answers != null && answers.Any())
+                    foreach (var question in questions)
                     {
-                        foreach (var answer in answers)
-                        {
-                            answer.QuizAnswerId = 0;
-                            answer.QuizQuestionId = question.QuizQuestionId;
-                            context.QuizAnswers.Add(answer);
-                        }
+                        question.QuizQuestionId = 0; // Reset ID for new record
+                        question.QuizMaterialId = quiz.id;
+
+                        // Temporarily store answers
+                        var answers = question.Answers?.ToList();
+                        question.Answers = new List<QuizAnswer>();
+
+                        context.QuizQuestions.Add(question);
                         await context.SaveChangesAsync();
+
+                        // Add answers if present
+                        if (answers != null && answers.Any())
+                        {
+                            foreach (var answer in answers)
+                            {
+                                answer.QuizAnswerId = 0;
+                                answer.QuizQuestionId = question.QuizQuestionId;
+                                context.QuizAnswers.Add(answer);
+                            }
+                            await context.SaveChangesAsync();
+                        }
                     }
+
+                    _logger.LogInformation("Added {QuestionCount} initial questions to quiz {QuizId}",
+                        questions.Count(), quiz.id);
                 }
 
-                _logger.LogInformation("Added {QuestionCount} initial questions to quiz {QuizId}",
-                    questions.Count(), quiz.id);
+                await transaction.CommitAsync();
+                _logger.LogInformation("Created quiz material: {Name} with ID: {Id}", quiz.Name, quiz.id);
+
+                return quiz;
             }
-
-            _logger.LogInformation("Created quiz material: {Name} with ID: {Id}", quiz.Name, quiz.id);
-
-            return quiz;
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Failed to create quiz material {Name} - Transaction rolled back", quiz.Name);
+                throw;
+            }
         }
 
         public async Task<QuizMaterial> UpdateAsync(QuizMaterial quiz)
@@ -199,7 +210,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 await transaction.CommitAsync();
                 _logger.LogInformation("Updated quiz material: {Id} ({Name})", quiz.id, quiz.Name);
 
-                return quiz;
+                return await GetWithQuestionsAsync(quiz.id) ?? quiz;
             }
             catch (Exception ex)
             {

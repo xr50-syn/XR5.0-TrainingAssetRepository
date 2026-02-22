@@ -48,7 +48,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
             return relationship;
         }
 
-        public async Task<bool> DeleteRelationshipAsync(string relationshipId)
+        public async Task<bool> DeleteRelationshipAsync(int relationshipId)
         {
             using var context = _dbContextFactory.CreateDbContext();
 
@@ -321,8 +321,8 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 if (childMaterial == null)
                     throw new ArgumentException($"Child material with ID {childMaterialId} not found");
 
-                // Check for circular reference
-                if (await WouldCreateCircularReferenceAsync(parentMaterialId, childMaterialId))
+                // Check for circular reference using the same context to see uncommitted changes
+                if (await CheckCircularReference(context, childMaterialId, parentMaterialId, new HashSet<int>()))
                     throw new InvalidOperationException("Assignment would create a circular reference");
 
                 // Check if relationship already exists

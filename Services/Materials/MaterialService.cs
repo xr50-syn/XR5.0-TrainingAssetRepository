@@ -124,7 +124,8 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 "workflow" => ParseWorkflowFromJson(materialData, TryGetPropertyCI),
                 "checklist" => ParseChecklistFromJson(materialData, TryGetPropertyCI),
                 "video" => ParseVideoFromJson(materialData, TryGetPropertyCI),
-                "questionnaire" or "quiz" => ParseQuestionnaireFromJson(materialData, TryGetPropertyCI),
+                "questionnaire" => ParseQuestionnaireFromJson(materialData, TryGetPropertyCI),
+                "quiz" => ParseQuizFromJson(materialData, TryGetPropertyCI),
                 "image" => ParseImageFromJson(materialData, TryGetPropertyCI),
                 "pdf" => ParsePDFFromJson(materialData, TryGetPropertyCI),
                 "unity" or "unitydemo" => ParseUnityFromJson(materialData, TryGetPropertyCI),
@@ -218,6 +219,56 @@ namespace XR50TrainingAssetRepo.Services.Materials
             }
 
             return questionnaire;
+        }
+
+        private Material ParseQuizFromJson(JsonElement json, TryGetPropertyDelegate tryGet)
+        {
+            var quiz = new QuizMaterial();
+            SetCommonPropertiesFromJson(quiz, json, tryGet);
+
+            if (tryGet(json, "evaluationMode", out var evalMode))
+                quiz.EvaluationMode = evalMode.GetBoolean();
+            if (tryGet(json, "minScore", out var minScore))
+                quiz.MinScore = minScore.GetInt32();
+
+            if (tryGet(json, "questions", out var questionsProp) && questionsProp.ValueKind == JsonValueKind.Array)
+            {
+                quiz.Questions = new List<QuizQuestion>();
+                int questionNumber = 1;
+                foreach (var q in questionsProp.EnumerateArray())
+                {
+                    var question = new QuizQuestion
+                    {
+                        QuestionNumber = questionNumber++,
+                        Text = tryGet(q, "text", out var text) ? text.GetString() ?? "" :
+                               (tryGet(q, "question", out var questionText) ? questionText.GetString() ?? "" : ""),
+                        Description = tryGet(q, "description", out var desc) ? desc.GetString() : null,
+                        QuestionType = tryGet(q, "questionType", out var qType) ? qType.GetString() ?? "text" : "text",
+                        AllowMultiple = tryGet(q, "allowMultiple", out var allowMultiple) && allowMultiple.GetBoolean(),
+                        ScaleConfig = tryGet(q, "scaleConfig", out var scaleConfig) ? scaleConfig.GetRawText() : null
+                    };
+
+                    if (tryGet(q, "answers", out var answersProp) && answersProp.ValueKind == JsonValueKind.Array)
+                    {
+                        question.Answers = new List<QuizAnswer>();
+                        int displayOrder = 1;
+                        foreach (var a in answersProp.EnumerateArray())
+                        {
+                            question.Answers.Add(new QuizAnswer
+                            {
+                                Text = tryGet(a, "text", out var ansText) ? ansText.GetString() ?? "" : "",
+                                CorrectAnswer = tryGet(a, "correctAnswer", out var correct) && correct.GetBoolean(),
+                                DisplayOrder = displayOrder++,
+                                Extra = tryGet(a, "extra", out var extra) ? extra.GetString() : null
+                            });
+                        }
+                    }
+
+                    quiz.Questions.Add(question);
+                }
+            }
+
+            return quiz;
         }
 
         private Material ParseImageFromJson(JsonElement json, TryGetPropertyDelegate tryGet)
@@ -406,8 +457,9 @@ namespace XR50TrainingAssetRepo.Services.Materials
         {
             using var context = _dbContextFactory.CreateDbContext();
 
-            var materials = await context.Materials.ToListAsync();
-            return materials.Where(m => m.GetType() == materialType);
+            return await context.Materials
+                .Where(m => m.GetType() == materialType)
+                .ToListAsync();
         }
 
         #endregion
@@ -515,6 +567,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 QuestionnaireMaterial => MaterialType.Questionnaire,
                 MQTT_TemplateMaterial => MaterialType.MQTT_Template,
                 QuizMaterial => MaterialType.Quiz,
+                AIAssistantMaterial => MaterialType.AIAssistant,
                 DefaultMaterial => MaterialType.Default,
                 _ => MaterialType.Default
             };

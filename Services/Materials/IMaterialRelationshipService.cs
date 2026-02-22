@@ -12,7 +12,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
         #region Base Relationship Operations
 
         Task<MaterialRelationship> CreateRelationshipAsync(MaterialRelationship relationship);
-        Task<bool> DeleteRelationshipAsync(string relationshipId);
+        Task<bool> DeleteRelationshipAsync(int relationshipId);
         Task<IEnumerable<MaterialRelationship>> GetMaterialRelationshipsAsync(int materialId);
         Task<IEnumerable<MaterialRelationship>> GetRelationshipsByTypeAsync(int materialId, string relatedEntityType);
 

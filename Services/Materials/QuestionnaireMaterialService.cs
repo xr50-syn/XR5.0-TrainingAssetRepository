@@ -67,31 +67,42 @@ namespace XR50TrainingAssetRepo.Services.Materials
         public async Task<QuestionnaireMaterial> CreateWithEntriesAsync(QuestionnaireMaterial questionnaire, IEnumerable<QuestionnaireEntry>? entries = null)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            questionnaire.Created_at = DateTime.UtcNow;
-            questionnaire.Updated_at = DateTime.UtcNow;
-            questionnaire.Type = MaterialType.Questionnaire;
-
-            context.Materials.Add(questionnaire);
-            await context.SaveChangesAsync();
-
-            if (entries != null && entries.Any())
+            try
             {
-                foreach (var entry in entries)
-                {
-                    entry.QuestionnaireEntryId = 0;
-                    entry.QuestionnaireMaterialId = questionnaire.id;
-                    context.QuestionnaireEntries.Add(entry);
-                }
+                questionnaire.Created_at = DateTime.UtcNow;
+                questionnaire.Updated_at = DateTime.UtcNow;
+                questionnaire.Type = MaterialType.Questionnaire;
+
+                context.Materials.Add(questionnaire);
                 await context.SaveChangesAsync();
 
-                _logger.LogInformation("Added {EntryCount} initial entries to questionnaire {QuestionnaireId}",
-                    entries.Count(), questionnaire.id);
+                if (entries != null && entries.Any())
+                {
+                    foreach (var entry in entries)
+                    {
+                        entry.QuestionnaireEntryId = 0;
+                        entry.QuestionnaireMaterialId = questionnaire.id;
+                        context.QuestionnaireEntries.Add(entry);
+                    }
+                    await context.SaveChangesAsync();
+
+                    _logger.LogInformation("Added {EntryCount} initial entries to questionnaire {QuestionnaireId}",
+                        entries.Count(), questionnaire.id);
+                }
+
+                await transaction.CommitAsync();
+                _logger.LogInformation("Created questionnaire material: {Name} with ID: {Id}", questionnaire.Name, questionnaire.id);
+
+                return questionnaire;
             }
-
-            _logger.LogInformation("Created questionnaire material: {Name} with ID: {Id}", questionnaire.Name, questionnaire.id);
-
-            return questionnaire;
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Failed to create questionnaire material {Name} - Transaction rolled back", questionnaire.Name);
+                throw;
+            }
         }
 
         public async Task<QuestionnaireMaterial> UpdateAsync(QuestionnaireMaterial questionnaire)
@@ -149,7 +160,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 await transaction.CommitAsync();
                 _logger.LogInformation("Updated questionnaire material: {Id} ({Name})", questionnaire.id, questionnaire.Name);
 
-                return questionnaire;
+                return await GetWithEntriesAsync(questionnaire.id) ?? questionnaire;
             }
             catch (Exception ex)
             {

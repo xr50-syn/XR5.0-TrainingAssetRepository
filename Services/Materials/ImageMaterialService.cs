@@ -67,31 +67,42 @@ namespace XR50TrainingAssetRepo.Services.Materials
         public async Task<ImageMaterial> CreateWithAnnotationsAsync(ImageMaterial image, IEnumerable<ImageAnnotation>? annotations = null)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            using var transaction = await context.Database.BeginTransactionAsync();
 
-            image.Created_at = DateTime.UtcNow;
-            image.Updated_at = DateTime.UtcNow;
-            image.Type = MaterialType.Image;
-
-            context.Materials.Add(image);
-            await context.SaveChangesAsync();
-
-            if (annotations != null && annotations.Any())
+            try
             {
-                foreach (var annotation in annotations)
-                {
-                    annotation.ImageAnnotationId = 0;
-                    annotation.ImageMaterialId = image.id;
-                    context.ImageAnnotations.Add(annotation);
-                }
+                image.Created_at = DateTime.UtcNow;
+                image.Updated_at = DateTime.UtcNow;
+                image.Type = MaterialType.Image;
+
+                context.Materials.Add(image);
                 await context.SaveChangesAsync();
 
-                _logger.LogInformation("Added {AnnotationCount} initial annotations to image {ImageId}",
-                    annotations.Count(), image.id);
+                if (annotations != null && annotations.Any())
+                {
+                    foreach (var annotation in annotations)
+                    {
+                        annotation.ImageAnnotationId = 0;
+                        annotation.ImageMaterialId = image.id;
+                        context.ImageAnnotations.Add(annotation);
+                    }
+                    await context.SaveChangesAsync();
+
+                    _logger.LogInformation("Added {AnnotationCount} initial annotations to image {ImageId}",
+                        annotations.Count(), image.id);
+                }
+
+                await transaction.CommitAsync();
+                _logger.LogInformation("Created image material: {Name} with ID: {Id}", image.Name, image.id);
+
+                return image;
             }
-
-            _logger.LogInformation("Created image material: {Name} with ID: {Id}", image.Name, image.id);
-
-            return image;
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Failed to create image material {Name} - Transaction rolled back", image.Name);
+                throw;
+            }
         }
 
         public async Task<ImageMaterial> UpdateAsync(ImageMaterial image)
@@ -158,7 +169,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 await transaction.CommitAsync();
                 _logger.LogInformation("Updated image material: {Id} ({Name})", image.id, image.Name);
 
-                return image;
+                return await GetWithAnnotationsAsync(image.id) ?? image;
             }
             catch (Exception ex)
             {
