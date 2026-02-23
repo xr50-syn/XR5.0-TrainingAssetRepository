@@ -49,6 +49,7 @@ services:
   training-repo:
     container_name: training-repo
     image: training-repo-image
+    pull_policy: never
     depends_on:
       mariadb:
         condition: service_healthy
