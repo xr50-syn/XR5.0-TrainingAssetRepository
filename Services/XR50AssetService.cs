@@ -993,11 +993,19 @@ namespace XR50TrainingAssetRepo.Services
             {
                 var jobId = await _chatbotApiService.SubmitDocumentAsync(assetId, asset.URL, asset.Filetype ?? "pdf");
                 asset.JobId = jobId;
-                asset.AiAvailable = "process";
+
+                if (jobId.StartsWith("duplicate-accepted-"))
+                {
+                    asset.AiAvailable = "ready";
+                    _logger.LogInformation("Asset {AssetId} already exists in AI service, marked as ready", assetId);
+                }
+                else
+                {
+                    asset.AiAvailable = "process";
+                    _logger.LogInformation("Submitted asset {AssetId} for AI processing. Job ID: {JobId}", assetId, jobId);
+                }
 
                 await context.SaveChangesAsync();
-
-                _logger.LogInformation("Submitted asset {AssetId} for AI processing. Job ID: {JobId}", assetId, jobId);
 
                 return asset;
             }

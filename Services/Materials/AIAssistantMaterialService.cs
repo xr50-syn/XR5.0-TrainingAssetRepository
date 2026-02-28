@@ -313,11 +313,21 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     {
                         var jobId = await _chatbotApiService.SubmitDocumentAsync(asset.Id, asset.URL, asset.Filetype ?? "pdf");
                         asset.JobId = jobId;
-                        asset.AiAvailable = "process";
-                        successCount++;
 
-                        _logger.LogInformation("Submitted asset {AssetId} for processing. Job ID: {JobId}",
-                            asset.Id, jobId);
+                        if (jobId.StartsWith("duplicate-accepted-"))
+                        {
+                            asset.AiAvailable = "ready";
+                            _logger.LogInformation("Asset {AssetId} already exists in AI service, marked as ready",
+                                asset.Id);
+                        }
+                        else
+                        {
+                            asset.AiAvailable = "process";
+                            _logger.LogInformation("Submitted asset {AssetId} for processing. Job ID: {JobId}",
+                                asset.Id, jobId);
+                        }
+
+                        successCount++;
                     }
                     catch (ChatbotApiException ex)
                     {

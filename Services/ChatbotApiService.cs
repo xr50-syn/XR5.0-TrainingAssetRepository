@@ -67,6 +67,20 @@ namespace XR50TrainingAssetRepo.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorContent = await response.Content.ReadAsStringAsync();
+
+                    // Workaround: the external AI service rejects documents whose filename
+                    // already exists in the collection, even if the content differs.
+                    // Treat this as success until the upstream API supports PUT/update.
+                    if (response.StatusCode == System.Net.HttpStatusCode.BadRequest
+                        && errorContent.Contains("already exists in collection"))
+                    {
+                        _logger.LogWarning(
+                            "Asset {AssetId} filename already exists in the AI service collection. Treating as success (upstream workaround)",
+                            assetId);
+
+                        return $"duplicate-accepted-{assetId}";
+                    }
+
                     _logger.LogError("Chatbot API submission failed for asset {AssetId}: {StatusCode} - {Error}",
                         assetId, response.StatusCode, errorContent);
                     throw new ChatbotApiException($"Failed to submit document: {response.StatusCode} - {errorContent}");
