@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authentication.Certificate;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -22,6 +24,7 @@ using Microsoft.AspNetCore.Http.Json;
 using Amazon;
 using Amazon.S3;
 using Amazon.S3.Model;
+using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,9 +41,25 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(System.Text.Json.JsonNamingPolicy.CamelCase));
         options.JsonSerializerOptions.Converters.Add(new NullableIntToStringConverter());
         options.JsonSerializerOptions.Converters.Add(new IntToStringConverter());
+    })
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var problemDetails = ApiProblemDetailsFactory.CreateValidationProblemDetails(
+                context.HttpContext,
+                context.ModelState);
+
+            return new BadRequestObjectResult(problemDetails)
+            {
+                ContentTypes = { "application/problem+json" }
+            };
+        };
     });
 
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 
 // Configure JWT Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -434,6 +453,22 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+app.UseExceptionHandler();
+app.UseStatusCodePages(async statusCodeContext =>
+{
+    var httpContext = statusCodeContext.HttpContext;
+    var problemDetailsService = httpContext.RequestServices.GetRequiredService<IProblemDetailsService>();
+
+    var problemDetails = ApiProblemDetailsFactory.CreateStatusCodeProblemDetails(
+        httpContext,
+        httpContext.Response.StatusCode);
+
+    await problemDetailsService.WriteAsync(new ProblemDetailsContext
+    {
+        HttpContext = httpContext,
+        ProblemDetails = problemDetails
+    });
+});
 app.UseCors();
 app.UseHttpsRedirection();
 app.UseRouting();

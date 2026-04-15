@@ -8,6 +8,7 @@ using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Services;
+using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
@@ -62,7 +63,7 @@ namespace XR50TrainingAssetRepo.Controllers
             if (asset == null)
             {
                 _logger.LogWarning("Asset {Id} not found in tenant: {TenantName}", id, tenantName);
-                return NotFound();
+                return this.ProblemNotFound($"Asset {id} was not found.");
             }
 
             return asset;
@@ -126,7 +127,7 @@ namespace XR50TrainingAssetRepo.Controllers
         {
             if (id != asset.Id)
             {
-                return BadRequest("ID mismatch");
+                return this.ProblemBadRequest("ID mismatch.");
             }
 
             _logger.LogInformation("Updating asset {Id} for tenant: {TenantName}", id, tenantName);
@@ -140,7 +141,7 @@ namespace XR50TrainingAssetRepo.Controllers
             {
                 if (!await _assetService.AssetExistsAsync(id))
                 {
-                    return NotFound();
+                    return this.ProblemNotFound($"Asset {id} was not found.");
                 }
                 else
                 {
@@ -161,7 +162,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
             if (!deleted)
             {
-                return BadRequest("Asset not found or is being used by materials");
+                return this.ProblemBadRequest("Asset was not found or is being used by materials.");
             }
 
             _logger.LogInformation("Deleted asset {Id} for tenant: {TenantName}", id, tenantName);
@@ -257,7 +258,7 @@ namespace XR50TrainingAssetRepo.Controllers
             }
             catch (ArgumentException ex)
             {
-                return NotFound(ex.Message);
+                return this.ProblemNotFound(ex.Message);
             }
         }
 
@@ -271,7 +272,7 @@ namespace XR50TrainingAssetRepo.Controllers
         {
             _logger.LogWarning("Upload endpoint disabled. Use POST /api/{tenantName}/assets instead.");
             return Task.FromResult<ActionResult<CreateAssetResponse>>(
-                StatusCode(StatusCodes.Status410Gone, new { Error = "Endpoint disabled. Use POST /api/{tenantName}/assets instead." }));
+                this.ProblemGone("Endpoint disabled. Use POST /api/{tenantName}/assets instead."));
         }
 
         // POST: api/{tenantName}/assets/{id}/upload
@@ -286,7 +287,7 @@ namespace XR50TrainingAssetRepo.Controllers
         {
             if (file == null || file.Length == 0)
             {
-                return BadRequest("No file provided");
+                return this.ProblemBadRequest("No file provided.");
             }
 
             _logger.LogInformation("Upload file to existing asset {Id} for tenant: {TenantName}", id, tenantName);
@@ -311,16 +312,16 @@ namespace XR50TrainingAssetRepo.Controllers
             }
             catch (KeyNotFoundException ex)
             {
-                return NotFound(new { Error = ex.Message });
+                return this.ProblemNotFound(ex.Message);
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new { Error = ex.Message });
+                return this.ProblemBadRequest(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to upload file for asset {Id} in tenant: {TenantName}", id, tenantName);
-                return StatusCode(500, "Upload failed: " + ex.Message);
+                return this.ProblemServerError("Upload failed.");
             }
         }
 
@@ -333,7 +334,7 @@ namespace XR50TrainingAssetRepo.Controllers
             var asset = await _assetService.GetAssetAsync(id);
             if (asset == null)
             {
-                return NotFound();
+                return this.ProblemNotFound($"Asset {id} was not found.");
             }
 
             var fileSize = await _assetService.GetAssetFileSizeAsync(id);
@@ -422,17 +423,17 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (ArgumentException ex)
             {
                 _logger.LogWarning("Invalid request for creating share: {Error}", ex.Message);
-                return BadRequest(new { Error = ex.Message });
+                return this.ProblemBadRequest(ex.Message);
             }
             catch (InvalidOperationException ex)
             {
                 _logger.LogWarning("Invalid operation for creating share: {Error}", ex.Message);
-                return BadRequest(new { Error = ex.Message });
+                return this.ProblemBadRequest(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating share for asset {AssetId}", assetId);
-                return StatusCode(500, new { Error = "Failed to create share", Details = ex.Message });
+                return this.ProblemServerError("Failed to create share.");
             }
         }
         /// Get all shares for an asset
@@ -453,7 +454,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting shares for asset {AssetId}", assetId);
-                return StatusCode(500, new { Error = "Failed to get shares", Details = ex.Message });
+                return this.ProblemServerError("Failed to get shares.");
             }
         }
 
@@ -476,7 +477,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting shares for tenant {TenantName}", tenantName);
-                return StatusCode(500, new { Error = "Failed to get shares", Details = ex.Message });
+                return this.ProblemServerError("Failed to get shares.");
             }
         }
 
@@ -496,7 +497,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 if (share == null)
                 {
                     _logger.LogWarning("Share {ShareId} not found in tenant {TenantName}", shareId, tenantName);
-                    return NotFound(new { Error = $"Share '{shareId}' not found" });
+                    return this.ProblemNotFound($"Share '{shareId}' was not found.");
                 }
 
                 return Ok(share);
@@ -504,7 +505,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting share {ShareId}", shareId);
-                return StatusCode(500, new { Error = "Failed to get share", Details = ex.Message });
+                return this.ProblemServerError("Failed to get share.");
             }
         }
 
@@ -523,7 +524,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 if (!deleted)
                 {
                     _logger.LogWarning("Share {ShareId} not found in tenant {TenantName}", shareId, tenantName);
-                    return NotFound(new { Error = $"Share '{shareId}' not found" });
+                    return this.ProblemNotFound($"Share '{shareId}' was not found.");
                 }
 
                 _logger.LogInformation("Successfully deleted share {ShareId}", shareId);
@@ -532,7 +533,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error deleting share {ShareId}", shareId);
-                return StatusCode(500, new { Error = "Failed to delete share", Details = ex.Message });
+                return this.ProblemServerError("Failed to delete share.");
             }
         }
 
@@ -557,7 +558,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting share URL for asset {AssetId}", assetId);
-                return StatusCode(500, new { Error = "Failed to get share URL", Details = ex.Message });
+                return this.ProblemServerError("Failed to get share URL.");
             }
         }
 
@@ -586,21 +587,21 @@ namespace XR50TrainingAssetRepo.Controllers
             }
             catch (KeyNotFoundException)
             {
-                return NotFound(new { Error = $"Asset {id} not found" });
+                return this.ProblemNotFound($"Asset {id} was not found.");
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new { Error = ex.Message });
+                return this.ProblemBadRequest(ex.Message);
             }
             catch (ChatbotApiException ex)
             {
                 _logger.LogError(ex, "Chatbot API error submitting asset {AssetId}", id);
-                return StatusCode(502, new { Error = "Failed to communicate with AI service", Details = ex.Message });
+                return this.ProblemBadGateway("Failed to communicate with AI service.");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error submitting asset {AssetId} for AI processing", id);
-                return StatusCode(500, new { Error = "Failed to submit asset for AI processing", Details = ex.Message });
+                return this.ProblemServerError("Failed to submit asset for AI processing.");
             }
         }
 
@@ -614,7 +615,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
             if (status != "ready" && status != "process" && status != "notready")
             {
-                return BadRequest(new { Error = "Invalid status. Must be 'ready', 'process', or 'notready'" });
+                return this.ProblemBadRequest("Invalid status. Must be 'ready', 'process', or 'notready'.");
             }
 
             try
@@ -625,7 +626,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting assets by AI status");
-                return StatusCode(500, new { Error = "Failed to get assets", Details = ex.Message });
+                return this.ProblemServerError("Failed to get assets.");
             }
         }
 
@@ -645,7 +646,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting pending assets");
-                return StatusCode(500, new { Error = "Failed to get pending assets", Details = ex.Message });
+                return this.ProblemServerError("Failed to get pending assets.");
             }
         }
 
@@ -670,7 +671,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error syncing AI statuses");
-                return StatusCode(500, new { Error = "Failed to sync AI statuses", Details = ex.Message });
+                return this.ProblemServerError("Failed to sync AI statuses.");
             }
         }
 

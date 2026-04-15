@@ -12,6 +12,7 @@ using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services;
 using XR50TrainingAssetRepo.Services.Materials;
+using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
@@ -77,7 +78,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 // Validate request
                 if (string.IsNullOrWhiteSpace(request.Name))
                 {
-                    return BadRequest("Training program name is required");
+                    return this.ProblemBadRequest("Training program name is required.");
                 }
 
                 // Parse materials array - handle both int[] and object[] with material creation data
@@ -138,12 +139,12 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (ArgumentException ex)
             {
                 _logger.LogWarning("Invalid request for tenant {TenantName}: {Message}", tenantName, ex.Message);
-                return BadRequest(ex.Message);
+                return this.ProblemBadRequest(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating training program with materials for tenant: {TenantName}", tenantName);
-                return StatusCode(500, "An error occurred while creating the training program");
+                return this.ProblemServerError("An error occurred while creating the training program.");
             }
         }
 
@@ -189,12 +190,12 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (ArgumentException ex)
             {
                 _logger.LogWarning(ex, "Validation error in bulk submit");
-                return BadRequest(new { error = ex.Message });
+                return this.ProblemBadRequest(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error bulk submitting materials in program {ProgramId}", programId);
-                return StatusCode(500, new { error = "Failed to bulk submit materials", details = ex.Message });
+                return this.ProblemServerError("Failed to bulk submit materials.");
             }
         }
 
@@ -211,7 +212,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 // Parse ID from string (UUID-ready)
                 if (!int.TryParse(id, out int programId))
                 {
-                    return BadRequest($"Invalid training program ID format: {id}");
+                    return this.ProblemBadRequest($"Invalid training program ID format: {id}");
                 }
 
                 // Read raw JSON body
@@ -255,17 +256,17 @@ namespace XR50TrainingAssetRepo.Controllers
             }
             catch (KeyNotFoundException)
             {
-                return NotFound($"Training program {id} not found");
+                return this.ProblemNotFound($"Training program {id} was not found.");
             }
             catch (ArgumentException ex)
             {
                 _logger.LogWarning("Invalid request for updating training program {Id}: {Message}", id, ex.Message);
-                return BadRequest(ex.Message);
+                return this.ProblemBadRequest(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error updating training program {Id} for tenant: {TenantName}", id, tenantName);
-                return StatusCode(500, "An error occurred while updating the training program");
+                return this.ProblemServerError("An error occurred while updating the training program.");
             }
         }
 
@@ -445,7 +446,7 @@ namespace XR50TrainingAssetRepo.Controllers
             
             if (!deleted)
             {
-                return NotFound();
+                return this.ProblemNotFound($"Training program {id} was not found.");
             }
 
             _logger.LogInformation("Deleted training program {Id} for tenant: {TenantName}", id, tenantName);
@@ -466,7 +467,7 @@ namespace XR50TrainingAssetRepo.Controllers
             var program = await _trainingProgramService.GetTrainingProgramAsync(trainingProgramId);
             if (program == null)
             {
-                return NotFound($"Training program {trainingProgramId} not found");
+                return this.ProblemNotFound($"Training program {trainingProgramId} was not found.");
             }
 
             var materials = await _materialRelationshipService.GetMaterialsByTrainingProgramAsync(trainingProgramId);
@@ -495,7 +496,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
                 if (!success)
                 {
-                    return BadRequest("Assignment already exists");
+                    return this.ProblemBadRequest("Assignment already exists.");
                 }
 
                 _logger.LogInformation("Successfully assigned material {MaterialId} to training program {TrainingProgramId} for tenant: {TenantName}",
@@ -512,7 +513,7 @@ namespace XR50TrainingAssetRepo.Controllers
             }
             catch (ArgumentException ex)
             {
-                return BadRequest(ex.Message);
+                return this.ProblemBadRequest(ex.Message);
             }
         }
         [HttpDelete("{trainingProgramId}/remove-material/{materialId}")]
@@ -529,7 +530,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
             if (!success)
             {
-                return NotFound("Material assignment not found");
+                return this.ProblemNotFound("Material assignment was not found.");
             }
 
             _logger.LogInformation("Successfully removed material {MaterialId} from training program {TrainingProgramId} for tenant: {TenantName}",
@@ -561,7 +562,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to create complete training program: {Name}", request.Name);
-                return StatusCode(500, new { Error = "Failed to create training program", Details = ex.Message });
+                return this.ProblemServerError("Failed to create training program.");
             }
         }
 
@@ -577,7 +578,7 @@ namespace XR50TrainingAssetRepo.Controllers
             if (result == null)
             {
                 _logger.LogWarning("Training program {Id} not found in tenant: {TenantName}", id, tenantName);
-                return NotFound();
+                return this.ProblemNotFound($"Training program {id} was not found.");
             }
 
             _logger.LogInformation("Retrieved simplified training program {Id}: {MaterialCount} direct materials, {LearningPathMaterialCount} learning path materials",

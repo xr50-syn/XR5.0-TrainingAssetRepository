@@ -12,6 +12,7 @@ using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Services;
 using XR50TrainingAssetRepo.Services.Materials;
+using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 using MaterialType = XR50TrainingAssetRepo.Models.Type;
 
 namespace XR50TrainingAssetRepo.Controllers
@@ -126,7 +127,7 @@ namespace XR50TrainingAssetRepo.Controllers
             if (material == null)
             {
                 _logger.LogWarning("Material {Id} not found in tenant: {TenantName}", id, tenantName);
-                return NotFound();
+                return this.ProblemNotFound($"Material {id} was not found.");
             }
 
             return material;
@@ -181,12 +182,12 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (ArgumentException ex)
             {
                 _logger.LogWarning(ex, "Validation error submitting answers");
-                return BadRequest(new { error = ex.Message });
+                return this.ProblemBadRequest(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error submitting answers for material {MaterialId}", materialId);
-                return StatusCode(500, new { error = "Failed to submit answers", details = ex.Message });
+                return this.ProblemServerError("Failed to submit answers.");
             }
         }
 
@@ -232,12 +233,12 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (ArgumentException ex)
             {
                 _logger.LogWarning(ex, "Validation error marking material complete");
-                return BadRequest(new { error = ex.Message });
+                return this.ProblemBadRequest(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error marking material {MaterialId} as complete", materialId);
-                return StatusCode(500, new { error = "Failed to mark material complete", details = ex.Message });
+                return this.ProblemServerError("Failed to mark material complete.");
             }
         }
 
@@ -256,7 +257,7 @@ public async Task<ActionResult<object>> GetCompleteMaterialDetails(string tenant
         if (baseMaterial == null)
         {
             _logger.LogWarning("Material not found: {MaterialId}", id);
-            return NotFound(new { Error = $"Material with ID {id} not found" });
+            return this.ProblemNotFound($"Material {id} was not found.");
         }
 
         // Use the existing service methods that work with Include() patterns
@@ -278,7 +279,7 @@ public async Task<ActionResult<object>> GetCompleteMaterialDetails(string tenant
 
         if (materialDetails == null)
         {
-            return NotFound(new { Error = $"Material with ID {id} not found" });
+            return this.ProblemNotFound($"Material {id} was not found.");
         }
 
         _logger.LogInformation("Retrieved complete details for material: {MaterialId} (Type: {MaterialType})", 
@@ -289,7 +290,7 @@ public async Task<ActionResult<object>> GetCompleteMaterialDetails(string tenant
     catch (Exception ex)
     {
         _logger.LogError(ex, "Error getting complete material details: {MaterialId}", id);
-        return StatusCode(500, new { Error = "Failed to retrieve material details", Details = ex.Message });
+        return this.ProblemServerError("Failed to retrieve material details.");
     }
 }
 
@@ -863,7 +864,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 if (material == null)
                 {
                     _logger.LogWarning("Material not found: {MaterialId}", id);
-                    return NotFound(new { Error = $"Material with ID {id} not found" });
+                    return this.ProblemNotFound($"Material {id} was not found.");
                 }
 
                 _logger.LogInformation("Retrieved complete typed material: {MaterialId} (Type: {MaterialType})",
@@ -873,7 +874,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting complete typed material: {MaterialId}", id);
-                return StatusCode(500, new { Error = "Failed to retrieve material", Details = ex.Message });
+                return this.ProblemServerError("Failed to retrieve material.");
             }
         }
 
@@ -890,7 +891,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 // Parse the material type - use MaterialType alias for your enum
                 if (!Enum.TryParse<MaterialType>(materialType, true, out var type))
                 {
-                    return BadRequest(new { Error = $"Invalid material type: {materialType}" });
+                    return this.ProblemBadRequest($"Invalid material type: {materialType}");
                 }
 
                 // Use the enum overload of GetMaterialsByTypeAsync
@@ -915,7 +916,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting complete materials by type: {MaterialType}", materialType);
-                return StatusCode(500, new { Error = "Failed to retrieve materials", Details = ex.Message });
+                return this.ProblemServerError("Failed to retrieve materials.");
             }
         }
 
@@ -930,7 +931,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var material = await _materialServiceBase.GetByIdAsync(id);
                 if (material == null)
                 {
-                    return NotFound(new { Error = $"Material with ID {id} not found" });
+                    return this.ProblemNotFound($"Material {id} was not found.");
                 }
 
                 var summary = new
@@ -950,7 +951,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting material summary: {MaterialId}", id);
-                return StatusCode(500, new { Error = "Failed to retrieve material summary", Details = ex.Message });
+                return this.ProblemServerError("Failed to retrieve material summary.");
             }
         }
         // DEPRECATED: Use POST /materials instead
@@ -1008,7 +1009,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 else
                 {
                     _logger.LogWarning("Unsupported Content-Type: {ContentType}", contentType);
-                    return StatusCode(415, $"Unsupported Media Type. Please use 'application/json', 'multipart/form-data', or 'application/x-www-form-urlencoded'. Received: {contentType}");
+                    return this.ProblemUnsupportedMediaType($"Unsupported media type. Use 'application/json', 'multipart/form-data', or 'application/x-www-form-urlencoded'. Received: {contentType}");
                 }
 
                 // Parse the incoming data to determine material type
@@ -1016,7 +1017,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 if (material == null)
                 {
-                    return BadRequest("Invalid material data or unsupported material type");
+                    return this.ProblemBadRequest("Invalid material data or unsupported material type.");
                 }
 
                 _logger.LogInformation("Creating material {Name} (Type: {Type}) for tenant: {TenantName}",
@@ -1061,7 +1062,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating material for tenant: {TenantName}", tenantName);
-                return StatusCode(500, $"Error creating material: {ex.Message}");
+                return this.ProblemServerError("Error creating material.");
             }
         }
         // DEPRECATED: Use POST /materials instead
@@ -1083,7 +1084,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 catch (JsonException ex)
                 {
                     _logger.LogError(ex, "Invalid JSON in materialData parameter");
-                    return BadRequest("Invalid JSON format in materialData");
+                    return this.ProblemBadRequest("Invalid JSON format in materialData.");
                 }
 
                 // Parse asset data if provided
@@ -1097,7 +1098,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     catch (JsonException ex)
                     {
                         _logger.LogError(ex, "Invalid JSON in assetData parameter");
-                        return BadRequest("Invalid JSON format in assetData");
+                        return this.ProblemBadRequest("Invalid JSON format in assetData.");
                     }
                 }
 
@@ -1131,7 +1132,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             catch (Exception ex)
             {
                 _logger.LogError(ex, " Error creating detailed material with asset for tenant: {TenantName}", tenantName);
-                return StatusCode(500, $"Error creating material: {ex.Message}");
+                return this.ProblemServerError("Error creating material.");
             }
         }
 
@@ -1193,7 +1194,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         var assetRefData = ExtractAssetReferenceFromAssetData(assetData.Value);
                         if (assetRefData == null)
                         {
-                            return BadRequest("Asset data is invalid or missing required fields");
+                            return this.ProblemBadRequest("Asset data is invalid or missing required fields.");
                         }
                         
                         createdAsset = await _assetService.CreateAssetReference(tenantName, assetRefData);
@@ -1206,7 +1207,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         var assetRefData = ExtractAssetReferenceData(materialData);
                         if (assetRefData == null)
                         {
-                            return BadRequest("Asset reference data is invalid or missing required fields");
+                            return this.ProblemBadRequest("Asset reference data is invalid or missing required fields.");
                         }
                         
                         createdAsset = await _assetService.CreateAssetReference(tenantName, assetRefData);
@@ -1217,7 +1218,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Failed to create asset during material creation");
-                    return StatusCode(500, $"Failed to create asset: {ex.Message}");
+                    return this.ProblemServerError("Failed to create asset.");
                 }
 
                 // Create the material with the asset ID
@@ -1268,13 +1269,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         _logger.LogWarning(cleanupEx, "Failed to clean up asset {AssetId} after material creation failure", createdAsset.Id);
                     }
                     
-                    return StatusCode(500, $"Failed to create material: {ex.Message}");
+                    return this.ProblemServerError("Failed to create material.");
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, " Error in CreateMaterialWithAsset");
-                return StatusCode(500, $"Error creating material with asset: {ex.Message}");
+                return this.ProblemServerError("Error creating material with asset.");
             }
         }
 
@@ -1541,7 +1542,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                     if (string.IsNullOrEmpty(body))
                     {
-                        return BadRequest("Request body is required");
+                        return this.ProblemBadRequest("Request body is required.");
                     }
 
                     try
@@ -1551,7 +1552,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     catch (JsonException ex)
                     {
                         _logger.LogError(ex, "Invalid JSON in request body");
-                        return BadRequest("Invalid JSON format in request body");
+                        return this.ProblemBadRequest("Invalid JSON format in request body.");
                     }
                 }
                 // Handle multipart/form-data content type
@@ -1564,7 +1565,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                     if (string.IsNullOrEmpty(materialJson))
                     {
-                        return BadRequest("material field is required");
+                        return this.ProblemBadRequest("material field is required.");
                     }
 
                     file = form.Files.GetFile("file");
@@ -1576,7 +1577,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     catch (JsonException ex)
                     {
                         _logger.LogError(ex, "Invalid JSON in material parameter");
-                        return BadRequest("Invalid JSON format in material");
+                        return this.ProblemBadRequest("Invalid JSON format in material.");
                     }
 
                     // Extract optional assetData
@@ -1590,7 +1591,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         catch (JsonException ex)
                         {
                             _logger.LogError(ex, "Invalid JSON in assetData parameter");
-                            return BadRequest("Invalid JSON format in assetData");
+                            return this.ProblemBadRequest("Invalid JSON format in assetData.");
                         }
                     }
 
@@ -1598,14 +1599,14 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 }
                 else
                 {
-                    return BadRequest($"Unsupported content type: {contentType}. Use application/json or multipart/form-data");
+                    return this.ProblemBadRequest($"Unsupported content type: {contentType}. Use application/json or multipart/form-data.");
                 }
 
                 // Validate required fields
                 var validationError = ValidateMaterialData(materialData);
                 if (validationError != null)
                 {
-                    return BadRequest(validationError);
+                    return this.ProblemBadRequest(validationError);
                 }
 
                 // Parse the incoming JSON to determine material type
@@ -1639,7 +1640,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating material for tenant: {TenantName}", tenantName);
-                return StatusCode(500, $"Error creating material: {ex.Message}");
+                return this.ProblemServerError("Error creating material.");
             }
         }
 
@@ -1679,7 +1680,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var validationError = ValidateMaterialData(materialData);
                 if (validationError != null)
                 {
-                    return BadRequest(validationError);
+                    return this.ProblemBadRequest(validationError);
                 }
 
                 // Parse the incoming JSON to determine material type
@@ -1703,7 +1704,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating material for tenant: {TenantName}", tenantName);
-                return StatusCode(500, $"Error creating material: {ex.Message}");
+                return this.ProblemServerError("Error creating material.");
             }
         }
 
@@ -2490,7 +2491,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     if (!isValid)
                     {
                         _logger.LogWarning("Question validation failed: {Error}", error);
-                        return BadRequest(error);
+                        return this.ProblemBadRequest(error);
                     }
                 }
 
@@ -2636,7 +2637,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 
                 if (material == null)
                 {
-                    return BadRequest("Invalid material data or unsupported material type");
+                    return this.ProblemBadRequest("Invalid material data or unsupported material type.");
                 }
                 
                 // Use the complete creation method to handle subcomponents (annotations, timestamps, etc.)
@@ -3540,7 +3541,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 // Parse the ID from string (supports future UUID migration)
                 if (!int.TryParse(id, out int materialId))
                 {
-                    return BadRequest($"Invalid material ID format: {id}");
+                    return this.ProblemBadRequest($"Invalid material ID format: {id}");
                 }
 
                 JsonElement jsonElement;
@@ -3559,7 +3560,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                     if (!form.ContainsKey("material"))
                     {
-                        return BadRequest("material is required in form-data requests");
+                        return this.ProblemBadRequest("material is required in form-data requests.");
                     }
 
                     var materialDataString = form["material"].ToString();
@@ -3570,7 +3571,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     catch (JsonException ex)
                     {
                         _logger.LogError(ex, "Invalid JSON in material parameter");
-                        return BadRequest("Invalid JSON format in material");
+                        return this.ProblemBadRequest("Invalid JSON format in material.");
                     }
 
                     // Extract optional file
@@ -3586,7 +3587,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         catch (JsonException ex)
                         {
                             _logger.LogError(ex, "Invalid JSON in assetData parameter");
-                            return BadRequest("Invalid JSON format in assetData");
+                            return this.ProblemBadRequest("Invalid JSON format in assetData.");
                         }
                     }
 
@@ -3626,7 +3627,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 else
                 {
                     _logger.LogWarning("Unsupported Content-Type for PUT: {ContentType}", contentType);
-                    return StatusCode(415, $"Unsupported Media Type. Please use 'application/json' or 'multipart/form-data'. Received: {contentType}");
+                    return this.ProblemUnsupportedMediaType($"Unsupported media type. Please use 'application/json' or 'multipart/form-data'. Received: {contentType}");
                 }
 
                 // Verify ID in body matches route parameter
@@ -3638,7 +3639,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                     if (bodyId != id)
                     {
-                        return BadRequest($"ID mismatch: route={id}, body={bodyId}");
+                        return this.ProblemBadRequest($"ID mismatch: route={id}, body={bodyId}");
                     }
                 }
 
@@ -3648,14 +3649,14 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var existingMaterial = await _materialServiceBase.GetByIdAsync(materialId);
                 if (existingMaterial == null)
                 {
-                    return NotFound($"Material with ID {materialId} not found");
+                    return this.ProblemNotFound($"Material {materialId} was not found.");
                 }
 
                 // Parse the material from JSON, using existing material's type as fallback
                 var material = ParseMaterialFromJsonForUpdate(jsonElement, existingMaterial);
                 if (material == null)
                 {
-                    return BadRequest("Invalid material data or unsupported material type");
+                    return this.ProblemBadRequest("Invalid material data or unsupported material type.");
                 }
 
                 // Ensure the ID is set correctly
@@ -3778,17 +3779,17 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
             catch (KeyNotFoundException)
             {
-                return NotFound($"Material with ID {id} not found");
+                return this.ProblemNotFound($"Material {id} was not found.");
             }
             catch (ArgumentException ex)
             {
                 _logger.LogWarning(ex, "Invalid material type for update");
-                return BadRequest(ex.Message);
+                return this.ProblemBadRequest(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error updating material {Id} for tenant: {TenantName}", id, tenantName);
-                return StatusCode(500, $"Error updating material: {ex.Message}");
+                return this.ProblemServerError("Error updating material.");
             }
         }
 
@@ -3802,7 +3803,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             if (!deleted)
             {
-                return NotFound(new { Status = "error", Message = $"Material with ID {id} not found" });
+                return this.ProblemNotFound($"Material {id} was not found.");
             }
 
             _logger.LogInformation("Deleted material {Id} for tenant: {TenantName}", id, tenantName);
@@ -3958,7 +3959,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating complete workflow for tenant: {TenantName}", tenantName);
-                return StatusCode(500, $"Error creating workflow: {ex.Message}");
+                return this.ProblemServerError("Error creating workflow.");
             }
         }
 
@@ -3995,7 +3996,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating complete video for tenant: {TenantName}", tenantName);
-                return StatusCode(500, $"Error creating video: {ex.Message}");
+                return this.ProblemServerError("Error creating video.");
             }
         }
 
@@ -4021,7 +4022,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating complete checklist for tenant: {TenantName}", tenantName);
-                return StatusCode(500, $"Error creating checklist: {ex.Message}");
+                return this.ProblemServerError("Error creating checklist.");
             }
         }
 
@@ -4037,7 +4038,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             if (video == null)
             {
                 _logger.LogWarning("Video material {Id} not found in tenant: {TenantName}", id, tenantName);
-                return NotFound();
+                return this.ProblemNotFound("Video material was not found.");
             }
 
             _logger.LogInformation("Retrieved video material {Id} with {Count} timestamps for tenant: {TenantName}",
@@ -4065,7 +4066,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             catch (ArgumentException ex)
             {
                 _logger.LogWarning("{Message} for tenant: {TenantName}", ex.Message, tenantName);
-                return NotFound(ex.Message);
+                return this.ProblemNotFound(ex.Message);
             }
         }
         // DELETE: api/{tenantName}/materials/videos/5/timestamps/3
@@ -4079,7 +4080,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             if (!removed)
             {
-                return NotFound("Timestamp not found");
+                return this.ProblemNotFound("Timestamp was not found.");
             }
 
             _logger.LogInformation("Removed timestamp {TimestampId} from video {VideoId} for tenant: {TenantName}",
@@ -4101,7 +4102,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             if (checklist == null)
             {
                 _logger.LogWarning("Checklist material {Id} not found in tenant: {TenantName}", id, tenantName);
-                return NotFound();
+                return this.ProblemNotFound("Checklist material was not found.");
             }
 
             _logger.LogInformation("Retrieved checklist material {Id} with {Count} entries for tenant: {TenantName}",
@@ -4129,7 +4130,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             catch (ArgumentException ex)
             {
                 _logger.LogWarning("{Message} for tenant: {TenantName}", ex.Message, tenantName);
-                return NotFound(ex.Message);
+                return this.ProblemNotFound(ex.Message);
             }
         }
 
@@ -4144,7 +4145,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             if (!removed)
             {
-                return NotFound("Entry not found");
+                return this.ProblemNotFound("Entry was not found.");
             }
 
             _logger.LogInformation("Removed entry {EntryId} from checklist {ChecklistId} for tenant: {TenantName}",
@@ -4166,7 +4167,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             if (workflow == null)
             {
                 _logger.LogWarning("Workflow material {Id} not found in tenant: {TenantName}", id, tenantName);
-                return NotFound();
+                return this.ProblemNotFound("Workflow material was not found.");
             }
 
             _logger.LogInformation("Retrieved workflow material {Id} with {Count} steps for tenant: {TenantName}",
@@ -4194,7 +4195,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             catch (ArgumentException ex)
             {
                 _logger.LogWarning("{Message} for tenant: {TenantName}", ex.Message, tenantName);
-                return NotFound(ex.Message);
+                return this.ProblemNotFound(ex.Message);
             }
         }
 
@@ -4209,7 +4210,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             if (!removed)
             {
-                return NotFound("Step not found");
+                return this.ProblemNotFound("Step was not found.");
             }
 
             _logger.LogInformation("Removed step {StepId} from workflow {WorkflowId} for tenant: {TenantName}",
@@ -4264,7 +4265,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             if (!success)
             {
-                return BadRequest("Material not found or material type does not support assets");
+                return this.ProblemBadRequest("Material was not found or its type does not support assets.");
             }
 
             _logger.LogInformation("Assigned asset {AssetId} to material {MaterialId} for tenant: {TenantName}",
@@ -4284,7 +4285,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             if (!success)
             {
-                return BadRequest("Material not found or material type does not support assets");
+                return this.ProblemBadRequest("Material was not found or its type does not support assets.");
             }
 
             _logger.LogInformation("Removed asset from material {MaterialId} for tenant: {TenantName}",
@@ -4341,7 +4342,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             if (!success)
             {
-                return NotFound("Relationship not found");
+                return this.ProblemNotFound("Relationship was not found.");
             }
 
             _logger.LogInformation("Removed material {MaterialId} from learning path {LearningPathId} for tenant: {TenantName}",
@@ -4380,13 +4381,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             {
                 _logger.LogWarning(ex, "Failed to assign material {ChildId} to material {ParentId}",
                     childMaterialId, parentMaterialId);
-                return NotFound(ex.Message);
+                return this.ProblemNotFound(ex.Message);
             }
             catch (InvalidOperationException ex)
             {
                 _logger.LogWarning(ex, "Invalid operation assigning material {ChildId} to material {ParentId}",
                     childMaterialId, parentMaterialId);
-                return BadRequest(ex.Message);
+                return this.ProblemBadRequest(ex.Message);
             }
         }
 
@@ -4402,7 +4403,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             if (!success)
             {
-                return NotFound("Relationship not found");
+                return this.ProblemNotFound("Relationship was not found.");
             }
 
             _logger.LogInformation("Removed material {ChildId} from material {ParentId} for tenant: {TenantName}",
@@ -4497,7 +4498,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             catch (ArgumentException ex)
             {
                 _logger.LogWarning(ex, "Material {MaterialId} not found", materialId);
-                return NotFound(ex.Message);
+                return this.ProblemNotFound(ex.Message);
             }
         }
 
@@ -5148,13 +5149,13 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             {
                 _logger.LogWarning(ex, "Failed to assign material {MaterialId} to {SubcomponentType} {SubcomponentId}",
                     materialId, subcomponentType, subcomponentId);
-                return NotFound(ex.Message);
+                return this.ProblemNotFound(ex.Message);
             }
             catch (InvalidOperationException ex)
             {
                 _logger.LogWarning(ex, "Invalid operation assigning material {MaterialId} to {SubcomponentType} {SubcomponentId}",
                     materialId, subcomponentType, subcomponentId);
-                return BadRequest(ex.Message);
+                return this.ProblemBadRequest(ex.Message);
             }
         }
 
@@ -5174,7 +5175,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             if (!success)
             {
-                return NotFound("Relationship not found");
+                return this.ProblemNotFound("Relationship was not found.");
             }
 
             return Ok(new { Message = $"Material successfully removed from {subcomponentType}" });
@@ -5221,7 +5222,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             if (!success)
             {
-                return BadRequest("Failed to reorder materials");
+                return this.ProblemBadRequest("Failed to reorder materials.");
             }
 
             return Ok(new { Message = "Materials reordered successfully" });
@@ -5288,7 +5289,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error generating material summary for tenant: {TenantName}", tenantName);
-                return StatusCode(500, $"Error generating summary: {ex.Message}");
+                return this.ProblemServerError("Error generating summary.");
             }
         }
 
@@ -5426,7 +5427,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting AI assistant materials");
-                return StatusCode(500, new { Error = "Failed to get AI assistant materials", Details = ex.Message });
+                return this.ProblemServerError("Failed to get AI assistant materials.");
             }
         }
 
@@ -5453,16 +5454,16 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
             catch (KeyNotFoundException)
             {
-                return NotFound(new { Error = $"AI assistant material {id} not found" });
+                return this.ProblemNotFound($"AI assistant material {id} was not found.");
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new { Error = ex.Message });
+                return this.ProblemBadRequest(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error submitting AI assistant material {Id} for AI processing", id);
-                return StatusCode(500, new { Error = "Failed to submit AI assistant material for AI processing", Details = ex.Message });
+                return this.ProblemServerError("Failed to submit AI assistant material for AI processing.");
             }
         }
 
@@ -5487,12 +5488,12 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
             catch (KeyNotFoundException)
             {
-                return NotFound(new { Error = $"AI assistant material {id} not found" });
+                return this.ProblemNotFound($"AI assistant material {id} was not found.");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error refreshing AI assistant material {Id} status", id);
-                return StatusCode(500, new { Error = "Failed to refresh AI assistant material status", Details = ex.Message });
+                return this.ProblemServerError("Failed to refresh AI assistant material status.");
             }
         }
 
@@ -5510,7 +5511,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 if (!result)
                 {
-                    return NotFound(new { Error = $"AI assistant material {id} not found" });
+                    return this.ProblemNotFound($"AI assistant material {id} was not found.");
                 }
 
                 return Ok(new
@@ -5522,7 +5523,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error adding asset {AssetId} to AI assistant material {Id}", assetId, id);
-                return StatusCode(500, new { Error = "Failed to add asset to AI assistant material", Details = ex.Message });
+                return this.ProblemServerError("Failed to add asset to AI assistant material.");
             }
         }
 
@@ -5540,7 +5541,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 if (!result)
                 {
-                    return NotFound(new { Error = $"AI assistant material {id} not found or asset not in list" });
+                    return this.ProblemNotFound($"AI assistant material {id} was not found or the asset is not in its list.");
                 }
 
                 return Ok(new
@@ -5552,7 +5553,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error removing asset {AssetId} from AI assistant material {Id}", assetId, id);
-                return StatusCode(500, new { Error = "Failed to remove asset from AI assistant material", Details = ex.Message });
+                return this.ProblemServerError("Failed to remove asset from AI assistant material.");
             }
         }
 
