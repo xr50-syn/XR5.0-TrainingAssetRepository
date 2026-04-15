@@ -1735,15 +1735,15 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         /// <summary>
         /// Validates material data for required fields and valid type
         /// </summary>
-        /// <returns>Error object if validation fails, null if valid</returns>
-        private object? ValidateMaterialData(JsonElement materialData)
+        /// <returns>Error detail if validation fails, null if valid</returns>
+        private string? ValidateMaterialData(JsonElement materialData)
         {
             // Check for required name field
             if (!TryGetPropertyCaseInsensitive(materialData, "name", out var nameProp) ||
                 string.IsNullOrWhiteSpace(nameProp.GetString()))
             {
                 _logger.LogWarning("Material creation failed: name is required");
-                return new { Error = "Material name is required" };
+                return "Material name is required";
             }
 
             // Check for valid type if provided
@@ -1753,7 +1753,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 if (!string.IsNullOrEmpty(typeValue) && !ValidMaterialTypes.Contains(typeValue))
                 {
                     _logger.LogWarning("Material creation failed: invalid type '{Type}'", typeValue);
-                    return new { Error = $"Invalid material type: '{typeValue}'. Valid types are: {string.Join(", ", ValidMaterialTypes)}" };
+                    return $"Invalid material type: '{typeValue}'. Valid types are: {string.Join(", ", ValidMaterialTypes)}";
                 }
             }
 
@@ -1764,7 +1764,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 if (!string.IsNullOrEmpty(discValue) && !ValidMaterialTypes.Contains(discValue))
                 {
                     _logger.LogWarning("Material creation failed: invalid discriminator '{Discriminator}'", discValue);
-                    return new { Error = $"Invalid material discriminator: '{discValue}'. Valid types are: {string.Join(", ", ValidMaterialTypes)}" };
+                    return $"Invalid material discriminator: '{discValue}'. Valid types are: {string.Join(", ", ValidMaterialTypes)}";
                 }
             }
 
