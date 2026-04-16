@@ -250,11 +250,9 @@ namespace XR50TrainingAssetRepo.Controllers
 
             try
             {
-                var downloadUrl = await _assetService.GetAssetDownloadUrlAsync(id);
+                var downloadUrl = await _assetService.GetAssetDownloadUrlAsync(tenantName, id);
 
-                // TODO: Implement actual file download from OwnCloud/S3
-                
-                return Ok();
+                return Ok(new { DownloadUrl = downloadUrl });
             }
             catch (ArgumentException ex)
             {
@@ -337,8 +335,8 @@ namespace XR50TrainingAssetRepo.Controllers
                 return this.ProblemNotFound($"Asset {id} was not found.");
             }
 
-            var fileSize = await _assetService.GetAssetFileSizeAsync(id);
-            var fileExists = await _assetService.AssetFileExistsAsync(id);
+            var fileSize = await _assetService.GetAssetFileSizeAsync(tenantName, id);
+            var fileExists = await _assetService.AssetFileExistsAsync(tenantName, id);
 
             return Ok(new
             {

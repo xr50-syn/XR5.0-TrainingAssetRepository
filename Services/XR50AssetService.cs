@@ -29,12 +29,11 @@ namespace XR50TrainingAssetRepo.Services
         Task<int> GetAssetUsageCountAsync(int assetId);
         
         // File Management with Storage Service
-        Task<string> GetAssetDownloadUrlAsync(int assetId);
+        Task<string> GetAssetDownloadUrlAsync(string tenantName, int assetId);
         Task<Asset> UploadAssetAsync(IFormFile file, string tenantName, string filename, string? description = null);
         Task<Asset> UploadAssetToExistingAsync(int assetId, IFormFile file, string tenantName, string? filename = null, string? description = null);
-        Task<bool> DeleteAssetFileAsync(int assetId);
-        Task<long> GetAssetFileSizeAsync(int assetId);
-        Task<bool> AssetFileExistsAsync(int assetId);
+        Task<long> GetAssetFileSizeAsync(string tenantName, int assetId);
+        Task<bool> AssetFileExistsAsync(string tenantName, int assetId);
         // Share Management
         Task<Share> CreateShareAsync(string tenantName, string assetId);
         Task<bool> DeleteShareAsync(string tenantName, string shareId);
@@ -532,7 +531,7 @@ namespace XR50TrainingAssetRepo.Services
             return materials.Count();
         }
 
-        public async Task<string> GetAssetDownloadUrlAsync(int assetId)
+        public async Task<string> GetAssetDownloadUrlAsync(string tenantName, int assetId)
         {
             var asset = await GetAssetAsync(assetId);
             if (asset == null)
@@ -542,9 +541,6 @@ namespace XR50TrainingAssetRepo.Services
 
             try
             {
-                // Extract tenant name from context or determine from asset
-                var tenantName = ExtractTenantNameFromContext();
-
                 var downloadUrl = await _storageService.GetDownloadUrlAsync(tenantName, asset.Filename);
 
                 _logger.LogInformation("Generated download URL for asset {AssetId} ({Filename}) from {StorageType}",
@@ -683,32 +679,7 @@ namespace XR50TrainingAssetRepo.Services
             }
         }
 
-        public async Task<bool> DeleteAssetFileAsync(int assetId)
-        {
-            var asset = await GetAssetAsync(assetId);
-            if (asset == null)
-            {
-                return false;
-            }
-
-            try
-            {
-                var tenantName = ExtractTenantNameFromContext();
-                var deleted = await _storageService.DeleteFileAsync(tenantName, asset.Filename);
-
-                _logger.LogInformation("Deleted file for asset {AssetId} ({Filename}) from {StorageType} storage",
-                    assetId, asset.Filename, _storageService.GetStorageType());
-
-                return deleted;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to delete file for asset {AssetId} ({Filename})", assetId, asset.Filename);
-                return false;
-            }
-        }
-
-        public async Task<long> GetAssetFileSizeAsync(int assetId)
+        public async Task<long> GetAssetFileSizeAsync(string tenantName, int assetId)
         {
             var asset = await GetAssetAsync(assetId);
             if (asset == null)
@@ -718,7 +689,6 @@ namespace XR50TrainingAssetRepo.Services
 
             try
             {
-                var tenantName = ExtractTenantNameFromContext();
                 var size = await _storageService.GetFileSizeAsync(tenantName, asset.Filename);
 
                 _logger.LogInformation("Retrieved file size for asset {AssetId} ({Filename}): {Size} bytes",
@@ -733,7 +703,7 @@ namespace XR50TrainingAssetRepo.Services
             }
         }
 
-        public async Task<bool> AssetFileExistsAsync(int assetId)
+        public async Task<bool> AssetFileExistsAsync(string tenantName, int assetId)
         {
             var asset = await GetAssetAsync(assetId);
             if (asset == null)
@@ -743,7 +713,6 @@ namespace XR50TrainingAssetRepo.Services
 
             try
             {
-                var tenantName = ExtractTenantNameFromContext();
                 var exists = await _storageService.FileExistsAsync(tenantName, asset.Filename);
 
                 _logger.LogInformation("File existence check for asset {AssetId} ({Filename}): {Exists}",
@@ -949,19 +918,6 @@ namespace XR50TrainingAssetRepo.Services
                 ".wav" or ".mp3" or ".ogg" or ".flac" => "audio",
                 _ => "unknown"
             };
-        }
-
-        private string ExtractTenantNameFromContext()
-        {
-            // This is a simplified implementation
-            // In a real scenario, you might extract tenant from:
-            // - HTTP context (URL path, headers, claims)
-            // - Database lookup
-            // - Configuration
-
-            // For now, return a default tenant name
-            // TODO: Implement proper tenant resolution
-            return "default-tenant";
         }
 
         #region AI Processing Operations
