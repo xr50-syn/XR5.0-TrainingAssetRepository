@@ -139,8 +139,24 @@ namespace XR50TrainingAssetRepo.Services.Materials
             context.Materials.Add(aiAssistant);
             await context.SaveChangesAsync();
 
-            _logger.LogInformation("Created AI Assistant material: {Name} with ID: {Id} and {AssetCount} assets",
-                aiAssistant.Name, aiAssistant.id, assetIds.Count);
+            // Derive and persist the DataLens collection name
+            var collectionName = $"aiassist_{aiAssistant.id}";
+            aiAssistant.CollectionName = collectionName;
+            await context.SaveChangesAsync();
+
+            _logger.LogInformation("Created AI Assistant material: {Name} with ID: {Id}, collection: {CollectionName}, and {AssetCount} assets",
+                aiAssistant.Name, aiAssistant.id, collectionName, assetIds.Count);
+
+            // Ensure the DataLens collection exists
+            try
+            {
+                await _chatbotApiService.EnsureCollectionExistsAsync(collectionName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to create DataLens collection {CollectionName} for AI Assistant material {Id}. Will retry on processing.",
+                    collectionName, aiAssistant.id);
+            }
 
             // Automatically submit assets for AI processing
             if (assetIds.Any())
@@ -153,7 +169,6 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Auto-submission failed for AI Assistant material {Id}. Manual submission required.", aiAssistant.id);
-                    // Don't throw - material is created, user can retry submission manually
                 }
             }
 
@@ -296,6 +311,19 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 throw new InvalidOperationException("AI Assistant material has no assets to submit");
             }
 
+            // Resolve collection name, generate and persist if missing
+            var collectionName = aiAssistant.CollectionName;
+            if (string.IsNullOrEmpty(collectionName))
+            {
+                collectionName = $"aiassist_{aiAssistantId}";
+                aiAssistant.CollectionName = collectionName;
+                _logger.LogInformation("Generated collection name {CollectionName} for AI Assistant material {AIAssistantId}",
+                    collectionName, aiAssistantId);
+            }
+
+            // Ensure the DataLens collection exists
+            await _chatbotApiService.EnsureCollectionExistsAsync(collectionName);
+
             // Get assets and submit each for processing
             var assets = await context.Assets
                 .Where(a => assetIds.Contains(a.Id))
@@ -311,21 +339,13 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 {
                     try
                     {
-                        var jobId = await _chatbotApiService.SubmitDocumentAsync(asset.Id, asset.URL, asset.Filetype ?? "pdf");
+                        var jobId = await _chatbotApiService.SubmitDocumentAsync(
+                            asset.Id, asset.URL, asset.Filetype ?? "pdf", collectionName);
                         asset.JobId = jobId;
+                        asset.AiAvailable = "process";
 
-                        if (jobId.StartsWith("duplicate-accepted-"))
-                        {
-                            asset.AiAvailable = "ready";
-                            _logger.LogInformation("Asset {AssetId} already exists in AI service, marked as ready",
-                                asset.Id);
-                        }
-                        else
-                        {
-                            asset.AiAvailable = "process";
-                            _logger.LogInformation("Submitted asset {AssetId} for processing. Job ID: {JobId}",
-                                asset.Id, jobId);
-                        }
+                        _logger.LogInformation("Submitted asset {AssetId} to collection {CollectionName}. Job ID: {JobId}",
+                            asset.Id, collectionName, jobId);
 
                         successCount++;
                     }

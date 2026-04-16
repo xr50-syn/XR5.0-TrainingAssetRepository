@@ -225,6 +225,13 @@ namespace XR50TrainingAssetRepo.Models
         public string? AIAssistantAssetIds { get; set; }
 
         /// <summary>
+        /// DataLens collection name for this AI Assistant material.
+        /// Each material gets its own collection (e.g., "aiassist_42").
+        /// </summary>
+        [StringLength(255)]
+        public string? CollectionName { get; set; }
+
+        /// <summary>
         /// Current active session for this AI Assistant material
         /// </summary>
         [JsonIgnore]

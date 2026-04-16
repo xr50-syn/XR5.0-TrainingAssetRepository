@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using XR50TrainingAssetRepo.Models;
@@ -7,9 +8,9 @@ using XR50TrainingAssetRepo.Services.Materials;
 namespace XR50TrainingAssetRepo.Services
 {
     /// <summary>
-    /// Service for interacting with the AI Assistant API (Siemens API wrapper).
-    /// Provides document upload and conversational chat with audio responses.
-    /// Manages sessions automatically - first call appends filenames, subsequent calls use stored session.
+    /// Service for interacting with the DataLens AI API (v1).
+    /// Provides inference queries with session management and document uploads.
+    /// All operations are scoped to a DataLens collection.
     /// </summary>
     public class AIAssistantService : IAIAssistantService
     {
@@ -18,6 +19,7 @@ namespace XR50TrainingAssetRepo.Services
         private readonly IConfiguration _configuration;
         private readonly ILogger<AIAssistantService> _logger;
         private readonly string _baseUrl;
+        private readonly string _defaultCollectionName;
 
         public AIAssistantService(
             HttpClient httpClient,
@@ -30,17 +32,22 @@ namespace XR50TrainingAssetRepo.Services
             _configuration = configuration;
             _logger = logger;
 
-            // Use same base URL as ChatbotApi
             _baseUrl = configuration["ChatbotApi:BaseUrl"]
                 ?? Environment.GetEnvironmentVariable("CHATBOT_API_BASE_URL")
-                ?? "http://localhost:5001/docs";
+                ?? "http://localhost:5001";
 
-            var apiKey = configuration["ChatbotApi:ApiKey"]
-                ?? Environment.GetEnvironmentVariable("CHATBOT_API_KEY");
+            _defaultCollectionName = configuration["ChatbotApi:DefaultCollectionName"]
+                ?? Environment.GetEnvironmentVariable("CHATBOT_API_DEFAULT_COLLECTION")
+                ?? "pdf_knowledge_base";
 
-            if (!string.IsNullOrEmpty(apiKey))
+            // Bearer token authentication (v1 API)
+            var bearerToken = configuration["ChatbotApi:BearerToken"]
+                ?? Environment.GetEnvironmentVariable("CHATBOT_API_BEARER_TOKEN");
+
+            if (!string.IsNullOrEmpty(bearerToken))
             {
-                _httpClient.DefaultRequestHeaders.Add("X-API-Key", apiKey);
+                _httpClient.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue("Bearer", bearerToken);
             }
 
             _httpClient.BaseAddress = new Uri(_baseUrl.TrimEnd('/') + "/");
@@ -51,77 +58,12 @@ namespace XR50TrainingAssetRepo.Services
 
         public async Task<AIAssistantAskResponse> AskAsync(string query, string? sessionId = null)
         {
-            _logger.LogInformation("Sending query to default AI assistant: {Query}", query);
-
-            var formContent = new FormUrlEncodedContent(new[]
-            {
-                new KeyValuePair<string, string>("query", query),
-                new KeyValuePair<string, string>("session_id", sessionId ?? string.Empty)
-            });
-
-            var askUrl = "ask";
-
-            try
-            {
-                var response = await _httpClient.PostAsync(askUrl, formContent);
-                response.EnsureSuccessStatusCode();
-
-                var responseContent = await response.Content.ReadAsStringAsync();
-
-                _logger.LogDebug("Received response from AI assistant: {Response}",
-                    responseContent.Length > 500 ? responseContent.Substring(0, 500) + "..." : responseContent);
-
-                return ParseAskResponse(responseContent, query, sessionId);
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogError(ex, "Failed to communicate with AI assistant endpoint {Endpoint}", askUrl);
-                throw new InvalidOperationException($"Failed to communicate with AI assistant: {ex.Message}", ex);
-            }
+            return await AskCollectionAsync(_defaultCollectionName, query, sessionId, sourceFiles: null);
         }
 
         public async Task<AIAssistantDocumentUploadResponse> UploadDocumentAsync(Stream fileStream, string fileName, string contentType)
         {
-            _logger.LogInformation("Uploading document to AI assistant: {FileName}", fileName);
-
-            try
-            {
-                using var content = new MultipartFormDataContent();
-                var streamContent = new StreamContent(fileStream);
-                streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
-                content.Add(streamContent, "file", fileName);
-
-                var response = await _httpClient.PostAsync("document", content);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    _logger.LogError("AI assistant document upload failed: {StatusCode} - {Error}",
-                        response.StatusCode, errorContent);
-                    throw new InvalidOperationException($"Failed to upload document: {response.StatusCode} - {errorContent}");
-                }
-
-                var responseContent = await response.Content.ReadAsStringAsync();
-                var result = JsonSerializer.Deserialize<AIAssistantDocumentApiResponse>(responseContent, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-
-                _logger.LogInformation("Document uploaded successfully. Job ID: {JobId}", result?.JobId);
-
-                return new AIAssistantDocumentUploadResponse
-                {
-                    JobId = result?.JobId,
-                    Status = result?.Status ?? "pending",
-                    Message = result?.Message ?? "Document submitted for processing",
-                    DocumentId = result?.DocumentId
-                };
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogError(ex, "Network error uploading document to AI assistant");
-                throw new InvalidOperationException($"Network error uploading document: {ex.Message}", ex);
-            }
+            return await UploadDocumentToCollectionAsync(_defaultCollectionName, fileStream, fileName, contentType);
         }
 
         public async Task<bool> IsDefaultEndpointAvailableAsync()
@@ -149,14 +91,16 @@ namespace XR50TrainingAssetRepo.Services
                 throw new KeyNotFoundException($"AIAssistantMaterial with ID {aiAssistantMaterialId} not found");
             }
 
+            var collectionName = aiAssistantMaterial.CollectionName ?? _defaultCollectionName;
+
             // Check for existing valid session
             var existingSession = await _aiAssistantMaterialService.GetActiveSessionAsync(aiAssistantMaterialId);
 
-            string effectiveQuery = query;
             string? sessionIdToUse = sessionId ?? existingSession?.SessionId;
+            string? sourceFiles = null;
 
             // If no session exists (or explicit sessionId not provided and no stored session),
-            // this is a first call - append filenames
+            // this is a first call - use source_files to establish document context
             if (existingSession == null && string.IsNullOrEmpty(sessionId))
             {
                 var assets = await _aiAssistantMaterialService.GetAssetsAsync(aiAssistantMaterialId);
@@ -164,10 +108,9 @@ namespace XR50TrainingAssetRepo.Services
 
                 if (filenames.Any())
                 {
-                    var filenameList = string.Join(", ", filenames);
-                    effectiveQuery = $"{query} using filenames {filenameList}";
-                    _logger.LogInformation("First call for AI Assistant material {AIAssistantMaterialId}. Appending filenames: {Filenames}",
-                        aiAssistantMaterialId, filenameList);
+                    sourceFiles = string.Join(",", filenames);
+                    _logger.LogInformation("First call for AI Assistant material {AIAssistantMaterialId}. Using source_files: {SourceFiles}",
+                        aiAssistantMaterialId, sourceFiles);
                 }
 
                 sessionIdToUse = null; // No session for first call
@@ -179,7 +122,7 @@ namespace XR50TrainingAssetRepo.Services
             }
 
             // Make the API call
-            var response = await AskAsync(effectiveQuery, sessionIdToUse);
+            var response = await AskCollectionAsync(collectionName, query, sessionIdToUse, sourceFiles);
 
             // If this was a first call and we got a session_id back, store it
             if (existingSession == null && string.IsNullOrEmpty(sessionId) && !string.IsNullOrEmpty(response.SessionId))
@@ -200,17 +143,12 @@ namespace XR50TrainingAssetRepo.Services
                 throw new KeyNotFoundException($"AIAssistantMaterial with ID {aiAssistantMaterialId} not found");
             }
 
-            _logger.LogInformation("Uploading document for AI Assistant material {AIAssistantMaterialId}: {FileName}",
-                aiAssistantMaterialId, fileName);
+            var collectionName = aiAssistantMaterial.CollectionName ?? _defaultCollectionName;
 
-            // Upload the document
-            var result = await UploadDocumentAsync(fileStream, fileName, contentType);
+            _logger.LogInformation("Uploading document for AI Assistant material {AIAssistantMaterialId} to collection {CollectionName}: {FileName}",
+                aiAssistantMaterialId, collectionName, fileName);
 
-            // Note: The document is uploaded but not automatically associated with the AIAssistantMaterial.
-            // To associate it, an Asset would need to be created first, then linked via AddAssetAsync.
-            // This could be extended in the future to handle asset creation automatically.
-
-            return result;
+            return await UploadDocumentToCollectionAsync(collectionName, fileStream, fileName, contentType);
         }
 
         public async Task<IEnumerable<AIAssistantDocumentInfo>> GetDocumentsAsync(int aiAssistantMaterialId)
@@ -229,7 +167,7 @@ namespace XR50TrainingAssetRepo.Services
                 FileName = a.Filename,
                 Status = a.AiAvailable ?? "notready",
                 JobId = a.JobId,
-                UploadedAt = null // Asset doesn't have Created_at
+                UploadedAt = null
             });
         }
 
@@ -241,8 +179,104 @@ namespace XR50TrainingAssetRepo.Services
                 return false;
             }
 
-            // For now, use the default endpoint check
             return await IsDefaultEndpointAvailableAsync();
+        }
+
+        #endregion
+
+        #region Internal Collection Operations
+
+        private async Task<AIAssistantAskResponse> AskCollectionAsync(
+            string collectionName, string query, string? sessionId, string? sourceFiles)
+        {
+            _logger.LogInformation("Sending query to collection {CollectionName}: {Query}", collectionName, query);
+
+            // Build the inference URL with query parameters
+            var queryParams = new List<string>
+            {
+                $"query={Uri.EscapeDataString(query)}"
+            };
+
+            if (!string.IsNullOrEmpty(sessionId))
+            {
+                queryParams.Add($"session_id={Uri.EscapeDataString(sessionId)}");
+            }
+
+            if (!string.IsNullOrEmpty(sourceFiles))
+            {
+                queryParams.Add($"source_files={Uri.EscapeDataString(sourceFiles)}");
+            }
+
+            var inferenceUrl = $"api/v1/collections/{Uri.EscapeDataString(collectionName)}/inferences?{string.Join("&", queryParams)}";
+
+            try
+            {
+                var response = await _httpClient.PostAsync(inferenceUrl, null);
+                response.EnsureSuccessStatusCode();
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+
+                _logger.LogDebug("Received response from collection {CollectionName}: {Response}",
+                    collectionName,
+                    responseContent.Length > 500 ? responseContent.Substring(0, 500) + "..." : responseContent);
+
+                return ParseAskResponse(responseContent, query, sessionId);
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "Failed to communicate with DataLens inference endpoint for collection {CollectionName}",
+                    collectionName);
+                throw new InvalidOperationException($"Failed to communicate with AI assistant: {ex.Message}", ex);
+            }
+        }
+
+        private async Task<AIAssistantDocumentUploadResponse> UploadDocumentToCollectionAsync(
+            string collectionName, Stream fileStream, string fileName, string contentType)
+        {
+            _logger.LogInformation("Uploading document to collection {CollectionName}: {FileName}",
+                collectionName, fileName);
+
+            try
+            {
+                using var content = new MultipartFormDataContent();
+                var streamContent = new StreamContent(fileStream);
+                streamContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+                content.Add(streamContent, "file", fileName);
+
+                var uploadUrl = $"api/v1/collections/{Uri.EscapeDataString(collectionName)}/documents";
+                var response = await _httpClient.PostAsync(uploadUrl, content);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger.LogError("Document upload to collection {CollectionName} failed: {StatusCode} - {Error}",
+                        collectionName, response.StatusCode, errorContent);
+                    throw new InvalidOperationException($"Failed to upload document: {response.StatusCode} - {errorContent}");
+                }
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<DataLensDocumentUploadResponse>(responseContent, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                _logger.LogInformation("Document uploaded to collection {CollectionName}. Job ID: {JobId}",
+                    collectionName, result?.JobId);
+
+                return new AIAssistantDocumentUploadResponse
+                {
+                    JobId = result?.JobId,
+                    Status = result?.Status ?? "pending",
+                    Message = "Document submitted for processing",
+                    DocumentId = result?.Document,
+                    CollectionName = result?.CollectionName ?? collectionName
+                };
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "Network error uploading document to collection {CollectionName}", collectionName);
+                throw new InvalidOperationException($"Network error uploading document: {ex.Message}", ex);
+            }
         }
 
         #endregion
@@ -265,7 +299,8 @@ namespace XR50TrainingAssetRepo.Services
                     Text = apiResponse?.Response?.Speech?.Text,
                     AudioUrl = apiResponse?.Response?.Speech?.Link,
                     Sources = apiResponse?.Sources,
-                    Markdown = apiResponse?.Response?.Markdown
+                    Markdown = apiResponse?.Response?.Markdown,
+                    CollectionName = apiResponse?.CollectionName
                 };
             }
             catch (JsonException ex)
@@ -291,6 +326,9 @@ namespace XR50TrainingAssetRepo.Services
 
             [JsonPropertyName("query")]
             public string? Query { get; set; }
+
+            [JsonPropertyName("collection_name")]
+            public string? CollectionName { get; set; }
 
             [JsonPropertyName("response")]
             public AIAssistantApiResponseContent? Response { get; set; }
@@ -321,21 +359,6 @@ namespace XR50TrainingAssetRepo.Services
 
             [JsonPropertyName("link")]
             public string? Link { get; set; }
-        }
-
-        private class AIAssistantDocumentApiResponse
-        {
-            [JsonPropertyName("job_id")]
-            public string? JobId { get; set; }
-
-            [JsonPropertyName("status")]
-            public string? Status { get; set; }
-
-            [JsonPropertyName("message")]
-            public string? Message { get; set; }
-
-            [JsonPropertyName("document_id")]
-            public string? DocumentId { get; set; }
         }
 
         #endregion

@@ -58,6 +58,7 @@ namespace XR50TrainingAssetRepo.Services
         private readonly IStorageService _storageService; // Unified storage interface
         private readonly IChatbotApiService _chatbotApiService;
         private readonly ILogger<AssetService> _logger;
+        private readonly string _defaultCollectionName;
 
         public AssetService(
             IConfiguration configuration,
@@ -75,6 +76,9 @@ namespace XR50TrainingAssetRepo.Services
             _storageService = storageService;
             _chatbotApiService = chatbotApiService;
             _logger = logger;
+            _defaultCollectionName = configuration["ChatbotApi:DefaultCollectionName"]
+                ?? Environment.GetEnvironmentVariable("CHATBOT_API_DEFAULT_COLLECTION")
+                ?? "pdf_knowledge_base";
         }
 
         public async Task<IEnumerable<Asset>> GetAllAssetsAsync()
@@ -991,19 +995,15 @@ namespace XR50TrainingAssetRepo.Services
 
             try
             {
-                var jobId = await _chatbotApiService.SubmitDocumentAsync(assetId, asset.URL, asset.Filetype ?? "pdf");
-                asset.JobId = jobId;
+                // Resolve collection name: check if asset belongs to an AIAssistantMaterial
+                var collectionName = await ResolveCollectionNameForAssetAsync(context, assetId);
 
-                if (jobId.StartsWith("duplicate-accepted-"))
-                {
-                    asset.AiAvailable = "ready";
-                    _logger.LogInformation("Asset {AssetId} already exists in AI service, marked as ready", assetId);
-                }
-                else
-                {
-                    asset.AiAvailable = "process";
-                    _logger.LogInformation("Submitted asset {AssetId} for AI processing. Job ID: {JobId}", assetId, jobId);
-                }
+                var jobId = await _chatbotApiService.SubmitDocumentAsync(assetId, asset.URL, asset.Filetype ?? "pdf", collectionName);
+                asset.JobId = jobId;
+                asset.AiAvailable = "process";
+
+                _logger.LogInformation("Submitted asset {AssetId} to collection {CollectionName} for AI processing. Job ID: {JobId}",
+                    assetId, collectionName, jobId);
 
                 await context.SaveChangesAsync();
 
@@ -1033,6 +1033,9 @@ namespace XR50TrainingAssetRepo.Services
                 return 0;
             }
 
+            // Build asset-to-collection mapping
+            var assetCollectionMap = await BuildAssetCollectionMapAsync(context, processingAssets.Select(a => a.Id).ToList());
+
             var updatedCount = 0;
 
             foreach (var asset in processingAssets)
@@ -1042,12 +1045,13 @@ namespace XR50TrainingAssetRepo.Services
 
                 try
                 {
-                    var status = await _chatbotApiService.GetJobStatusAsync(asset.JobId!);
+                    var collectionName = assetCollectionMap.GetValueOrDefault(asset.Id, _defaultCollectionName);
+                    var status = await _chatbotApiService.GetJobStatusAsync(asset.JobId!, collectionName);
 
                     _logger.LogInformation("Asset {AssetId} status check returned: Status='{Status}'",
                         asset.Id, status.Status);
 
-                    if (status.Status == "success")
+                    if (status.Status == "completed")
                     {
                         asset.AiAvailable = "ready";
                         updatedCount++;
@@ -1103,6 +1107,49 @@ namespace XR50TrainingAssetRepo.Services
                 .Where(a => a.AiAvailable == "process" && !string.IsNullOrEmpty(a.JobId))
                 .OrderBy(a => a.Filename)
                 .ToListAsync();
+        }
+
+        /// <summary>
+        /// Resolves the DataLens collection name for an asset by finding its owning AIAssistantMaterial.
+        /// Falls back to the default collection if the asset is not associated with any material.
+        /// </summary>
+        private async Task<string> ResolveCollectionNameForAssetAsync(XR50TrainingContext context, int assetId)
+        {
+            var aiAssistantMaterial = await context.Materials
+                .OfType<AIAssistantMaterial>()
+                .Where(m => m.AIAssistantAssetIds != null && m.AIAssistantAssetIds.Contains(assetId.ToString()))
+                .FirstOrDefaultAsync();
+
+            if (aiAssistantMaterial?.CollectionName != null)
+            {
+                return aiAssistantMaterial.CollectionName;
+            }
+
+            return _defaultCollectionName;
+        }
+
+        /// <summary>
+        /// Builds a mapping of asset IDs to their DataLens collection names.
+        /// </summary>
+        private async Task<Dictionary<int, string>> BuildAssetCollectionMapAsync(XR50TrainingContext context, List<int> assetIds)
+        {
+            var map = new Dictionary<int, string>();
+
+            var aiAssistantMaterials = await context.Materials
+                .OfType<AIAssistantMaterial>()
+                .Where(m => m.AIAssistantAssetIds != null && m.CollectionName != null)
+                .ToListAsync();
+
+            foreach (var material in aiAssistantMaterials)
+            {
+                var materialAssetIds = material.GetAssetIdsList();
+                foreach (var assetId in materialAssetIds.Where(id => assetIds.Contains(id)))
+                {
+                    map[assetId] = material.CollectionName!;
+                }
+            }
+
+            return map;
         }
 
         #endregion

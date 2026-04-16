@@ -2,29 +2,21 @@
 
 ## Active Workarounds
 
+(none)
+
+## Resolved
+
 ### CHAT-001: Chatbot API duplicate filename rejection
 
 **Date**: 2026-02-28
-**Status**: Active workaround — revert when upstream is fixed
-**Affected files**:
-- `Services/ChatbotApiService.cs`
-- `Services/XR50AssetService.cs`
-- `Services/Materials/AIAssistantMaterialService.cs`
+**Resolved**: 2026-04-16 (DataLens API v1.1.0 migration)
+**Status**: Resolved
 
 **Problem**:
-The external AI service rejects document submissions when a file with the same filename already exists in the collection, regardless of whether the content is different. The API returns:
+The external AI service rejected document submissions when a file with the same filename already existed in the collection.
 
-```
-400 BadRequest
-{"detail": "Document '<filename>' already exists in collection '<collection>'. Use PUT to update."}
-```
-
-This blocks re-uploading or uploading different files that happen to share a name.
-
-**Workaround**:
-The `ChatbotApiService.SubmitDocumentAsync` method catches this specific `400 BadRequest` response and treats it as a successful submission, returning a synthetic job ID (`duplicate-accepted-{assetId}`). The callers in `XR50AssetService` and `AIAssistantMaterialService` detect this synthetic ID and mark the asset as `"ready"` immediately instead of `"process"`.
-
-**This is not correct behavior.** It assumes the previously uploaded document is acceptable, which may not be true if the user intended to replace it with different content.
+**Previous Workaround**:
+`ChatbotApiService.SubmitDocumentAsync` caught the `400 BadRequest` and returned a synthetic job ID (`duplicate-accepted-{assetId}`), treating it as success.
 
 **Resolution**:
-Once the upstream AI service supports `PUT` for updating existing documents, this workaround should be removed and replaced with proper update logic. Search for `duplicate-accepted-` across the codebase to find all related code.
+The DataLens API v1.1.0 now supports `PUT /api/v1/collections/{collection_name}/documents/{document_name}` for updating existing documents. `ChatbotApiService.SubmitDocumentAsync` checks if a document exists and uses PUT (update) or POST (create) accordingly. The synthetic `duplicate-accepted-` job ID pattern and all associated caller detection code has been removed.

@@ -37,7 +37,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string? Text { get; set; }
 
         /// <summary>
-        /// URL to the WAV audio file.
+        /// URL to the audio file.
         /// </summary>
         public string? AudioUrl { get; set; }
 
@@ -50,6 +50,11 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         /// Additional markdown content (if available).
         /// </summary>
         public string? Markdown { get; set; }
+
+        /// <summary>
+        /// The DataLens collection that was queried.
+        /// </summary>
+        public string? CollectionName { get; set; }
     }
 
     /// <summary>
@@ -73,9 +78,14 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string? Message { get; set; }
 
         /// <summary>
-        /// Document ID if assigned.
+        /// Document name/ID if assigned.
         /// </summary>
         public string? DocumentId { get; set; }
+
+        /// <summary>
+        /// The DataLens collection the document was uploaded to.
+        /// </summary>
+        public string? CollectionName { get; set; }
     }
 
     /// <summary>

@@ -24,6 +24,7 @@ namespace XR50TrainingAssetRepo.Services
         // Polling intervals
         private readonly TimeSpan _activePollingInterval;
         private readonly TimeSpan _idleCheckInterval;
+        private readonly string _defaultCollectionName;
 
         public AiStatusSyncService(
             IServiceProvider serviceProvider,
@@ -41,6 +42,10 @@ namespace XR50TrainingAssetRepo.Services
             // Idle check: when no jobs are processing (default 5 minutes)
             var idleMinutes = configuration.GetValue<int>("AiStatusSync:IdleIntervalMinutes", 5);
             _idleCheckInterval = TimeSpan.FromMinutes(idleMinutes);
+
+            _defaultCollectionName = configuration["ChatbotApi:DefaultCollectionName"]
+                ?? Environment.GetEnvironmentVariable("CHATBOT_API_DEFAULT_COLLECTION")
+                ?? "pdf_knowledge_base";
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -146,6 +151,9 @@ namespace XR50TrainingAssetRepo.Services
             _logger.LogDebug("Checking {Count} processing assets for tenant {Tenant}",
                 processingAssets.Count, tenantName);
 
+            // Build asset-to-collection mapping from AIAssistantMaterials
+            var assetCollectionMap = await BuildAssetCollectionMapAsync(context, processingAssets.Select(a => a.Id).ToList());
+
             var updatedAssetIds = new List<int>();
             var stillProcessingCount = 0;
 
@@ -153,9 +161,10 @@ namespace XR50TrainingAssetRepo.Services
             {
                 try
                 {
-                    var status = await chatbotApiService.GetJobStatusAsync(asset.JobId!);
+                    var collectionName = assetCollectionMap.GetValueOrDefault(asset.Id, _defaultCollectionName);
+                    var status = await chatbotApiService.GetJobStatusAsync(asset.JobId!, collectionName);
 
-                    if (status.Status == "success")
+                    if (status.Status == "completed")
                     {
                         asset.AiAvailable = "ready";
                         updatedAssetIds.Add(asset.Id);
@@ -249,6 +258,30 @@ namespace XR50TrainingAssetRepo.Services
             }
 
             await context.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Builds a mapping of asset IDs to their DataLens collection names from AIAssistantMaterials.
+        /// </summary>
+        private async Task<Dictionary<int, string>> BuildAssetCollectionMapAsync(XR50TrainingContext context, List<int> assetIds)
+        {
+            var map = new Dictionary<int, string>();
+
+            var aiAssistantMaterials = await context.Materials
+                .OfType<AIAssistantMaterial>()
+                .Where(m => m.AIAssistantAssetIds != null && m.CollectionName != null)
+                .ToListAsync();
+
+            foreach (var material in aiAssistantMaterials)
+            {
+                var materialAssetIds = material.GetAssetIdsList();
+                foreach (var assetId in materialAssetIds.Where(id => assetIds.Contains(id)))
+                {
+                    map[assetId] = material.CollectionName!;
+                }
+            }
+
+            return map;
         }
 
         /// <summary>
