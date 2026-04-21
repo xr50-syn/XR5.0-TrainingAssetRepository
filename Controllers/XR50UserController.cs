@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Services;
+using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
@@ -64,7 +65,7 @@ namespace XR50TrainingAssetRepo.Controllers
             if (user == null)
             {
                 _logger.LogWarning("User {UserName} not found in tenant: {TenantName}", userName, tenantName);
-                return NotFound();
+                return this.ProblemNotFound($"User '{userName}' not found.");
             }
 
             return user;
@@ -80,13 +81,13 @@ namespace XR50TrainingAssetRepo.Controllers
             if (string.IsNullOrWhiteSpace(user.UserName))
             {
                 _logger.LogWarning("User creation failed: UserName is required for tenant: {TenantName}", tenantName);
-                return BadRequest(new { Error = "UserName is required" });
+                return this.ProblemBadRequest("UserName is required.");
             }
 
             if (string.IsNullOrWhiteSpace(user.Password))
             {
                 _logger.LogWarning("User creation failed: Password is required for tenant: {TenantName}", tenantName);
-                return BadRequest(new { Error = "Password is required" });
+                return this.ProblemBadRequest("Password is required.");
             }
 
             try
@@ -99,7 +100,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 {
                     _logger.LogWarning("User creation failed: UserName '{UserName}' already exists for tenant: {TenantName}",
                         user.UserName, tenantName);
-                    return Conflict(new { Error = $"User '{user.UserName}' already exists" });
+                    return this.ProblemConflict($"User '{user.UserName}' already exists.");
                 }
 
                 context.Users.Add(user);
@@ -137,7 +138,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating user {UserName} for tenant: {TenantName}", user.UserName, tenantName);
-                return StatusCode(500, new { Error = "Failed to create user", Details = ex.Message });
+                return this.ProblemServerError("Failed to create user.");
             }
         }
 
@@ -156,7 +157,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 if (existingUser == null)
                 {
                     _logger.LogWarning("User {UserName} not found for update in tenant: {TenantName}", userName, tenantName);
-                    return NotFound(new { Error = $"User '{userName}' not found" });
+                    return this.ProblemNotFound($"User '{userName}' not found.");
                 }
 
                 // 2. Apply partial updates (only update non-null/non-empty fields from request)
@@ -208,12 +209,12 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (DbUpdateConcurrencyException ex)
             {
                 _logger.LogWarning(ex, "Concurrency conflict updating user {UserName} for tenant: {TenantName}", userName, tenantName);
-                return Conflict(new { Error = "The user was modified by another request. Please retry." });
+                return this.ProblemConflict("The user was modified by another request. Please retry.");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error updating user {UserName} for tenant: {TenantName}", userName, tenantName);
-                return StatusCode(500, new { Error = "Failed to update user", Details = ex.Message });
+                return this.ProblemServerError("Failed to update user.");
             }
         }
 
@@ -248,7 +249,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 var user = await context.Users.FindAsync(userName);
                 if (user == null)
                 {
-                    return NotFound();
+                    return this.ProblemNotFound($"User '{userName}' not found.");
                 }
 
                 context.Users.Remove(user);
@@ -261,7 +262,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error deleting user {UserName} for tenant: {TenantName}", userName, tenantName);
-                return StatusCode(500, new { Error = "Failed to delete user", Details = ex.Message });
+                return this.ProblemServerError("Failed to delete user.");
             }
         }
 

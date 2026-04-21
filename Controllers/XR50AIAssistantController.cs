@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services;
 using XR50TrainingAssetRepo.Services.Materials;
+using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
@@ -41,7 +42,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
             if (string.IsNullOrWhiteSpace(request.Query))
             {
-                return BadRequest(new { Error = "Query cannot be empty" });
+                return this.ProblemBadRequest("Query cannot be empty.");
             }
 
             try
@@ -55,12 +56,12 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (InvalidOperationException ex)
             {
                 _logger.LogError(ex, "AI assistant operation failed");
-                return BadRequest(new { Error = ex.Message });
+                return this.ProblemBadRequest(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unexpected error in AI assistant");
-                return StatusCode(500, new { Error = "Internal server error" });
+                return this.ProblemServerError("Internal server error.");
             }
         }
 
@@ -102,7 +103,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
             if (file == null || file.Length == 0)
             {
-                return BadRequest(new { Error = "No file provided" });
+                return this.ProblemBadRequest("No file provided.");
             }
 
             try
@@ -118,12 +119,12 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (InvalidOperationException ex)
             {
                 _logger.LogError(ex, "Document upload failed");
-                return BadRequest(new { Error = ex.Message });
+                return this.ProblemBadRequest(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unexpected error uploading document");
-                return StatusCode(500, new { Error = "Internal server error" });
+                return this.ProblemServerError("Internal server error.");
             }
         }
 
@@ -170,7 +171,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
             if (string.IsNullOrWhiteSpace(request.Query))
             {
-                return BadRequest(new { Error = "Query cannot be empty" });
+                return this.ProblemBadRequest("Query cannot be empty.");
             }
 
             try
@@ -185,17 +186,17 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (KeyNotFoundException ex)
             {
                 _logger.LogWarning("AIAssistantMaterial {AIAssistantId} not found in tenant {TenantName}", aiAssistantId, tenantName);
-                return NotFound(new { Error = ex.Message });
+                return this.ProblemNotFound(ex.Message);
             }
             catch (InvalidOperationException ex)
             {
                 _logger.LogError(ex, "AI assistant operation failed for material {AIAssistantId}", aiAssistantId);
-                return BadRequest(new { Error = ex.Message });
+                return this.ProblemBadRequest(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unexpected error in AI assistant for material {AIAssistantId}", aiAssistantId);
-                return StatusCode(500, new { Error = "Internal server error" });
+                return this.ProblemServerError("Internal server error.");
             }
         }
 
@@ -241,7 +242,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
             if (file == null || file.Length == 0)
             {
-                return BadRequest(new { Error = "No file provided" });
+                return this.ProblemBadRequest("No file provided.");
             }
 
             try
@@ -258,17 +259,17 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (KeyNotFoundException ex)
             {
                 _logger.LogWarning("AIAssistantMaterial {AIAssistantId} not found in tenant {TenantName}", aiAssistantId, tenantName);
-                return NotFound(new { Error = ex.Message });
+                return this.ProblemNotFound(ex.Message);
             }
             catch (InvalidOperationException ex)
             {
                 _logger.LogError(ex, "Document upload failed for material {AIAssistantId}", aiAssistantId);
-                return BadRequest(new { Error = ex.Message });
+                return this.ProblemBadRequest(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unexpected error uploading document to material {AIAssistantId}", aiAssistantId);
-                return StatusCode(500, new { Error = "Internal server error" });
+                return this.ProblemServerError("Internal server error.");
             }
         }
 
@@ -298,12 +299,12 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (KeyNotFoundException ex)
             {
                 _logger.LogWarning("AIAssistantMaterial {AIAssistantId} not found in tenant {TenantName}", aiAssistantId, tenantName);
-                return NotFound(new { Error = ex.Message });
+                return this.ProblemNotFound(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unexpected error getting documents for material {AIAssistantId}", aiAssistantId);
-                return StatusCode(500, new { Error = "Internal server error" });
+                return this.ProblemServerError("Internal server error.");
             }
         }
 
@@ -375,7 +376,7 @@ namespace XR50TrainingAssetRepo.Controllers
             if (material == null)
             {
                 _logger.LogWarning("AIAssistantMaterial {AIAssistantId} not found in tenant: {TenantName}", aiAssistantId, tenantName);
-                return NotFound(new { Error = $"AIAssistantMaterial with ID {aiAssistantId} not found" });
+                return this.ProblemNotFound($"AIAssistantMaterial with ID {aiAssistantId} not found.");
             }
 
             // Get active session info
@@ -413,7 +414,7 @@ namespace XR50TrainingAssetRepo.Controllers
             var material = await _aiAssistantMaterialService.GetByIdAsync(aiAssistantId);
             if (material == null)
             {
-                return NotFound(new { Error = $"AIAssistantMaterial with ID {aiAssistantId} not found" });
+                return this.ProblemNotFound($"AIAssistantMaterial with ID {aiAssistantId} not found.");
             }
 
             await _aiAssistantMaterialService.InvalidateSessionAsync(aiAssistantId);

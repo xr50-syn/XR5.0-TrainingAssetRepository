@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services;
+using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
@@ -42,7 +43,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving tenants");
-                return StatusCode(500, new { Error = "Failed to retrieve tenants", Details = ex.Message });
+                return this.ProblemServerError("Failed to retrieve tenants.");
             }
         }
 
@@ -66,12 +67,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 {
                     _logger.LogWarning("Storage type mismatch: requested {RequestedType}, but server is configured for {RunningType}",
                         request.StorageType, runningStorageType);
-                    return BadRequest(new
-                    {
-                        Error = "Storage type mismatch",
-                        Message = $"This server is configured for {runningStorageType} storage. Cannot create tenant with {request.StorageType} storage.",
-                        ConfiguredStorageType = runningStorageType
-                    });
+                    return this.ProblemBadRequest($"Storage type mismatch. This server is configured for {runningStorageType} storage. Cannot create tenant with {request.StorageType} storage.");
                 }
 
                 // Create tenant object from request
@@ -130,17 +126,7 @@ namespace XR50TrainingAssetRepo.Controllers
                     var storageValidated = await _storageService.CreateTenantStorageAsync(request.TenantName, tenant);
                     if (!storageValidated)
                     {
-                        return BadRequest(new 
-                        { 
-                            Error = "Storage validation failed", 
-                            Message = $"Pre-provisioned S3 bucket '{tenant.S3BucketName}' is not accessible",
-                            Instructions = new[]
-                            {
-                                "1. Verify the bucket exists in the specified region",
-                                "2. Check IAM permissions for the application",
-                                "3. Ensure bucket name matches infrastructure configuration"
-                            }
-                        });
+                        return this.ProblemBadRequest($"Pre-provisioned S3 bucket '{tenant.S3BucketName}' is not accessible. Verify the bucket exists in the specified region, check IAM permissions, and ensure bucket name matches infrastructure configuration.");
                     }
                 }
                 else
@@ -161,17 +147,17 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (ArgumentException ex)
             {
                 _logger.LogWarning("Invalid request for tenant creation: {Error}", ex.Message);
-                return BadRequest(new { Error = "Invalid request", Details = ex.Message });
+                return this.ProblemBadRequest(ex.Message);
             }
             catch (InvalidOperationException ex)
             {
                 _logger.LogError("Tenant creation failed: {Error}", ex.Message);
-                return BadRequest(new { Error = "Tenant creation failed", Details = ex.Message });
+                return this.ProblemBadRequest($"Tenant creation failed: {ex.Message}");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unexpected error creating tenant: {TenantName}", request.TenantName);
-                return StatusCode(500, new { Error = "Tenant creation failed", Details = ex.Message });
+                return this.ProblemServerError("Tenant creation failed.");
             }
         }
 
@@ -189,16 +175,16 @@ namespace XR50TrainingAssetRepo.Controllers
                 if (tenant == null)
                 {
                     _logger.LogWarning("Tenant not found: {TenantName}", tenantName);
-                    return NotFound(new { Error = $"Tenant '{tenantName}' not found" });
+                    return this.ProblemNotFound($"Tenant '{tenantName}' not found.");
                 }
-                
+
                 var response = TenantResponse.FromTenant(tenant);
                 return Ok(response);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving tenant: {TenantName}", tenantName);
-                return StatusCode(500, new { Error = "Failed to retrieve tenant", Details = ex.Message });
+                return this.ProblemServerError("Failed to retrieve tenant.");
             }
         }
 
@@ -225,7 +211,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error deleting tenant: {TenantName}", tenantName);
-                return StatusCode(500, new { Error = "Failed to delete tenant", Details = ex.Message });
+                return this.ProblemServerError("Failed to delete tenant.");
             }
         }
 
@@ -242,7 +228,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 var tenant = await _tenantManagementService.GetTenantAsync(tenantName);
                 if (tenant == null)
                 {
-                    return NotFound(new { Error = $"Tenant '{tenantName}' not found" });
+                    return this.ProblemNotFound($"Tenant '{tenantName}' not found.");
                 }
 
                 var validationResult = await _storageService.TenantStorageExistsAsync(tenantName);
@@ -283,13 +269,13 @@ namespace XR50TrainingAssetRepo.Controllers
                 else
                 {
                     _logger.LogWarning("Storage validation failed for tenant: {TenantName}", tenantName);
-                    return BadRequest(response);
+                    return this.ProblemBadRequest($"Storage validation failed for tenant '{tenantName}'.");
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error validating storage for tenant: {TenantName}", tenantName);
-                return StatusCode(500, new { Error = "Storage validation failed", Details = ex.Message });
+                return this.ProblemServerError("Storage validation failed.");
             }
         }
 
@@ -306,7 +292,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 var tenant = await _tenantManagementService.GetTenantAsync(tenantName);
                 if (tenant == null)
                 {
-                    return NotFound(new { Error = $"Tenant '{tenantName}' not found" });
+                    return this.ProblemNotFound($"Tenant '{tenantName}' not found.");
                 }
 
                 var statistics = await _storageService.GetStorageStatisticsAsync(tenantName);
@@ -345,7 +331,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting storage statistics for tenant: {TenantName}", tenantName);
-                return StatusCode(500, new { Error = "Failed to get storage statistics", Details = ex.Message });
+                return this.ProblemServerError("Failed to get storage statistics.");
             }
         }
        

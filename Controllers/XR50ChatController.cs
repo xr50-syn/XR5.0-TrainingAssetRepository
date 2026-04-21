@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services;
 using XR50TrainingAssetRepo.Services.Materials;
+using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
@@ -39,7 +40,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
             if (string.IsNullOrWhiteSpace(request.Query))
             {
-                return BadRequest(new { Error = "Query cannot be empty" });
+                return this.ProblemBadRequest("Query cannot be empty.");
             }
 
             try
@@ -53,12 +54,12 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (InvalidOperationException ex)
             {
                 _logger.LogError(ex, "Chat operation failed");
-                return BadRequest(new { Error = ex.Message });
+                return this.ProblemBadRequest(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unexpected error in chat");
-                return StatusCode(500, new { Error = "Internal server error" });
+                return this.ProblemServerError("Internal server error.");
             }
         }
 
@@ -120,7 +121,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
             if (string.IsNullOrWhiteSpace(request.Query))
             {
-                return BadRequest(new { Error = "Query cannot be empty" });
+                return this.ProblemBadRequest("Query cannot be empty.");
             }
 
             try
@@ -135,17 +136,17 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (KeyNotFoundException ex)
             {
                 _logger.LogWarning("Chatbot {ChatbotId} not found in tenant {TenantName}", chatbotId, tenantName);
-                return NotFound(new { Error = ex.Message });
+                return this.ProblemNotFound(ex.Message);
             }
             catch (InvalidOperationException ex)
             {
                 _logger.LogError(ex, "Chat operation failed for chatbot {ChatbotId}", chatbotId);
-                return BadRequest(new { Error = ex.Message });
+                return this.ProblemBadRequest(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unexpected error in chat for chatbot {ChatbotId}", chatbotId);
-                return StatusCode(500, new { Error = "Internal server error" });
+                return this.ProblemServerError("Internal server error.");
             }
         }
 
@@ -215,7 +216,7 @@ namespace XR50TrainingAssetRepo.Controllers
             if (chatbot == null)
             {
                 _logger.LogWarning("Chatbot {ChatbotId} not found in tenant: {TenantName}", chatbotId, tenantName);
-                return NotFound(new { Error = $"Chatbot with ID {chatbotId} not found" });
+                return this.ProblemNotFound($"Chatbot with ID {chatbotId} not found.");
             }
 
             return Ok(new

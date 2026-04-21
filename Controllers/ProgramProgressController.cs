@@ -6,6 +6,7 @@ using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services;
 using XR50TrainingAssetRepo.Services.Materials;
+using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
@@ -54,12 +55,12 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (KeyNotFoundException ex)
             {
                 _logger.LogWarning("Program {ProgramId} not found: {Message}", programId, ex.Message);
-                return NotFound(new { error = ex.Message });
+                return this.ProblemNotFound(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting program progress for {ProgramId}", programId);
-                return StatusCode(500, new { error = "Failed to retrieve program progress" });
+                return this.ProblemServerError("Failed to retrieve program progress.");
             }
         }
 

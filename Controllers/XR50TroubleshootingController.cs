@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Services;
+using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
@@ -42,7 +43,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error diagnosing tenant {TenantName}", tenantName);
-                return StatusCode(500, $"Error diagnosing tenant: {ex.Message}");
+                return this.ProblemServerError($"Error diagnosing tenant '{tenantName}'.");
             }
         }
 
@@ -62,13 +63,13 @@ namespace XR50TrainingAssetRepo.Controllers
                 }
                 else
                 {
-                    return BadRequest(new { Message = $"Failed to repair tenant {tenantName}" });
+                    return this.ProblemBadRequest($"Failed to repair tenant '{tenantName}'.");
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error repairing tenant {TenantName}", tenantName);
-                return StatusCode(500, $"Error repairing tenant: {ex.Message}");
+                return this.ProblemServerError($"Error repairing tenant '{tenantName}'.");
             }
         }
 
@@ -91,7 +92,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error testing connection for tenant {TenantName}", tenantName);
-                return StatusCode(500, $"Error testing connection: {ex.Message}");
+                return this.ProblemServerError($"Error testing connection for tenant '{tenantName}'.");
             }
         }
 
@@ -109,7 +110,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting tenant databases");
-                return StatusCode(500, $"Error getting databases: {ex.Message}");
+                return this.ProblemServerError("Error getting tenant databases.");
             }
         }
 
@@ -144,7 +145,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating test tenant {TenantName}", tenantName);
-                return StatusCode(500, $"Error creating test tenant: {ex.Message}");
+                return this.ProblemServerError($"Error creating test tenant '{tenantName}'.");
             }
         }
 
@@ -181,7 +182,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error force recreating tenant {TenantName}", tenantName);
-                return StatusCode(500, $"Error force recreating tenant: {ex.Message}");
+                return this.ProblemServerError($"Error force recreating tenant '{tenantName}'.");
             }
         }
 
@@ -209,13 +210,13 @@ namespace XR50TrainingAssetRepo.Controllers
                 }
                 else
                 {
-                    return BadRequest(new { Message = $"Failed to create tables for tenant {tenantName}" });
+                    return this.ProblemBadRequest($"Failed to create tables for tenant '{tenantName}'.");
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error manually creating tables for tenant {TenantName}", tenantName);
-                return StatusCode(500, $"Error creating tables: {ex.Message}");
+                return this.ProblemServerError($"Error creating tables for tenant '{tenantName}'.");
             }
         }
 
@@ -240,13 +241,13 @@ namespace XR50TrainingAssetRepo.Controllers
                 }
                 else
                 {
-                    return BadRequest(new { Message = $"Failed to rebuild tenant database {tenantName}" });
+                    return this.ProblemBadRequest($"Failed to rebuild tenant database '{tenantName}'.");
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error rebuilding tenant database {TenantName}", tenantName);
-                return StatusCode(500, $"Error rebuilding database: {ex.Message}");
+                return this.ProblemServerError($"Error rebuilding database for tenant '{tenantName}'.");
             }
         }
 
@@ -268,7 +269,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting tables for tenant {TenantName}", tenantName);
-                return StatusCode(500, $"Error getting tables: {ex.Message}");
+                return this.ProblemServerError($"Error getting tables for tenant '{tenantName}'.");
             }
         }
 
@@ -293,13 +294,13 @@ namespace XR50TrainingAssetRepo.Controllers
                 }
                 else
                 {
-                    return BadRequest(new { Message = $"Failed to delete tenant database {tenantName}" });
+                    return this.ProblemBadRequest($"Failed to delete tenant database '{tenantName}'.");
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error deleting tenant database {TenantName}", tenantName);
-                return StatusCode(500, $"Error deleting database: {ex.Message}");
+                return this.ProblemServerError($"Error deleting database for tenant '{tenantName}'.");
             }
         }
 
@@ -323,7 +324,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error completely deleting tenant {TenantName}", tenantName);
-                return StatusCode(500, $"Error deleting tenant: {ex.Message}");
+                return this.ProblemServerError($"Error completely deleting tenant '{tenantName}'.");
             }
         }
 
@@ -357,7 +358,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error performing health check");
-                return StatusCode(500, $"Error performing health check: {ex.Message}");
+                return this.ProblemServerError("Error performing health check.");
             }
         }
 
@@ -382,13 +383,13 @@ namespace XR50TrainingAssetRepo.Controllers
                 }
                 else
                 {
-                    return BadRequest(new { Message = $"Failed to migrate Annotations columns for tenant {tenantName}" });
+                    return this.ProblemBadRequest($"Failed to migrate Annotations columns for tenant '{tenantName}'.");
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error migrating Annotations columns for tenant {TenantName}", tenantName);
-                return StatusCode(500, $"Error migrating columns: {ex.Message}");
+                return this.ProblemServerError($"Error migrating Annotations columns for tenant '{tenantName}'.");
             }
         }
 
@@ -413,13 +414,13 @@ namespace XR50TrainingAssetRepo.Controllers
                 }
                 else
                 {
-                    return BadRequest(new { Message = $"Failed to migrate QuizAnswers table for tenant {tenantName}" });
+                    return this.ProblemBadRequest($"Failed to migrate QuizAnswers table for tenant '{tenantName}'.");
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error migrating QuizAnswers table for tenant {TenantName}", tenantName);
-                return StatusCode(500, $"Error migrating QuizAnswers table: {ex.Message}");
+                return this.ProblemServerError($"Error migrating QuizAnswers table for tenant '{tenantName}'.");
             }
         }
 
@@ -444,13 +445,13 @@ namespace XR50TrainingAssetRepo.Controllers
                 }
                 else
                 {
-                    return BadRequest(new { Message = $"Failed to migrate Quiz evaluation columns for tenant {tenantName}" });
+                    return this.ProblemBadRequest($"Failed to migrate Quiz evaluation columns for tenant '{tenantName}'.");
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error migrating Quiz evaluation columns for tenant {TenantName}", tenantName);
-                return StatusCode(500, $"Error migrating Quiz evaluation columns: {ex.Message}");
+                return this.ProblemServerError($"Error migrating Quiz evaluation columns for tenant '{tenantName}'.");
             }
         }
     }

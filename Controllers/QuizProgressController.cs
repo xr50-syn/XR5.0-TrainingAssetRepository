@@ -6,6 +6,7 @@ using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services;
 using XR50TrainingAssetRepo.Services.Materials;
+using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
@@ -52,7 +53,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting tenant quiz progress for {TenantName}", tenantName);
-                return StatusCode(500, new { Error = "Failed to retrieve quiz progress" });
+                return this.ProblemServerError("Failed to retrieve quiz progress.");
             }
         }
 
@@ -81,12 +82,12 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (KeyNotFoundException ex)
             {
                 _logger.LogWarning("Training program {ProgramId} not found: {Message}", programId, ex.Message);
-                return NotFound(new { Error = ex.Message });
+                return this.ProblemNotFound(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting program quiz progress for {ProgramId}", programId);
-                return StatusCode(500, new { Error = "Failed to retrieve quiz progress" });
+                return this.ProblemServerError("Failed to retrieve quiz progress.");
             }
         }
 
@@ -115,12 +116,12 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (KeyNotFoundException ex)
             {
                 _logger.LogWarning("Learning path {LearningPathId} not found: {Message}", learningPathId, ex.Message);
-                return NotFound(new { Error = ex.Message });
+                return this.ProblemNotFound(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting learning path quiz progress for {LearningPathId}", learningPathId);
-                return StatusCode(500, new { Error = "Failed to retrieve quiz progress" });
+                return this.ProblemServerError("Failed to retrieve quiz progress.");
             }
         }
 
@@ -149,12 +150,12 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (KeyNotFoundException ex)
             {
                 _logger.LogWarning("Quiz material {MaterialId} not found: {Message}", materialId, ex.Message);
-                return NotFound(new { Error = ex.Message });
+                return this.ProblemNotFound(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting material quiz progress for {MaterialId}", materialId);
-                return StatusCode(500, new { Error = "Failed to retrieve quiz progress" });
+                return this.ProblemServerError("Failed to retrieve quiz progress.");
             }
         }
 

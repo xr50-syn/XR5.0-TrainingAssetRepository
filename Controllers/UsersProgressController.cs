@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services.Materials;
+using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
@@ -35,7 +36,7 @@ namespace XR50TrainingAssetRepo.Controllers
             {
                 if (string.IsNullOrEmpty(userId))
                 {
-                    return BadRequest(new { error = "userId is required" });
+                    return this.ProblemBadRequest("userId is required.");
                 }
 
                 var result = await _userMaterialService.GetUserProgressAsync(userId);
@@ -44,12 +45,12 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (ArgumentException ex)
             {
                 _logger.LogWarning(ex, "User not found");
-                return NotFound(new { error = ex.Message });
+                return this.ProblemNotFound(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting user progress");
-                return StatusCode(500, new { error = "Failed to get progress" });
+                return this.ProblemServerError("Failed to get progress.");
             }
         }
 
@@ -70,7 +71,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting all users progress");
-                return StatusCode(500, new { error = "Failed to get users progress" });
+                return this.ProblemServerError("Failed to get users progress.");
             }
         }
 
@@ -91,7 +92,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
                 if (result == null)
                 {
-                    return NotFound(new { error = "No data found for this user/material combination" });
+                    return this.ProblemNotFound("No data found for this user/material combination.");
                 }
 
                 return Ok(result);
@@ -99,7 +100,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting material detail for user {UserId}", userId);
-                return StatusCode(500, new { error = "Failed to get material detail" });
+                return this.ProblemServerError("Failed to get material detail.");
             }
         }
 
@@ -120,7 +121,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
                 if (result == null)
                 {
-                    return NotFound(new { error = "Program not found or no data for user" });
+                    return this.ProblemNotFound("Program not found or no data for user.");
                 }
 
                 return Ok(result);
@@ -128,7 +129,7 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting program materials for user {UserId}", userId);
-                return StatusCode(500, new { error = "Failed to get program materials" });
+                return this.ProblemServerError("Failed to get program materials.");
             }
         }
 

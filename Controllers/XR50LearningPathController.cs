@@ -9,6 +9,7 @@ using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Services;
 using XR50TrainingAssetRepo.Services.Materials;
+using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
@@ -62,7 +63,7 @@ namespace XR50TrainingAssetRepo.Controllers
             if (learningPath == null)
             {
                 _logger.LogWarning("Learning path {Id} not found in tenant: {TenantName}", id, tenantName);
-                return NotFound();
+                return this.ProblemNotFound($"Learning path with ID {id} not found.");
             }
 
             return learningPath;
@@ -91,7 +92,7 @@ namespace XR50TrainingAssetRepo.Controllers
         {
             if (id != learningPath.id)
             {
-                return BadRequest("ID mismatch");
+                return this.ProblemBadRequest("ID mismatch.");
             }
 
             _logger.LogInformation("Updating learning path {Id} for tenant: {TenantName}", id, tenantName);
@@ -105,7 +106,7 @@ namespace XR50TrainingAssetRepo.Controllers
             {
                 if (!await _learningPathService.LearningPathExistsAsync(id))
                 {
-                    return NotFound();
+                    return this.ProblemNotFound($"Learning path with ID {id} not found.");
                 }
                 else
                 {
@@ -126,7 +127,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
             if (!deleted)
             {
-                return NotFound();
+                return this.ProblemNotFound($"Learning path with ID {id} not found.");
             }
 
             _logger.LogInformation("Deleted learning path {Id} for tenant: {TenantName}", id, tenantName);
@@ -160,7 +161,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
             if (!success)
             {
-                return BadRequest("Association already exists or entities not found");
+                return this.ProblemBadRequest("Association already exists or entities not found.");
             }
 
             _logger.LogInformation("Successfully assigned learning path {LearningPathId} to training program {TrainingProgramId} for tenant: {TenantName}",
@@ -180,7 +181,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
             if (!success)
             {
-                return NotFound("Association not found");
+                return this.ProblemNotFound("Association not found.");
             }
 
             _logger.LogInformation("Successfully removed learning path {LearningPathId} from training program {TrainingProgramId} for tenant: {TenantName}",
@@ -203,7 +204,7 @@ namespace XR50TrainingAssetRepo.Controllers
             var learningPath = await _learningPathService.GetLearningPathAsync(learningPathId);
             if (learningPath == null)
             {
-                return NotFound($"Learning path {learningPathId} not found");
+                return this.ProblemNotFound($"Learning path {learningPathId} not found.");
             }
 
             var materials = await _materialRelationshipService.GetMaterialsByLearningPathAsync(learningPathId, includeOrder);
@@ -245,11 +246,11 @@ namespace XR50TrainingAssetRepo.Controllers
             }
             catch (ArgumentException ex)
             {
-                return BadRequest(ex.Message);
+                return this.ProblemBadRequest(ex.Message);
             }
         }
 
-       
+
         /// Remove a material from this learning path
         
         [HttpDelete("{learningPathId}/remove-material/{materialId}")]
@@ -265,7 +266,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
             if (!success)
             {
-                return NotFound("Material assignment not found");
+                return this.ProblemNotFound("Material assignment not found.");
             }
 
             _logger.LogInformation("Successfully removed material {MaterialId} from learning path {LearningPathId} for tenant: {TenantName}",
@@ -290,7 +291,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
             if (!success)
             {
-                return BadRequest("Failed to reorder materials");
+                return this.ProblemBadRequest("Failed to reorder materials.");
             }
 
             _logger.LogInformation("Successfully reordered materials in learning path {LearningPathId} for tenant: {TenantName}",
@@ -361,12 +362,12 @@ namespace XR50TrainingAssetRepo.Controllers
             catch (ArgumentException ex)
             {
                 _logger.LogWarning(ex, "Invalid request for creating complete learning path: {Name}", request.LearningPathName);
-                return BadRequest(ex.Message);
+                return this.ProblemBadRequest(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to create complete learning path: {Name}", request.LearningPathName);
-                return StatusCode(500, new { Error = "Failed to create learning path", Details = ex.Message });
+                return this.ProblemServerError("Failed to create learning path.");
             }
         }
 
@@ -385,7 +386,7 @@ namespace XR50TrainingAssetRepo.Controllers
             if (result == null)
             {
                 _logger.LogWarning("Learning path {Id} not found in tenant: {TenantName}", id, tenantName);
-                return NotFound();
+                return this.ProblemNotFound($"Learning path with ID {id} not found.");
             }
 
             _logger.LogInformation("Retrieved complete learning path {Id}: {MaterialCount} materials, {ProgramCount} training programs",
@@ -420,7 +421,7 @@ namespace XR50TrainingAssetRepo.Controllers
             var learningPath = await _learningPathService.GetLearningPathAsync(learningPathId);
             if (learningPath == null)
             {
-                return NotFound($"Learning path {learningPathId} not found");
+                return this.ProblemNotFound($"Learning path {learningPathId} not found.");
             }
 
             var results = new List<MaterialAssignmentResult>();
