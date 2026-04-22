@@ -2554,9 +2554,11 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 if (TryGetPropertyCaseInsensitive(jsonElement, "unique_id", out var uniqueIdProp) && uniqueIdProp.ValueKind == JsonValueKind.Number)
                     aiAssistant.Unique_id = uniqueIdProp.GetInt32();
 
-                // Parse asset IDs from JSON.
-                // Primary shape is config.assets[].id (id may be numeric or a numeric string,
-                // e.g. DataLens-style payloads). Top-level assetIds / asset_ids are kept as fallbacks.
+                // Parse asset IDs from JSON. Accepted shapes, in priority order:
+                //   1. config.assets[].id      (nested, DataLens-style)
+                //   2. assets[].id             (same element shape, top-level)
+                //   3. assetIds / asset_ids    (flat id arrays, legacy)
+                // In all shapes, id may be numeric or a numeric string.
                 var assetIds = new List<int>();
 
                 if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var aiConfigElement)
@@ -2564,6 +2566,20 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     && configAssetsElement.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var assetElement in configAssetsElement.EnumerateArray())
+                    {
+                        if (TryGetPropertyCaseInsensitive(assetElement, "id", out var idProp)
+                            && TryParseAssetId(idProp, out var parsedId))
+                        {
+                            assetIds.Add(parsedId);
+                        }
+                    }
+                }
+
+                if (!assetIds.Any()
+                    && TryGetPropertyCaseInsensitive(jsonElement, "assets", out var topAssetsElement)
+                    && topAssetsElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var assetElement in topAssetsElement.EnumerateArray())
                     {
                         if (TryGetPropertyCaseInsensitive(assetElement, "id", out var idProp)
                             && TryParseAssetId(idProp, out var parsedId))
