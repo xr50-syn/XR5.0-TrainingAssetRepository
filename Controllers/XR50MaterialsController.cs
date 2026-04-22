@@ -2554,34 +2554,47 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 if (TryGetPropertyCaseInsensitive(jsonElement, "unique_id", out var uniqueIdProp) && uniqueIdProp.ValueKind == JsonValueKind.Number)
                     aiAssistant.Unique_id = uniqueIdProp.GetInt32();
 
-                // Parse asset IDs from JSON
+                // Parse asset IDs from JSON.
+                // Primary shape is config.assets[].id (id may be numeric or a numeric string,
+                // e.g. DataLens-style payloads). Top-level assetIds / asset_ids are kept as fallbacks.
                 var assetIds = new List<int>();
 
-                if (TryGetPropertyCaseInsensitive(jsonElement, "assetIds", out var assetIdsProp))
+                if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var aiConfigElement)
+                    && TryGetPropertyCaseInsensitive(aiConfigElement, "assets", out var configAssetsElement)
+                    && configAssetsElement.ValueKind == JsonValueKind.Array)
                 {
-                    if (assetIdsProp.ValueKind == JsonValueKind.Array)
+                    foreach (var assetElement in configAssetsElement.EnumerateArray())
                     {
-                        foreach (var assetIdElement in assetIdsProp.EnumerateArray())
+                        if (TryGetPropertyCaseInsensitive(assetElement, "id", out var idProp)
+                            && TryParseAssetId(idProp, out var parsedId))
                         {
-                            if (assetIdElement.ValueKind == JsonValueKind.Number)
-                            {
-                                assetIds.Add(assetIdElement.GetInt32());
-                            }
+                            assetIds.Add(parsedId);
                         }
                     }
                 }
 
-                // Alternative property names
-                if (!assetIds.Any() && TryGetPropertyCaseInsensitive(jsonElement, "asset_ids", out var altAssetIdsProp))
+                if (!assetIds.Any()
+                    && TryGetPropertyCaseInsensitive(jsonElement, "assetIds", out var assetIdsProp)
+                    && assetIdsProp.ValueKind == JsonValueKind.Array)
                 {
-                    if (altAssetIdsProp.ValueKind == JsonValueKind.Array)
+                    foreach (var assetIdElement in assetIdsProp.EnumerateArray())
                     {
-                        foreach (var assetIdElement in altAssetIdsProp.EnumerateArray())
+                        if (TryParseAssetId(assetIdElement, out var parsedId))
                         {
-                            if (assetIdElement.ValueKind == JsonValueKind.Number)
-                            {
-                                assetIds.Add(assetIdElement.GetInt32());
-                            }
+                            assetIds.Add(parsedId);
+                        }
+                    }
+                }
+
+                if (!assetIds.Any()
+                    && TryGetPropertyCaseInsensitive(jsonElement, "asset_ids", out var altAssetIdsProp)
+                    && altAssetIdsProp.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var assetIdElement in altAssetIdsProp.EnumerateArray())
+                    {
+                        if (TryParseAssetId(assetIdElement, out var parsedId))
+                        {
+                            assetIds.Add(parsedId);
                         }
                     }
                 }
@@ -2612,6 +2625,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     Description = createdMaterial.Description,
                     Type = GetLowercaseType(createdMaterial.Type),
                     Unique_id = createdMaterial.Unique_id,
+                    AssetIds = createdMaterial.GetAssetIdsList(),
                     Created_at = createdMaterial.Created_at
                 };
 
@@ -2859,6 +2873,18 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         }
 
         // Helper method for case-insensitive property lookup
+        private static bool TryParseAssetId(JsonElement element, out int id)
+        {
+            if (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out id))
+                return true;
+
+            if (element.ValueKind == JsonValueKind.String && int.TryParse(element.GetString(), out id))
+                return true;
+
+            id = 0;
+            return false;
+        }
+
         private bool TryGetPropertyCaseInsensitive(JsonElement jsonElement, string propertyName, out JsonElement property)
         {
             // Try exact match first
