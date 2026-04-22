@@ -454,5 +454,36 @@ namespace XR50TrainingAssetRepo.Controllers
                 return this.ProblemServerError($"Error migrating Quiz evaluation columns for tenant '{tenantName}'.");
             }
         }
+
+        /// <summary>
+        /// Migrate Materials table to add CollectionName for AI Assistant materials
+        /// </summary>
+        [HttpPost("migrate-ai-assistant-collections/{tenantName}")]
+        public async Task<ActionResult> MigrateAIAssistantCollectionColumns(string tenantName)
+        {
+            try
+            {
+                _logger.LogInformation("Running AI Assistant collection column migration for tenant: {TenantName}", tenantName);
+
+                var success = await _tableCreator.MigrateAIAssistantCollectionColumnsAsync(tenantName);
+
+                if (success)
+                {
+                    return Ok(new {
+                        Message = $"AI Assistant collection columns migrated successfully for tenant {tenantName}",
+                        Details = "Added 'CollectionName' to Materials table and backfilled existing AI Assistant materials"
+                    });
+                }
+                else
+                {
+                    return this.ProblemBadRequest($"Failed to migrate AI Assistant collection columns for tenant '{tenantName}'.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating AI Assistant collection columns for tenant {TenantName}", tenantName);
+                return this.ProblemServerError($"Error migrating AI Assistant collection columns for tenant '{tenantName}'.");
+            }
+        }
     }
 }

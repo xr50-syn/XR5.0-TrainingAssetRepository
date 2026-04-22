@@ -53,11 +53,16 @@ namespace XR50TrainingAssetRepo.Services
                 // 2. Create tables using manual table creator
                 _logger.LogInformation("Creating tables in tenant database...");
                 var tablesCreated = await _tableCreator.CreateTablesInDatabaseAsync(tenantDbName);
-                
+
                 if (!tablesCreated)
                 {
                     throw new InvalidOperationException($"Failed to create tables in tenant database {tenantDbName}");
                 }
+
+                // Apply column-level migrations that layer on top of the CREATE TABLE script.
+                // Fresh tenants are a no-op; kept here so provisioning and lab-purge paths converge
+                // on the same post-create schema state.
+                await _tableCreator.MigrateAIAssistantCollectionColumnsAsync(tenant.TenantName);
 
                 // 3. Verify tables were created
                 var tables = await _tableCreator.GetExistingTablesAsync(tenant.TenantName);

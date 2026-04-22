@@ -24,6 +24,7 @@ namespace XR50TrainingAssetRepo.Services
         Task<bool> MigrateMaterialRelationshipRanksAsync(string tenantName);
         Task<bool> MigrateUserMaterialProgramKeyAsync(string tenantName);
         Task<bool> MigrateQuizEvaluationColumnsAsync(string tenantName);
+        Task<bool> MigrateAIAssistantCollectionColumnsAsync(string tenantName);
     }
 
     public class XR50ManualTableCreator : IXR50ManualTableCreator
@@ -45,7 +46,23 @@ namespace XR50TrainingAssetRepo.Services
         public async Task<bool> CreateAllTablesAsync(string tenantName)
         {
             var tenantDbName = _tenantService.GetTenantSchema(tenantName);
-            return await CreateTablesInDatabaseAsync(tenantDbName);
+            var tablesCreated = await CreateTablesInDatabaseAsync(tenantDbName);
+            if (!tablesCreated)
+            {
+                return false;
+            }
+
+            // CREATE TABLE IF NOT EXISTS is a no-op against pre-existing tables, so
+            // columns added after the original schema (e.g. AIAssistantMaterial.CollectionName)
+            // need an explicit ALTER to land when the lab purges data without dropping tables.
+            var collectionColumnsMigrated = await MigrateAIAssistantCollectionColumnsAsync(tenantName);
+            if (!collectionColumnsMigrated)
+            {
+                _logger.LogWarning("Tables created for tenant {TenantName} but AI Assistant collection column migration failed", tenantName);
+                return false;
+            }
+
+            return true;
         }
 
         public async Task<bool> CreateTablesInDatabaseAsync(string databaseName)
@@ -344,6 +361,7 @@ namespace XR50TrainingAssetRepo.Services
             `ServiceJobId` varchar(255) DEFAULT NULL,
             `AIAssistantStatus` varchar(20) DEFAULT 'notready',
             `AIAssistantAssetIds` text DEFAULT NULL,
+            `CollectionName` varchar(255) DEFAULT NULL,
 
             -- Quiz-specific columns
             `EvaluationMode` tinyint(1) NOT NULL DEFAULT 0,
@@ -1512,6 +1530,82 @@ namespace XR50TrainingAssetRepo.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error migrating Quiz evaluation columns for tenant: {TenantName}", tenantName);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Migrates existing tenant databases to add AI Assistant collection metadata columns
+        /// required by newer queries over the Materials table.
+        /// </summary>
+        public async Task<bool> MigrateAIAssistantCollectionColumnsAsync(string tenantName)
+        {
+            try
+            {
+                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
+                var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
+
+                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+
+                _logger.LogInformation("=== Migrating AI Assistant collection columns for tenant: {TenantName} ===", tenantName);
+
+                using var connection = new MySqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                var aiAssistantColumns = new Dictionary<string, string>
+                {
+                    { "CollectionName", "ALTER TABLE `Materials` ADD COLUMN `CollectionName` varchar(255) DEFAULT NULL" }
+                };
+
+                foreach (var column in aiAssistantColumns)
+                {
+                    var checkQuery = @"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_SCHEMA = @dbName
+                        AND TABLE_NAME = 'Materials'
+                        AND COLUMN_NAME = @columnName";
+
+                    using (var checkCmd = new MySqlCommand(checkQuery, connection))
+                    {
+                        checkCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                        checkCmd.Parameters.AddWithValue("@columnName", column.Key);
+                        var exists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+
+                        if (!exists)
+                        {
+                            _logger.LogInformation("Adding {Column} column to Materials table...", column.Key);
+                            using (var addCmd = new MySqlCommand(column.Value, connection))
+                            {
+                                await addCmd.ExecuteNonQueryAsync();
+                                _logger.LogInformation("Successfully added {Column} column to Materials", column.Key);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogInformation("{Column} column already exists in Materials", column.Key);
+                        }
+                    }
+                }
+
+                // Backfill deterministic collection names for existing AI Assistant materials.
+                const string backfillSql = @"
+                    UPDATE `Materials`
+                    SET `CollectionName` = CONCAT('aiassist_', `id`)
+                    WHERE `Discriminator` = 'AIAssistantMaterial'
+                      AND (`CollectionName` IS NULL OR `CollectionName` = '')";
+
+                using (var backfillCmd = new MySqlCommand(backfillSql, connection))
+                {
+                    var updatedRows = await backfillCmd.ExecuteNonQueryAsync();
+                    _logger.LogInformation("Backfilled CollectionName for {UpdatedRows} AI Assistant materials", updatedRows);
+                }
+
+                _logger.LogInformation("=== AI Assistant collection columns migration completed for tenant: {TenantName} ===", tenantName);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating AI Assistant collection columns for tenant: {TenantName}", tenantName);
                 return false;
             }
         }
