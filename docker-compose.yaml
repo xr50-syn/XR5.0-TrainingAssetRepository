@@ -94,6 +94,11 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_DEFAULT_REGION: ${AWS_REGION:-eu-west-1}
 
+      # DataLens / Chatbot API (v1.1.0)
+      ChatbotApi__BaseUrl: ${CHATBOT_API_BASE_URL:-https://datalens.xr50.work}
+      ChatbotApi__BearerToken: ${CHATBOT_API_BEARER_TOKEN}
+      ChatbotApi__DefaultCollectionName: ${CHATBOT_API_DEFAULT_COLLECTION:-tap_assistant}
+
       # IAM/Keycloak Configuration
       IAM__Authority: ${KEYCLOAK_AUTHORITY:-http://keycloak:8080/realms/xr50}
       IAM__MetadataEndpoint: ${KEYCLOAK_METADATA:-http://keycloak:8080/realms/xr50/.well-known/openid-configuration}
