@@ -15,15 +15,21 @@ namespace XR50TrainingAssetRepo.Services.Materials
         private readonly IXR50TenantDbContextFactory _dbContextFactory;
         private readonly IChatbotApiService _chatbotApiService;
         private readonly ILogger<AIAssistantMaterialService> _logger;
+        private readonly string _defaultCollectionName;
 
         public AIAssistantMaterialService(
             IXR50TenantDbContextFactory dbContextFactory,
             IChatbotApiService chatbotApiService,
-            ILogger<AIAssistantMaterialService> logger)
+            ILogger<AIAssistantMaterialService> logger,
+            IConfiguration configuration)
         {
             _dbContextFactory = dbContextFactory;
             _chatbotApiService = chatbotApiService;
             _logger = logger;
+
+            _defaultCollectionName = configuration["ChatbotApi:DefaultCollectionName"]
+                ?? Environment.GetEnvironmentVariable("CHATBOT_API_DEFAULT_COLLECTION")
+                ?? "pdf_knowledge_base";
         }
 
         #region CRUD Operations
@@ -52,6 +58,12 @@ namespace XR50TrainingAssetRepo.Services.Materials
             aiAssistant.Updated_at = DateTime.UtcNow;
             aiAssistant.Type = MaterialType.AIAssistant;
 
+            // No explicit collection → bind to the shared default so queries route there.
+            // Status stays "notready" until the chatbot finishes its own processing step.
+            if (string.IsNullOrEmpty(aiAssistant.CollectionName))
+            {
+                aiAssistant.CollectionName = _defaultCollectionName;
+            }
             if (string.IsNullOrEmpty(aiAssistant.AIAssistantStatus))
             {
                 aiAssistant.AIAssistantStatus = "notready";
@@ -60,7 +72,8 @@ namespace XR50TrainingAssetRepo.Services.Materials
             context.Materials.Add(aiAssistant);
             await context.SaveChangesAsync();
 
-            _logger.LogInformation("Created AI Assistant material: {Name} with ID: {Id}", aiAssistant.Name, aiAssistant.id);
+            _logger.LogInformation("Created AI Assistant material: {Name} with ID: {Id} bound to collection {CollectionName}",
+                aiAssistant.Name, aiAssistant.id, aiAssistant.CollectionName);
 
             return aiAssistant;
         }
@@ -139,9 +152,14 @@ namespace XR50TrainingAssetRepo.Services.Materials
             context.Materials.Add(aiAssistant);
             await context.SaveChangesAsync();
 
-            // Derive and persist the DataLens collection name
-            var collectionName = $"aiassist_{aiAssistant.id}";
-            aiAssistant.CollectionName = collectionName;
+            // Resolve target collection. If the caller pre-set CollectionName (explicit per-material
+            // or named shared collection), honour it. Otherwise default to the configured shared
+            // collection — frontends that don't care about isolation just pile into one corpus.
+            if (string.IsNullOrEmpty(aiAssistant.CollectionName))
+            {
+                aiAssistant.CollectionName = _defaultCollectionName;
+            }
+            var collectionName = aiAssistant.CollectionName;
             await context.SaveChangesAsync();
 
             _logger.LogInformation("Created AI Assistant material: {Name} with ID: {Id}, collection: {CollectionName}, and {AssetCount} assets",
@@ -311,14 +329,14 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 throw new InvalidOperationException("AI Assistant material has no assets to submit");
             }
 
-            // Resolve collection name, generate and persist if missing
+            // Resolve collection name, fall back to the shared default if not set
             var collectionName = aiAssistant.CollectionName;
             if (string.IsNullOrEmpty(collectionName))
             {
-                collectionName = $"aiassist_{aiAssistantId}";
+                collectionName = _defaultCollectionName;
                 aiAssistant.CollectionName = collectionName;
-                _logger.LogInformation("Generated collection name {CollectionName} for AI Assistant material {AIAssistantId}",
-                    collectionName, aiAssistantId);
+                _logger.LogInformation("Bound AI Assistant material {AIAssistantId} to default collection {CollectionName}",
+                    aiAssistantId, collectionName);
             }
 
             // Ensure the DataLens collection exists
