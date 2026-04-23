@@ -232,7 +232,7 @@ namespace XR50TrainingAssetRepo.Services
             {
                 var assetIds = material.GetAssetIdsList();
                 var jobStatuses = await context.AIAssistantMaterialAssetJobs
-                    .Where(j => j.AIAssistantMaterialId == material.id)
+                    .Where(j => j.AIAssistantMaterialId == material.id && assetIds.Contains(j.AssetId))
                     .Select(j => j.Status)
                     .ToListAsync();
 

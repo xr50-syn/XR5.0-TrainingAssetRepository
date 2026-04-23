@@ -2562,66 +2562,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 if (TryGetPropertyCaseInsensitive(jsonElement, "unique_id", out var uniqueIdProp) && uniqueIdProp.ValueKind == JsonValueKind.Number)
                     aiAssistant.Unique_id = uniqueIdProp.GetInt32();
 
-                // Parse asset IDs from JSON. Accepted shapes, in priority order:
-                //   1. config.assets[].id      (nested, DataLens-style)
-                //   2. assets[].id             (same element shape, top-level)
-                //   3. assetIds / asset_ids    (flat id arrays, legacy)
-                // In all shapes, id may be numeric or a numeric string.
-                var assetIds = new List<int>();
-
-                if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var aiConfigElement)
-                    && TryGetPropertyCaseInsensitive(aiConfigElement, "assets", out var configAssetsElement)
-                    && configAssetsElement.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var assetElement in configAssetsElement.EnumerateArray())
-                    {
-                        if (TryGetPropertyCaseInsensitive(assetElement, "id", out var idProp)
-                            && TryParseAssetId(idProp, out var parsedId))
-                        {
-                            assetIds.Add(parsedId);
-                        }
-                    }
-                }
-
-                if (!assetIds.Any()
-                    && TryGetPropertyCaseInsensitive(jsonElement, "assets", out var topAssetsElement)
-                    && topAssetsElement.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var assetElement in topAssetsElement.EnumerateArray())
-                    {
-                        if (TryGetPropertyCaseInsensitive(assetElement, "id", out var idProp)
-                            && TryParseAssetId(idProp, out var parsedId))
-                        {
-                            assetIds.Add(parsedId);
-                        }
-                    }
-                }
-
-                if (!assetIds.Any()
-                    && TryGetPropertyCaseInsensitive(jsonElement, "assetIds", out var assetIdsProp)
-                    && assetIdsProp.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var assetIdElement in assetIdsProp.EnumerateArray())
-                    {
-                        if (TryParseAssetId(assetIdElement, out var parsedId))
-                        {
-                            assetIds.Add(parsedId);
-                        }
-                    }
-                }
-
-                if (!assetIds.Any()
-                    && TryGetPropertyCaseInsensitive(jsonElement, "asset_ids", out var altAssetIdsProp)
-                    && altAssetIdsProp.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var assetIdElement in altAssetIdsProp.EnumerateArray())
-                    {
-                        if (TryParseAssetId(assetIdElement, out var parsedId))
-                        {
-                            assetIds.Add(parsedId);
-                        }
-                    }
-                }
+                // Parse asset IDs from JSON. See ParseAIAssistantAssetIds for accepted shapes.
+                var assetIds = ParseAIAssistantAssetIds(jsonElement);
 
                 // Create the AI assistant material
                 AIAssistantMaterial createdMaterial;
@@ -2925,6 +2867,75 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
             id = 0;
             return false;
+        }
+
+        /// <summary>
+        /// Parses asset IDs referenced by an AI Assistant create/update payload. Accepted shapes,
+        /// in priority order (first one that yields ids wins):
+        ///   1. config.assets[].id   (nested, DataLens-style)
+        ///   2. assets[].id          (same element shape, top-level)
+        ///   3. assetIds / asset_ids (flat id arrays, legacy)
+        /// In every shape, ids may be numbers or numeric strings.
+        /// </summary>
+        private List<int> ParseAIAssistantAssetIds(JsonElement jsonElement)
+        {
+            var assetIds = new List<int>();
+
+            if (TryGetPropertyCaseInsensitive(jsonElement, "config", out var aiConfigElement)
+                && TryGetPropertyCaseInsensitive(aiConfigElement, "assets", out var configAssetsElement)
+                && configAssetsElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var assetElement in configAssetsElement.EnumerateArray())
+                {
+                    if (TryGetPropertyCaseInsensitive(assetElement, "id", out var idProp)
+                        && TryParseAssetId(idProp, out var parsedId))
+                    {
+                        assetIds.Add(parsedId);
+                    }
+                }
+            }
+
+            if (!assetIds.Any()
+                && TryGetPropertyCaseInsensitive(jsonElement, "assets", out var topAssetsElement)
+                && topAssetsElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var assetElement in topAssetsElement.EnumerateArray())
+                {
+                    if (TryGetPropertyCaseInsensitive(assetElement, "id", out var idProp)
+                        && TryParseAssetId(idProp, out var parsedId))
+                    {
+                        assetIds.Add(parsedId);
+                    }
+                }
+            }
+
+            if (!assetIds.Any()
+                && TryGetPropertyCaseInsensitive(jsonElement, "assetIds", out var assetIdsProp)
+                && assetIdsProp.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var assetIdElement in assetIdsProp.EnumerateArray())
+                {
+                    if (TryParseAssetId(assetIdElement, out var parsedId))
+                    {
+                        assetIds.Add(parsedId);
+                    }
+                }
+            }
+
+            if (!assetIds.Any()
+                && TryGetPropertyCaseInsensitive(jsonElement, "asset_ids", out var altAssetIdsProp)
+                && altAssetIdsProp.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var assetIdElement in altAssetIdsProp.EnumerateArray())
+                {
+                    if (TryParseAssetId(assetIdElement, out var parsedId))
+                    {
+                        assetIds.Add(parsedId);
+                    }
+                }
+            }
+
+            return assetIds;
         }
 
         private bool TryGetPropertyCaseInsensitive(JsonElement jsonElement, string propertyName, out JsonElement property)
@@ -3730,6 +3741,25 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 // Ensure the ID is set correctly
                 material.id = materialId;
 
+                // AI Assistant: PUT is additive over the asset list.
+                //   - assets absent or empty → keep the existing list untouched
+                //   - asset already linked     → treat as a no-op on the linkage (job-level logic
+                //                                will skip if active or retry if failed)
+                //   - new asset id             → union into the list
+                // Removal is explicit via DELETE /{id}/ai-assistant/assets/{assetId}; PUT never
+                // removes. This avoids wiping a material's DataLens references just because a
+                // client sent the "shape" of the material without its asset list.
+                if (material is AIAssistantMaterial newAi && existingMaterial is AIAssistantMaterial existingAi)
+                {
+                    var incomingIds = ParseAIAssistantAssetIds(jsonElement);
+                    var mergedIds = existingAi.GetAssetIdsList();
+                    foreach (var incomingId in incomingIds)
+                    {
+                        if (!mergedIds.Contains(incomingId)) mergedIds.Add(incomingId);
+                    }
+                    newAi.SetAssetIdsList(mergedIds);
+                }
+
                 // Handle file upload if provided
                 if (file != null)
                 {
@@ -3765,6 +3795,24 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 // Update the material and get the updated instance with populated child IDs
                 var updatedMaterial = await _materialServiceBase.UpdateAsync(material);
                 _logger.LogInformation("Updated material {Id} for tenant: {TenantName}", materialId, tenantName);
+
+                // AI Assistant materials: re-run the per-asset job reconciliation so that
+                //   (a) newly added assets get submitted to DataLens,
+                //   (b) removed assets have their orphan job rows pruned,
+                //   (c) the material's aggregate AIAssistantStatus reflects the new asset list.
+                // Swallow exceptions to keep PUT semantics (material update already persisted);
+                // failure surfaces in logs and will also surface on the next GET via CalculateAggregateStatusAsync.
+                if (updatedMaterial is AIAssistantMaterial)
+                {
+                    try
+                    {
+                        await _aiAssistantMaterialService.SubmitForProcessingAsync(materialId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "AI Assistant job reconciliation failed after PUT for material {Id}. Status may be stale until next manual submit.", materialId);
+                    }
+                }
 
                 // Process related materials for subcomponents based on material type
                 // Use updatedMaterial which has the correct database-generated IDs for entries/steps/etc.

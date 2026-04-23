@@ -328,9 +328,32 @@ namespace XR50TrainingAssetRepo.Services.Materials
             }
 
             var assetIds = aiAssistant.GetAssetIdsList();
+
+            // Load the material's existing per-asset job rows, then prune orphans whose
+            // AssetId was removed from the material (e.g. via PUT). Keeps the aggregate
+            // honest and stops stale rows from pointing at the wrong collection.
+            var allJobs = await context.AIAssistantMaterialAssetJobs
+                .Where(j => j.AIAssistantMaterialId == aiAssistantId)
+                .ToListAsync();
+            var orphanJobs = allJobs.Where(j => !assetIds.Contains(j.AssetId)).ToList();
+            if (orphanJobs.Any())
+            {
+                context.AIAssistantMaterialAssetJobs.RemoveRange(orphanJobs);
+                _logger.LogInformation("Pruned {Count} orphan job row(s) for material {AIAssistantId}",
+                    orphanJobs.Count, aiAssistantId);
+            }
+            var existingJobs = allJobs.Except(orphanJobs).ToList();
+
             if (!assetIds.Any())
             {
-                throw new InvalidOperationException("AI Assistant material has no assets to submit");
+                // Nothing to submit — just persist the prune and normalise status.
+                if (aiAssistant.AIAssistantStatus != "notready")
+                {
+                    aiAssistant.AIAssistantStatus = "notready";
+                    aiAssistant.Updated_at = DateTime.UtcNow;
+                }
+                await context.SaveChangesAsync();
+                return aiAssistant;
             }
 
             // Resolve collection name, fall back to the shared default if not set
@@ -345,13 +368,6 @@ namespace XR50TrainingAssetRepo.Services.Materials
 
             // Ensure the DataLens collection exists
             await _chatbotApiService.EnsureCollectionExistsAsync(collectionName);
-
-            // Load the material's existing per-asset job rows.
-            // These are the source of truth for this material's DataLens state — independent
-            // of any other material that might share the same Asset row.
-            var existingJobs = await context.AIAssistantMaterialAssetJobs
-                .Where(j => j.AIAssistantMaterialId == aiAssistantId)
-                .ToListAsync();
 
             var assets = await context.Assets
                 .Where(a => assetIds.Contains(a.Id))
@@ -536,10 +552,10 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 return "notready";
             }
 
-            // Aggregate from this material's own job rows, so one material's state is
-            // independent of any other material that might share the same Asset rows.
+            // Aggregate from this material's own job rows, filtered to the material's CURRENT
+            // asset list — orphan rows (from assets that were removed) must not influence status.
             var jobStatuses = await context.AIAssistantMaterialAssetJobs
-                .Where(j => j.AIAssistantMaterialId == aiAssistant.id)
+                .Where(j => j.AIAssistantMaterialId == aiAssistant.id && assetIds.Contains(j.AssetId))
                 .Select(j => j.Status)
                 .ToListAsync();
 
