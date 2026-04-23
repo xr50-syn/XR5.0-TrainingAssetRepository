@@ -766,8 +766,13 @@ private async Task<object?> GetAIAssistantDetails(int materialId)
     var aiAssistant = await _aiAssistantMaterialService.GetByIdAsync(materialId);
     if (aiAssistant == null) return null;
 
-    // Get all assets for this AI assistant material
+    // Get all assets for this AI assistant material.
+    // Asset-level AI state is reported from this material's own per-(material, asset) job rows,
+    // not the global Asset.AiAvailable/JobId — so the same Asset in different materials can
+    // independently show different processing states.
     var assetIds = aiAssistant.GetAssetIdsList();
+    var jobRows = await _aiAssistantMaterialService.GetAssetJobsAsync(materialId);
+    var jobByAsset = jobRows.ToDictionary(j => j.AssetId, j => j);
     var assets = new List<object>();
 
     foreach (var assetId in assetIds)
@@ -775,6 +780,7 @@ private async Task<object?> GetAIAssistantDetails(int materialId)
         var assetEntity = await _assetService.GetAssetAsync(assetId);
         if (assetEntity != null)
         {
+            jobByAsset.TryGetValue(assetId, out var job);
             assets.Add(new
             {
                 Id = assetEntity.Id,
@@ -783,8 +789,10 @@ private async Task<object?> GetAIAssistantDetails(int materialId)
                 Filetype = assetEntity.Filetype,
                 Src = assetEntity.Src,
                 URL = assetEntity.URL,
-                AiAvailable = assetEntity.AiAvailable,
-                JobId = assetEntity.JobId
+                AiAvailable = MapJobStatusToAiAvailable(job?.Status),
+                JobId = job?.JobId,
+                CollectionName = job?.CollectionName,
+                ErrorMessage = job?.ErrorMessage
             });
         }
     }
@@ -2895,6 +2903,18 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         }
 
         // Helper method for case-insensitive property lookup
+        // Translate the persisted job Status ("pending" | "processing" | "completed" | "failed" | null)
+        // into the material-facing AiAvailable vocabulary the GUI already understands.
+        private static string MapJobStatusToAiAvailable(string? status)
+        {
+            return status switch
+            {
+                "pending" or "processing" => "process",
+                "completed" => "ready",
+                _ => "notready",
+            };
+        }
+
         private static bool TryParseAssetId(JsonElement element, out int id)
         {
             if (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out id))

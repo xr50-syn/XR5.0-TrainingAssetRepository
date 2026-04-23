@@ -54,6 +54,7 @@ namespace XR50TrainingAssetRepo.Data
         public DbSet<UserMaterialData> UserMaterialData { get; set; } = null!;
         public DbSet<UserMaterialScore> UserMaterialScores { get; set; } = null!;
         public DbSet<AIAssistantSession> AIAssistantSessions { get; set; } = null!;
+        public DbSet<AIAssistantMaterialAssetJob> AIAssistantMaterialAssetJobs { get; set; } = null!;
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured && _tenantService != null && _configuration != null)
@@ -267,6 +268,24 @@ namespace XR50TrainingAssetRepo.Data
             modelBuilder.Entity<AIAssistantSession>()
                 .HasIndex(s => s.AIAssistantMaterialId)
                 .IsUnique();
+
+            // AIAssistantMaterialAssetJob — per-(material, asset) DataLens ingest state.
+            // Unique per (material, asset) pair; deleted when the material is deleted.
+            modelBuilder.Entity<AIAssistantMaterialAssetJob>()
+                .HasKey(j => j.Id);
+
+            modelBuilder.Entity<AIAssistantMaterialAssetJob>()
+                .HasOne(j => j.AIAssistantMaterial)
+                .WithMany()
+                .HasForeignKey(j => j.AIAssistantMaterialId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<AIAssistantMaterialAssetJob>()
+                .HasIndex(j => new { j.AIAssistantMaterialId, j.AssetId })
+                .IsUnique();
+
+            modelBuilder.Entity<AIAssistantMaterialAssetJob>()
+                .HasIndex(j => j.Status);
 
             modelBuilder.Entity<QuestionnaireMaterial>()
                 .HasMany(q => q.QuestionnaireEntries)

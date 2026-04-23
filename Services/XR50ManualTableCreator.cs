@@ -25,6 +25,7 @@ namespace XR50TrainingAssetRepo.Services
         Task<bool> MigrateUserMaterialProgramKeyAsync(string tenantName);
         Task<bool> MigrateQuizEvaluationColumnsAsync(string tenantName);
         Task<bool> MigrateAIAssistantCollectionColumnsAsync(string tenantName);
+        Task<bool> MigrateAIAssistantMaterialAssetJobsTableAsync(string tenantName);
     }
 
     public class XR50ManualTableCreator : IXR50ManualTableCreator
@@ -59,6 +60,13 @@ namespace XR50TrainingAssetRepo.Services
             if (!collectionColumnsMigrated)
             {
                 _logger.LogWarning("Tables created for tenant {TenantName} but AI Assistant collection column migration failed", tenantName);
+                return false;
+            }
+
+            var jobsTableMigrated = await MigrateAIAssistantMaterialAssetJobsTableAsync(tenantName);
+            if (!jobsTableMigrated)
+            {
+                _logger.LogWarning("Tables created for tenant {TenantName} but AIAssistantMaterialAssetJobs table migration failed", tenantName);
                 return false;
             }
 
@@ -604,6 +612,26 @@ namespace XR50TrainingAssetRepo.Services
                     PRIMARY KEY (`Id`),
                     UNIQUE INDEX `IX_AIAssistantSessions_AIAssistantMaterialId` (`AIAssistantMaterialId`),
                     CONSTRAINT `FK_AIAssistantSessions_Materials_AIAssistantMaterialId`
+                        FOREIGN KEY (`AIAssistantMaterialId`) REFERENCES `Materials` (`id`) ON DELETE CASCADE
+                )",
+
+                // AI Assistant Material/Asset Jobs - per-(material, asset) DataLens ingest state.
+                // Keyed on (MaterialId, AssetId) so the same Asset can have independent job state
+                // across multiple AIAssistantMaterials pointing at different collections.
+                @"CREATE TABLE IF NOT EXISTS `AIAssistantMaterialAssetJobs` (
+                    `Id` int NOT NULL AUTO_INCREMENT,
+                    `AIAssistantMaterialId` int NOT NULL,
+                    `AssetId` int NOT NULL,
+                    `CollectionName` varchar(255) NOT NULL,
+                    `JobId` varchar(255) DEFAULT NULL,
+                    `Status` varchar(20) NOT NULL DEFAULT 'pending',
+                    `ErrorMessage` text DEFAULT NULL,
+                    `CreatedAt` datetime(6) NOT NULL,
+                    `UpdatedAt` datetime(6) NOT NULL,
+                    PRIMARY KEY (`Id`),
+                    UNIQUE INDEX `IX_AIAssistantMaterialAssetJobs_Material_Asset` (`AIAssistantMaterialId`, `AssetId`),
+                    INDEX `IX_AIAssistantMaterialAssetJobs_Status` (`Status`),
+                    CONSTRAINT `FK_AIAssistantMaterialAssetJobs_Materials_AIAssistantMaterialId`
                         FOREIGN KEY (`AIAssistantMaterialId`) REFERENCES `Materials` (`id`) ON DELETE CASCADE
                 )"
             };
@@ -1606,6 +1634,75 @@ namespace XR50TrainingAssetRepo.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error migrating AI Assistant collection columns for tenant: {TenantName}", tenantName);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Creates the AIAssistantMaterialAssetJobs table on existing tenant DBs.
+        /// Per-(material, asset) DataLens ingest tracking — supersedes the global
+        /// Assets.AiAvailable / Assets.JobId fields for AI Assistant flows.
+        /// </summary>
+        public async Task<bool> MigrateAIAssistantMaterialAssetJobsTableAsync(string tenantName)
+        {
+            try
+            {
+                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
+                var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
+
+                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+
+                _logger.LogInformation("=== Migrating AIAssistantMaterialAssetJobs table for tenant: {TenantName} ===", tenantName);
+
+                using var connection = new MySqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                var tableCheckQuery = @"SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                    WHERE TABLE_SCHEMA = @dbName AND TABLE_NAME = 'AIAssistantMaterialAssetJobs'";
+
+                bool tableExists;
+                using (var checkCmd = new MySqlCommand(tableCheckQuery, connection))
+                {
+                    checkCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                    tableExists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+                }
+
+                if (tableExists)
+                {
+                    _logger.LogInformation("AIAssistantMaterialAssetJobs table already exists for tenant: {TenantName}", tenantName);
+                    return true;
+                }
+
+                const string createSql = @"
+                    CREATE TABLE `AIAssistantMaterialAssetJobs` (
+                        `Id` int NOT NULL AUTO_INCREMENT,
+                        `AIAssistantMaterialId` int NOT NULL,
+                        `AssetId` int NOT NULL,
+                        `CollectionName` varchar(255) NOT NULL,
+                        `JobId` varchar(255) DEFAULT NULL,
+                        `Status` varchar(20) NOT NULL DEFAULT 'pending',
+                        `ErrorMessage` text DEFAULT NULL,
+                        `CreatedAt` datetime(6) NOT NULL,
+                        `UpdatedAt` datetime(6) NOT NULL,
+                        PRIMARY KEY (`Id`),
+                        UNIQUE KEY `IX_AIAssistantMaterialAssetJobs_Material_Asset` (`AIAssistantMaterialId`, `AssetId`),
+                        KEY `IX_AIAssistantMaterialAssetJobs_Status` (`Status`),
+                        CONSTRAINT `FK_AIAssistantMaterialAssetJobs_Materials_AIAssistantMaterialId`
+                            FOREIGN KEY (`AIAssistantMaterialId`) REFERENCES `Materials` (`id`) ON DELETE CASCADE
+                    )";
+
+                using (var createCmd = new MySqlCommand(createSql, connection))
+                {
+                    await createCmd.ExecuteNonQueryAsync();
+                    _logger.LogInformation("Successfully created AIAssistantMaterialAssetJobs table for tenant: {TenantName}", tenantName);
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating AIAssistantMaterialAssetJobs table for tenant: {TenantName}", tenantName);
                 return false;
             }
         }

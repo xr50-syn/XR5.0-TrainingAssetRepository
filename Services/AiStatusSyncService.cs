@@ -129,116 +129,123 @@ namespace XR50TrainingAssetRepo.Services
         }
 
         /// <summary>
-        /// Sync assets for a single tenant. Returns count of jobs still processing.
+        /// Sync this tenant's in-flight per-(material, asset) DataLens jobs.
+        /// Returns count of jobs still processing (so the outer loop can adapt its interval).
         /// </summary>
         private async Task<int> SyncTenantAssetsAsync(
             IChatbotApiService chatbotApiService,
             string tenantName)
         {
-            // Create context directly with fixed tenant (background service has no HttpContext)
             using var context = CreateTenantContext(tenantName);
 
-            // Query database for processing assets
-            var processingAssets = await context.Assets
-                .Where(a => a.AiAvailable == "process" && !string.IsNullOrEmpty(a.JobId))
+            // Poll only the rows where DataLens is still working. "pending" and "processing"
+            // both represent non-terminal states from DataLens' ProcessingStatus enum.
+            var inFlightJobs = await context.AIAssistantMaterialAssetJobs
+                .Where(j => (j.Status == "pending" || j.Status == "processing")
+                            && !string.IsNullOrEmpty(j.JobId))
                 .ToListAsync();
 
-            if (!processingAssets.Any())
+            if (!inFlightJobs.Any())
             {
                 return 0;
             }
 
-            _logger.LogDebug("Checking {Count} processing assets for tenant {Tenant}",
-                processingAssets.Count, tenantName);
+            _logger.LogDebug("Checking {Count} in-flight AI Assistant jobs for tenant {Tenant}",
+                inFlightJobs.Count, tenantName);
 
-            // Build asset-to-collection mapping from AIAssistantMaterials
-            var assetCollectionMap = await BuildAssetCollectionMapAsync(context, processingAssets.Select(a => a.Id).ToList());
-
-            var updatedAssetIds = new List<int>();
+            var now = DateTime.UtcNow;
+            var touchedMaterialIds = new HashSet<int>();
             var stillProcessingCount = 0;
 
-            foreach (var asset in processingAssets)
+            foreach (var job in inFlightJobs)
             {
                 try
                 {
-                    var collectionName = assetCollectionMap.GetValueOrDefault(asset.Id, _defaultCollectionName);
-                    var status = await chatbotApiService.GetJobStatusAsync(asset.JobId!, collectionName);
+                    var status = await chatbotApiService.GetJobStatusAsync(job.JobId!, job.CollectionName);
 
                     if (status.Status == "completed")
                     {
-                        asset.AiAvailable = "ready";
-                        updatedAssetIds.Add(asset.Id);
-                        _logger.LogInformation("Asset {AssetId} AI processing completed for tenant {Tenant}",
-                            asset.Id, tenantName);
+                        job.Status = "completed";
+                        job.ErrorMessage = null;
+                        job.UpdatedAt = now;
+                        touchedMaterialIds.Add(job.AIAssistantMaterialId);
+                        _logger.LogInformation("Job {JobId} completed for material {MaterialId} asset {AssetId} ({Collection})",
+                            job.JobId, job.AIAssistantMaterialId, job.AssetId, job.CollectionName);
                     }
                     else if (status.Status == "failed")
                     {
-                        asset.AiAvailable = "notready";
-                        asset.JobId = null;
-                        updatedAssetIds.Add(asset.Id);
-                        _logger.LogWarning("Asset {AssetId} AI processing failed for tenant {Tenant}: {Error}",
-                            asset.Id, tenantName, status.Error);
+                        job.Status = "failed";
+                        job.ErrorMessage = status.Error;
+                        job.UpdatedAt = now;
+                        touchedMaterialIds.Add(job.AIAssistantMaterialId);
+                        _logger.LogWarning("Job {JobId} failed for material {MaterialId} asset {AssetId} ({Collection}): {Error}",
+                            job.JobId, job.AIAssistantMaterialId, job.AssetId, job.CollectionName, status.Error);
+                    }
+                    else if (status.Status == "processing" && job.Status != "processing")
+                    {
+                        // Reflect DataLens' transition from pending → processing
+                        job.Status = "processing";
+                        job.UpdatedAt = now;
+                        stillProcessingCount++;
                     }
                     else
                     {
-                        // Still pending or processing
                         stillProcessingCount++;
                     }
                 }
                 catch (ChatbotApiException ex)
                 {
-                    _logger.LogDebug(ex, "Failed to check status for asset {AssetId}", asset.Id);
-                    stillProcessingCount++; // Assume still processing on error
+                    _logger.LogDebug(ex, "Failed to check status for job {JobId} (material {MaterialId} asset {AssetId})",
+                        job.JobId, job.AIAssistantMaterialId, job.AssetId);
+                    stillProcessingCount++; // Assume still processing on transient error
                 }
             }
 
-            if (updatedAssetIds.Any())
+            if (touchedMaterialIds.Any())
             {
                 await context.SaveChangesAsync();
-
-                // Update any AI assistant materials that reference these assets
-                await UpdateAIAssistantMaterialStatusesAsync(context, updatedAssetIds);
+                await UpdateAIAssistantMaterialStatusesAsync(context, touchedMaterialIds);
+            }
+            else
+            {
+                // "processing" transitions still need a flush
+                await context.SaveChangesAsync();
             }
 
             return stillProcessingCount;
         }
 
-        private async Task UpdateAIAssistantMaterialStatusesAsync(XR50TrainingContext context, List<int> updatedAssetIds)
+        /// <summary>
+        /// Recompute AIAssistantStatus for each material whose job rows just changed.
+        /// Mirrors AIAssistantMaterialService.CalculateAggregateStatusAsync.
+        /// </summary>
+        private async Task UpdateAIAssistantMaterialStatusesAsync(XR50TrainingContext context, HashSet<int> materialIds)
         {
-            // Get all AI assistant materials in process state
-            var aiAssistantMaterials = await context.Materials
+            if (!materialIds.Any()) return;
+
+            var materials = await context.Materials
                 .OfType<AIAssistantMaterial>()
-                .Where(a => a.AIAssistantStatus == "process")
+                .Where(m => materialIds.Contains(m.id))
                 .ToListAsync();
 
-            foreach (var aiAssistant in aiAssistantMaterials)
+            foreach (var material in materials)
             {
-                var assetIds = aiAssistant.GetAssetIdsList();
-
-                // Check if any of the updated assets are in this AI assistant material
-                if (!assetIds.Intersect(updatedAssetIds).Any())
-                {
-                    continue;
-                }
-
-                // Check the status of all assets for this AI assistant material
-                var assetStatuses = await context.Assets
-                    .Where(a => assetIds.Contains(a.Id))
-                    .Select(a => a.AiAvailable)
+                var assetIds = material.GetAssetIdsList();
+                var jobStatuses = await context.AIAssistantMaterialAssetJobs
+                    .Where(j => j.AIAssistantMaterialId == material.id)
+                    .Select(j => j.Status)
                     .ToListAsync();
 
-                if (!assetStatuses.Any())
-                {
-                    continue;
-                }
-
-                // Determine new status
                 string newStatus;
-                if (assetStatuses.Any(s => s == "process"))
+                if (!assetIds.Any() || jobStatuses.Count < assetIds.Count)
+                {
+                    newStatus = "notready";
+                }
+                else if (jobStatuses.Any(s => s == "pending" || s == "processing"))
                 {
                     newStatus = "process";
                 }
-                else if (assetStatuses.All(s => s == "ready"))
+                else if (jobStatuses.All(s => s == "completed"))
                 {
                     newStatus = "ready";
                 }
@@ -247,41 +254,17 @@ namespace XR50TrainingAssetRepo.Services
                     newStatus = "notready";
                 }
 
-                if (aiAssistant.AIAssistantStatus != newStatus)
+                if (material.AIAssistantStatus != newStatus)
                 {
-                    aiAssistant.AIAssistantStatus = newStatus;
-                    aiAssistant.Updated_at = DateTime.UtcNow;
+                    material.AIAssistantStatus = newStatus;
+                    material.Updated_at = DateTime.UtcNow;
 
                     _logger.LogInformation("Updated AI assistant material {AIAssistantId} status to {Status}",
-                        aiAssistant.id, newStatus);
+                        material.id, newStatus);
                 }
             }
 
             await context.SaveChangesAsync();
-        }
-
-        /// <summary>
-        /// Builds a mapping of asset IDs to their DataLens collection names from AIAssistantMaterials.
-        /// </summary>
-        private async Task<Dictionary<int, string>> BuildAssetCollectionMapAsync(XR50TrainingContext context, List<int> assetIds)
-        {
-            var map = new Dictionary<int, string>();
-
-            var aiAssistantMaterials = await context.Materials
-                .OfType<AIAssistantMaterial>()
-                .Where(m => m.AIAssistantAssetIds != null && m.CollectionName != null)
-                .ToListAsync();
-
-            foreach (var material in aiAssistantMaterials)
-            {
-                var materialAssetIds = material.GetAssetIdsList();
-                foreach (var assetId in materialAssetIds.Where(id => assetIds.Contains(id)))
-                {
-                    map[assetId] = material.CollectionName!;
-                }
-            }
-
-            return map;
         }
 
         /// <summary>

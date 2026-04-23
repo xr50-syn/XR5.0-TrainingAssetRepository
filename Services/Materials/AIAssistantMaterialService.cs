@@ -346,62 +346,132 @@ namespace XR50TrainingAssetRepo.Services.Materials
             // Ensure the DataLens collection exists
             await _chatbotApiService.EnsureCollectionExistsAsync(collectionName);
 
-            // Get assets and submit each for processing
+            // Load the material's existing per-asset job rows.
+            // These are the source of truth for this material's DataLens state — independent
+            // of any other material that might share the same Asset row.
+            var existingJobs = await context.AIAssistantMaterialAssetJobs
+                .Where(j => j.AIAssistantMaterialId == aiAssistantId)
+                .ToListAsync();
+
             var assets = await context.Assets
                 .Where(a => assetIds.Contains(a.Id))
                 .ToListAsync();
 
+            var now = DateTime.UtcNow;
             var successCount = 0;
             var failedAssets = new List<(int AssetId, string Error)>();
             var skippedCount = 0;
 
             foreach (var asset in assets)
             {
-                if (asset.AiAvailable == "notready" && !string.IsNullOrEmpty(asset.URL))
-                {
-                    try
-                    {
-                        var jobId = await _chatbotApiService.SubmitDocumentAsync(
-                            asset.Id, asset.URL, asset.Filetype ?? "pdf", collectionName);
-                        asset.JobId = jobId;
-                        asset.AiAvailable = "process";
+                var existingJob = existingJobs.FirstOrDefault(j => j.AssetId == asset.Id);
 
-                        _logger.LogInformation("Submitted asset {AssetId} to collection {CollectionName}. Job ID: {JobId}",
-                            asset.Id, collectionName, jobId);
-
-                        successCount++;
-                    }
-                    catch (ChatbotApiException ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to submit asset {AssetId} for processing", asset.Id);
-                        failedAssets.Add((asset.Id, ex.Message));
-                    }
-                }
-                else
+                // Skip if this material already has a non-failed job for this asset in the
+                // target collection. Failed jobs are retried; mismatched collections are
+                // re-submitted so a material that switched collections re-ingests cleanly.
+                if (existingJob != null
+                    && existingJob.Status != "failed"
+                    && string.Equals(existingJob.CollectionName, collectionName, StringComparison.Ordinal))
                 {
                     skippedCount++;
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(asset.URL))
+                {
+                    failedAssets.Add((asset.Id, "asset has no URL"));
+                    continue;
+                }
+
+                try
+                {
+                    var jobId = await _chatbotApiService.SubmitDocumentAsync(
+                        asset.Id, asset.URL, asset.Filetype ?? "pdf", collectionName);
+
+                    if (existingJob == null)
+                    {
+                        context.AIAssistantMaterialAssetJobs.Add(new AIAssistantMaterialAssetJob
+                        {
+                            AIAssistantMaterialId = aiAssistantId,
+                            AssetId = asset.Id,
+                            CollectionName = collectionName,
+                            JobId = jobId,
+                            Status = "pending",
+                            ErrorMessage = null,
+                            CreatedAt = now,
+                            UpdatedAt = now
+                        });
+                    }
+                    else
+                    {
+                        existingJob.CollectionName = collectionName;
+                        existingJob.JobId = jobId;
+                        existingJob.Status = "pending";
+                        existingJob.ErrorMessage = null;
+                        existingJob.UpdatedAt = now;
+                    }
+
+                    _logger.LogInformation("Submitted asset {AssetId} for material {AIAssistantId} to collection {CollectionName}. Job ID: {JobId}",
+                        asset.Id, aiAssistantId, collectionName, jobId);
+
+                    successCount++;
+                }
+                catch (ChatbotApiException ex)
+                {
+                    _logger.LogWarning(ex, "Failed to submit asset {AssetId} for material {AIAssistantId}", asset.Id, aiAssistantId);
+                    failedAssets.Add((asset.Id, ex.Message));
+
+                    if (existingJob == null)
+                    {
+                        context.AIAssistantMaterialAssetJobs.Add(new AIAssistantMaterialAssetJob
+                        {
+                            AIAssistantMaterialId = aiAssistantId,
+                            AssetId = asset.Id,
+                            CollectionName = collectionName,
+                            JobId = null,
+                            Status = "failed",
+                            ErrorMessage = ex.Message,
+                            CreatedAt = now,
+                            UpdatedAt = now
+                        });
+                    }
+                    else
+                    {
+                        existingJob.CollectionName = collectionName;
+                        existingJob.Status = "failed";
+                        existingJob.ErrorMessage = ex.Message;
+                        existingJob.UpdatedAt = now;
+                    }
                 }
             }
 
-            // If all eligible assets failed, throw an error with details
+            await context.SaveChangesAsync();
+
+            // If every eligible asset failed this round, surface it to the caller.
             if (successCount == 0 && failedAssets.Any())
             {
                 var errorDetails = string.Join("; ", failedAssets.Select(f => $"Asset {f.AssetId}: {f.Error}"));
                 throw new InvalidOperationException($"Failed to submit all assets for processing. Errors: {errorDetails}");
             }
 
-            if (successCount > 0)
+            // Recompute material aggregate from its own job rows (not global asset state).
+            var aggregateStatus = await CalculateAggregateStatusAsync(context, aiAssistant);
+            if (aiAssistant.AIAssistantStatus != aggregateStatus)
             {
-                aiAssistant.AIAssistantStatus = "process";
-                aiAssistant.Updated_at = DateTime.UtcNow;
+                aiAssistant.AIAssistantStatus = aggregateStatus;
+                aiAssistant.Updated_at = now;
                 await context.SaveChangesAsync();
+            }
 
-                // Log if there were partial failures
-                if (failedAssets.Any())
-                {
-                    _logger.LogWarning("Partial submission failure for AI Assistant material {AIAssistantId}: {SuccessCount} succeeded, {FailedCount} failed",
-                        aiAssistantId, successCount, failedAssets.Count);
-                }
+            if (failedAssets.Any())
+            {
+                _logger.LogWarning("Partial submission for material {AIAssistantId}: {SuccessCount} succeeded, {FailedCount} failed, {SkippedCount} already in-flight",
+                    aiAssistantId, successCount, failedAssets.Count, skippedCount);
+            }
+            else if (successCount == 0 && skippedCount > 0)
+            {
+                _logger.LogInformation("Material {AIAssistantId}: all {SkippedCount} asset job(s) already tracked for collection {CollectionName}; aggregate status now {Status}",
+                    aiAssistantId, skippedCount, collectionName, aggregateStatus);
             }
 
             return aiAssistant;
@@ -434,6 +504,14 @@ namespace XR50TrainingAssetRepo.Services.Materials
             return aiAssistant;
         }
 
+        public async Task<List<AIAssistantMaterialAssetJob>> GetAssetJobsAsync(int aiAssistantId)
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+            return await context.AIAssistantMaterialAssetJobs
+                .Where(j => j.AIAssistantMaterialId == aiAssistantId)
+                .ToListAsync();
+        }
+
         public async Task<string> GetAggregateStatusAsync(int aiAssistantId)
         {
             using var context = _dbContextFactory.CreateDbContext();
@@ -458,29 +536,30 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 return "notready";
             }
 
-            var assets = await context.Assets
-                .Where(a => assetIds.Contains(a.Id))
-                .Select(a => a.AiAvailable)
+            // Aggregate from this material's own job rows, so one material's state is
+            // independent of any other material that might share the same Asset rows.
+            var jobStatuses = await context.AIAssistantMaterialAssetJobs
+                .Where(j => j.AIAssistantMaterialId == aiAssistant.id)
+                .Select(j => j.Status)
                 .ToListAsync();
 
-            if (!assets.Any())
+            if (jobStatuses.Count < assetIds.Count)
             {
+                // At least one asset has no job yet — the material isn't fully submitted.
                 return "notready";
             }
 
-            // If any asset is still processing, the whole material is processing
-            if (assets.Any(s => s == "process"))
+            if (jobStatuses.Any(s => s == "pending" || s == "processing"))
             {
                 return "process";
             }
 
-            // If all assets are ready, the material is ready
-            if (assets.All(s => s == "ready"))
+            if (jobStatuses.All(s => s == "completed"))
             {
                 return "ready";
             }
 
-            // Otherwise, not ready
+            // "failed" rows (or unexpected values) leave the material in a non-ready state.
             return "notready";
         }
 

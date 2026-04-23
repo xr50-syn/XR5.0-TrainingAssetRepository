@@ -28,6 +28,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
         Task<AIAssistantMaterial> SubmitForProcessingAsync(int aiAssistantId);
         Task<AIAssistantMaterial> UpdateStatusFromAssetsAsync(int aiAssistantId);
         Task<string> GetAggregateStatusAsync(int aiAssistantId);
+        Task<List<AIAssistantMaterialAssetJob>> GetAssetJobsAsync(int aiAssistantId);
 
         // Session management
         Task<AIAssistantSession?> GetActiveSessionAsync(int aiAssistantId);

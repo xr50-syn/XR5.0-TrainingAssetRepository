@@ -59,10 +59,11 @@ namespace XR50TrainingAssetRepo.Services
                     throw new InvalidOperationException($"Failed to create tables in tenant database {tenantDbName}");
                 }
 
-                // Apply column-level migrations that layer on top of the CREATE TABLE script.
-                // Fresh tenants are a no-op; kept here so provisioning and lab-purge paths converge
-                // on the same post-create schema state.
+                // Apply column-level and side-table migrations that layer on top of the CREATE TABLE
+                // script. Fresh tenants are a no-op; kept here so provisioning and lab-purge paths
+                // converge on the same post-create schema state.
                 await _tableCreator.MigrateAIAssistantCollectionColumnsAsync(tenant.TenantName);
+                await _tableCreator.MigrateAIAssistantMaterialAssetJobsTableAsync(tenant.TenantName);
 
                 // 3. Verify tables were created
                 var tables = await _tableCreator.GetExistingTablesAsync(tenant.TenantName);

@@ -485,5 +485,37 @@ namespace XR50TrainingAssetRepo.Controllers
                 return this.ProblemServerError($"Error migrating AI Assistant collection columns for tenant '{tenantName}'.");
             }
         }
+
+        /// <summary>
+        /// Create the AIAssistantMaterialAssetJobs table on an existing tenant DB.
+        /// Per-(material, asset) DataLens ingest state used by the new submit/sync flow.
+        /// </summary>
+        [HttpPost("migrate-ai-assistant-material-asset-jobs/{tenantName}")]
+        public async Task<ActionResult> MigrateAIAssistantMaterialAssetJobsTable(string tenantName)
+        {
+            try
+            {
+                _logger.LogInformation("Running AIAssistantMaterialAssetJobs table migration for tenant: {TenantName}", tenantName);
+
+                var success = await _tableCreator.MigrateAIAssistantMaterialAssetJobsTableAsync(tenantName);
+
+                if (success)
+                {
+                    return Ok(new {
+                        Message = $"AIAssistantMaterialAssetJobs table migrated successfully for tenant {tenantName}",
+                        Details = "Created per-(material, asset) DataLens job tracking table"
+                    });
+                }
+                else
+                {
+                    return this.ProblemBadRequest($"Failed to migrate AIAssistantMaterialAssetJobs table for tenant '{tenantName}'.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating AIAssistantMaterialAssetJobs table for tenant {TenantName}", tenantName);
+                return this.ProblemServerError($"Error migrating AIAssistantMaterialAssetJobs table for tenant '{tenantName}'.");
+            }
+        }
     }
 }

@@ -314,6 +314,57 @@ namespace XR50TrainingAssetRepo.Models
         public AIAssistantMaterial? AIAssistantMaterial { get; set; }
     }
 
+    /// <summary>
+    /// Per-(material, asset) DataLens processing job.
+    /// Asset.AiAvailable / Asset.JobId are global to an Asset row and cannot represent the
+    /// state of the same asset ingested into multiple collections. This table keys the job
+    /// on the owning material, so each AIAssistantMaterial tracks its own ingest independently
+    /// even when two materials share the same Asset row.
+    /// </summary>
+    public class AIAssistantMaterialAssetJob
+    {
+        [Key]
+        public int Id { get; set; }
+
+        public int AIAssistantMaterialId { get; set; }
+
+        public int AssetId { get; set; }
+
+        /// <summary>
+        /// DataLens collection the asset was submitted to. Snapshot at submit time —
+        /// re-derived only on re-submit.
+        /// </summary>
+        [Required]
+        [StringLength(255)]
+        public string CollectionName { get; set; } = string.Empty;
+
+        /// <summary>
+        /// DataLens job id for this submission. Null until submission succeeds.
+        /// </summary>
+        [StringLength(255)]
+        public string? JobId { get; set; }
+
+        /// <summary>
+        /// Status: "pending", "processing", "completed", "failed".
+        /// The AIAssistantMaterial's aggregate AIAssistantStatus is computed from these.
+        /// </summary>
+        [Required]
+        [StringLength(20)]
+        public string Status { get; set; } = "pending";
+
+        /// <summary>
+        /// Last error reported by DataLens or the submit call, if any.
+        /// </summary>
+        public string? ErrorMessage { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+
+        public DateTime UpdatedAt { get; set; }
+
+        [JsonIgnore]
+        public AIAssistantMaterial? AIAssistantMaterial { get; set; }
+    }
+
     public class QuizMaterial : Material
     {
         public bool EvaluationMode { get; set; } = false;
