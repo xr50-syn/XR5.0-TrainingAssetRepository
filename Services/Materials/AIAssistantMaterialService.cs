@@ -139,9 +139,10 @@ namespace XR50TrainingAssetRepo.Services.Materials
 
         #region AI Assistant-specific Operations
 
-        public async Task<AIAssistantMaterial> CreateWithAssetsAsync(AIAssistantMaterial aiAssistant, List<int> assetIds)
+        public async Task<(AIAssistantMaterial Material, List<string> Warnings)> CreateWithAssetsAsync(AIAssistantMaterial aiAssistant, List<int> assetIds)
         {
             using var context = _dbContextFactory.CreateDbContext();
+            var warnings = new List<string>();
 
             aiAssistant.Created_at = DateTime.UtcNow;
             aiAssistant.Updated_at = DateTime.UtcNow;
@@ -174,6 +175,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
             {
                 _logger.LogWarning(ex, "Failed to create DataLens collection {CollectionName} for AI Assistant material {Id}. Will retry on processing.",
                     collectionName, aiAssistant.id);
+                warnings.Add($"Collection '{collectionName}' could not be ensured: {ex.Message}");
             }
 
             // Automatically submit assets for AI processing
@@ -187,11 +189,13 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Auto-submission failed for AI Assistant material {Id}. Manual submission required.", aiAssistant.id);
+                    warnings.Add($"Auto-submission failed: {ex.Message}");
                 }
             }
 
             // Reload to get updated status
-            return await GetByIdAsync(aiAssistant.id) ?? aiAssistant;
+            var reloaded = await GetByIdAsync(aiAssistant.id) ?? aiAssistant;
+            return (reloaded, warnings);
         }
 
         public async Task<AIAssistantMaterial?> GetWithAssetsAsync(int id)

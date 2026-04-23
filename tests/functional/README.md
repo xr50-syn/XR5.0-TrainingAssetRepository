@@ -99,6 +99,9 @@ npm run test:programs
 # User management
 npm run test:users
 
+# AI Assistant material (DataLens integration)
+npm run test:ai-assistant
+
 # All tests with verbose output
 npm run test:verbose
 ```
@@ -146,6 +149,37 @@ npm run test:verbose
 - Create users (regular and admin)
 - Update user profiles
 - Delete users
+
+### 9. AI Assistant (`09-ai-assistant.test.js`)
+Smoke coverage for the AI Assistant material + DataLens integration. Two modes:
+
+- **Mode B** — payload has no assets. Material is bound to the shared default collection
+  (`ChatbotApi:DefaultCollectionName`, e.g. `tap_assistant`). No uploads happen;
+  `aiAssistantStatus` stays `"notready"` until something triggers processing.
+- **Mode A** — payload has assets. Three accepted shapes, all with `id` as number or
+  numeric string:
+  - `config.assets[].id`  (DataLens-native)
+  - `assets[].id`          (same element shape, top-level)
+  - `assetIds[]`           (legacy flat number array)
+
+Tests also assert the deploy-safety contract on the `CreateMaterialResponse`:
+- `status == "success"` + no `warnings` key in the happy path.
+- `status == "partial"` + non-empty `warnings[]` whenever DataLens is misconfigured
+  (bad base URL, missing Bearer token, unreachable host, etc). CI smoke tests can
+  assert on these to fail loudly on bad deploys instead of silently creating
+  materials that never process.
+
+**Fixture asset:** the Mode A tests need an existing asset in the tenant. The suite
+auto-discovers one via `GET /assets` (preferring `pdf`). If the tenant has no assets,
+Mode A tests are skipped with a log message — Mode B and the validation test still run.
+
+**Required config for the DataLens side of these tests:**
+
+| Variable | Where | Purpose |
+|----------|-------|---------|
+| `ChatbotApi__BaseUrl` | app env (compose) | Points at DataLens v1.1.0 (`https://datalens.xr50.work`) |
+| `CHATBOT_API_BEARER_TOKEN` | `.env` | Admin token; required to create per-material collections |
+| `ChatbotApi__DefaultCollectionName` | app env | Shared collection for Mode B queries (must pre-exist in DataLens) |
 
 ## Debugging
 

@@ -15,7 +15,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
         Task<bool> DeleteAsync(int id);
 
         // AI Assistant-specific operations
-        Task<AIAssistantMaterial> CreateWithAssetsAsync(AIAssistantMaterial aiAssistant, List<int> assetIds);
+        Task<(AIAssistantMaterial Material, List<string> Warnings)> CreateWithAssetsAsync(AIAssistantMaterial aiAssistant, List<int> assetIds);
         Task<AIAssistantMaterial?> GetWithAssetsAsync(int id);
 
         // Asset management

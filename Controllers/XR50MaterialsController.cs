@@ -2617,9 +2617,12 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 // Create the AI assistant material
                 AIAssistantMaterial createdMaterial;
+                var warnings = new List<string>();
                 if (assetIds.Any())
                 {
-                    createdMaterial = await _aiAssistantMaterialService.CreateWithAssetsAsync(aiAssistant, assetIds);
+                    var result = await _aiAssistantMaterialService.CreateWithAssetsAsync(aiAssistant, assetIds);
+                    createdMaterial = result.Material;
+                    warnings = result.Warnings;
                 }
                 else
                 {
@@ -2634,14 +2637,17 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
                 var response = new CreateMaterialResponse
                 {
-                    Status = "success",
-                    Message = "AI assistant material created successfully",
+                    Status = warnings.Count == 0 ? "success" : "partial",
+                    Message = warnings.Count == 0
+                        ? "AI assistant material created successfully"
+                        : "AI assistant material created with warnings; see Warnings",
                     id = createdMaterial.id,
                     Name = createdMaterial.Name,
                     Description = createdMaterial.Description,
                     Type = GetLowercaseType(createdMaterial.Type),
                     Unique_id = createdMaterial.Unique_id,
                     AssetIds = createdMaterial.GetAssetIdsList(),
+                    Warnings = warnings.Count > 0 ? warnings : null,
                     Created_at = createdMaterial.Created_at
                 };
 

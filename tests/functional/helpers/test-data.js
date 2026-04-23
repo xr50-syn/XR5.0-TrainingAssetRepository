@@ -241,6 +241,73 @@ function createChatbotMaterial(suffix = '', endpoint = 'https://test.xr50.work')
 }
 
 /**
+ * Generate an AI Assistant material in Mode B (empty assets).
+ * The server should bind the material to the shared default DataLens collection
+ * (ChatbotApi:DefaultCollectionName, e.g. "tap_assistant") and skip uploads.
+ */
+function createAIAssistantMaterialEmpty(suffix = '') {
+  return {
+    name: `Test AI Assistant Empty ${suffix || timestamp}`,
+    description: 'Mode B: no assets, queries fall back to shared default collection',
+    type: 'ai_assistant',
+    unique_id: Math.floor(Math.random() * 100000),
+    related: [],
+    assets: []
+  };
+}
+
+/**
+ * Generate an AI Assistant material in Mode A (config.assets[].id, DataLens-style).
+ * `id` is intentionally a numeric string to exercise the string-or-number parser.
+ * Caller supplies an existing asset id.
+ */
+function createAIAssistantMaterialWithConfigAssets(assetId, suffix = '') {
+  return {
+    name: `Test AI Assistant Config ${suffix || timestamp}`,
+    description: 'Mode A: asset id nested under config.assets[].id (string id)',
+    type: 'ai_assistant',
+    unique_id: Math.floor(Math.random() * 100000),
+    related: [],
+    config: {
+      assets: [
+        { id: String(assetId), type: 'pdf', name: 'fixture.pdf' }
+      ]
+    }
+  };
+}
+
+/**
+ * Generate an AI Assistant material with top-level assets[] shape.
+ * Same element contract as config.assets, just not nested.
+ */
+function createAIAssistantMaterialWithTopLevelAssets(assetId, suffix = '') {
+  return {
+    name: `Test AI Assistant TopLevel ${suffix || timestamp}`,
+    description: 'Mode A: asset id at top-level assets[].id',
+    type: 'ai_assistant',
+    unique_id: Math.floor(Math.random() * 100000),
+    related: [],
+    assets: [
+      { id: String(assetId), type: 'pdf', name: 'fixture.pdf' }
+    ]
+  };
+}
+
+/**
+ * Generate an AI Assistant material with legacy flat id arrays (assetIds).
+ */
+function createAIAssistantMaterialWithLegacyIds(assetId, suffix = '') {
+  return {
+    name: `Test AI Assistant Legacy ${suffix || timestamp}`,
+    description: 'Mode A: legacy flat assetIds[] (numeric ids)',
+    type: 'ai_assistant',
+    unique_id: Math.floor(Math.random() * 100000),
+    related: [],
+    assetIds: [Number(assetId)]
+  };
+}
+
+/**
  * Generate a training program
  */
 function createTrainingProgram(suffix = '') {
@@ -408,6 +475,10 @@ module.exports = {
   createWorkflowMaterial,
   createCompositeMaterial,
   createChatbotMaterial,
+  createAIAssistantMaterialEmpty,
+  createAIAssistantMaterialWithConfigAssets,
+  createAIAssistantMaterialWithTopLevelAssets,
+  createAIAssistantMaterialWithLegacyIds,
   createTrainingProgram,
   createProgramWithPaths,
   createTestUser,

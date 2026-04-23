@@ -12,6 +12,7 @@
     "test:hierarchy": "jest suites/06-hierarchy.test.js",
     "test:programs": "jest suites/07-programs.test.js",
     "test:users": "jest suites/08-users.test.js",
+    "test:ai-assistant": "jest suites/09-ai-assistant.test.js",
     "test:verbose": "jest --runInBand --verbose"
   },
   "dependencies": {

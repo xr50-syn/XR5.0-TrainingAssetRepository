@@ -22,6 +22,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public int? Unique_id { get; set; }
         public int? AssetId { get; set; }
         public List<int>? AssetIds { get; set; }
+        public List<string>? Warnings { get; set; }
         public DateTime? Created_at { get; set; }
     }
 
