@@ -2872,9 +2872,11 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         /// <summary>
         /// Parses asset IDs referenced by an AI Assistant create/update payload. Accepted shapes,
         /// in priority order (first one that yields ids wins):
-        ///   1. config.assets[].id   (nested, DataLens-style)
-        ///   2. assets[].id          (same element shape, top-level)
-        ///   3. assetIds / asset_ids (flat id arrays, legacy)
+        ///   1. config.assets[].id        (nested, DataLens-style)
+        ///   2. assets[].id               (same element shape, top-level)
+        ///   3. assetIds / asset_ids      (flat id arrays, legacy)
+        ///   4. aiAssistantAssetIds       (persistence-style; either a JSON array or a
+        ///                                 JSON-encoded string like "[1,2,3]")
         /// In every shape, ids may be numbers or numeric strings.
         /// </summary>
         private List<int> ParseAIAssistantAssetIds(JsonElement jsonElement)
@@ -2931,6 +2933,46 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     if (TryParseAssetId(assetIdElement, out var parsedId))
                     {
                         assetIds.Add(parsedId);
+                    }
+                }
+            }
+
+            if (!assetIds.Any()
+                && TryGetPropertyCaseInsensitive(jsonElement, "aiAssistantAssetIds", out var aiAssetIdsProp))
+            {
+                if (aiAssetIdsProp.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var assetIdElement in aiAssetIdsProp.EnumerateArray())
+                    {
+                        if (TryParseAssetId(assetIdElement, out var parsedId))
+                        {
+                            assetIds.Add(parsedId);
+                        }
+                    }
+                }
+                else if (aiAssetIdsProp.ValueKind == JsonValueKind.String)
+                {
+                    var raw = aiAssetIdsProp.GetString();
+                    if (!string.IsNullOrWhiteSpace(raw))
+                    {
+                        try
+                        {
+                            using var parsed = JsonDocument.Parse(raw);
+                            if (parsed.RootElement.ValueKind == JsonValueKind.Array)
+                            {
+                                foreach (var assetIdElement in parsed.RootElement.EnumerateArray())
+                                {
+                                    if (TryParseAssetId(assetIdElement, out var parsedId))
+                                    {
+                                        assetIds.Add(parsedId);
+                                    }
+                                }
+                            }
+                        }
+                        catch (JsonException ex)
+                        {
+                            _logger.LogWarning(ex, "Could not parse aiAssistantAssetIds string as JSON array: {Raw}", raw);
+                        }
                     }
                 }
             }
@@ -3758,6 +3800,18 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         if (!mergedIds.Contains(incomingId)) mergedIds.Add(incomingId);
                     }
                     newAi.SetAssetIdsList(mergedIds);
+
+                    // AIAssistantMaterial.AIAssistantStatus defaults to "notready" on construction,
+                    // so a PUT that omits the field would otherwise overwrite a "ready"/"process"
+                    // value during UpdateAIAssistantMaterialInPlace. SubmitForProcessingAsync
+                    // recomputes status afterwards, but if it throws (DataLens unreachable, etc.)
+                    // the controller swallows the error and the row would be stuck at "notready"
+                    // until the background sync ticks. Preserve the existing value when the client
+                    // didn't explicitly set one.
+                    if (!TryGetPropertyCaseInsensitive(jsonElement, "aiAssistantStatus", out _))
+                    {
+                        newAi.AIAssistantStatus = existingAi.AIAssistantStatus;
+                    }
                 }
 
                 // Handle file upload if provided

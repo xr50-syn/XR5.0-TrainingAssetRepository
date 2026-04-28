@@ -362,6 +362,19 @@ namespace XR50TrainingAssetRepo.Services.Materials
                         $"Cannot change material type from {existing.GetType().Name} to {material.GetType().Name}");
                 }
 
+                if (existing is AIAssistantMaterial existingAiAssistant &&
+                    material is AIAssistantMaterial updatedAiAssistant)
+                {
+                    UpdateAIAssistantMaterialInPlace(existingAiAssistant, updatedAiAssistant);
+                    await context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    _logger.LogInformation("Updated AI Assistant material in place: {Id} ({Name})",
+                        existingAiAssistant.id, existingAiAssistant.Name);
+
+                    return existingAiAssistant;
+                }
+
                 var createdAt = existing.Created_at;
                 var uniqueId = existing.Unique_id;
                 var existingAssetId = GetAssetId(existing);
@@ -397,6 +410,36 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 await transaction.RollbackAsync();
                 _logger.LogError(ex, "Failed to update material {Id}", material.id);
                 throw;
+            }
+        }
+
+        private static void UpdateAIAssistantMaterialInPlace(
+            AIAssistantMaterial existing,
+            AIAssistantMaterial updated)
+        {
+            existing.Name = updated.Name;
+            existing.Description = updated.Description;
+            existing.Type = MaterialType.AIAssistant;
+            existing.Updated_at = DateTime.UtcNow;
+
+            if (!string.IsNullOrWhiteSpace(updated.ServiceJobId))
+            {
+                existing.ServiceJobId = updated.ServiceJobId;
+            }
+
+            if (!string.IsNullOrWhiteSpace(updated.AIAssistantStatus))
+            {
+                existing.AIAssistantStatus = updated.AIAssistantStatus;
+            }
+
+            if (!string.IsNullOrWhiteSpace(updated.AIAssistantAssetIds))
+            {
+                existing.AIAssistantAssetIds = updated.AIAssistantAssetIds;
+            }
+
+            if (!string.IsNullOrWhiteSpace(updated.CollectionName))
+            {
+                existing.CollectionName = updated.CollectionName;
             }
         }
 
