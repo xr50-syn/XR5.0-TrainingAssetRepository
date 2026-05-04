@@ -15,7 +15,6 @@ namespace XR50TrainingAssetRepo.Services
         private readonly ILogger<ChatbotApiService> _logger;
         private readonly IConfiguration _configuration;
         private readonly string _baseUrl;
-        private readonly string _defaultCollectionName;
 
         public ChatbotApiService(
             HttpClient httpClient,
@@ -29,10 +28,6 @@ namespace XR50TrainingAssetRepo.Services
             _baseUrl = configuration["ChatbotApi:BaseUrl"]
                 ?? Environment.GetEnvironmentVariable("CHATBOT_API_BASE_URL")
                 ?? "http://localhost:5001";
-
-            _defaultCollectionName = configuration["ChatbotApi:DefaultCollectionName"]
-                ?? Environment.GetEnvironmentVariable("CHATBOT_API_DEFAULT_COLLECTION")
-                ?? "pdf_knowledge_base";
 
             // Bearer token authentication (v1 API)
             var bearerToken = configuration["ChatbotApi:BearerToken"]

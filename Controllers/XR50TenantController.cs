@@ -70,6 +70,13 @@ namespace XR50TrainingAssetRepo.Controllers
                     return this.ProblemBadRequest($"Storage type mismatch. This server is configured for {runningStorageType} storage. Cannot create tenant with {request.StorageType} storage.");
                 }
 
+                // Derive a per-tenant default AI collection if the caller didn't supply one.
+                // Sharing a collection across tenants would let chatbot queries surface another
+                // tenant's documents — see the "default collection cross-tenant" security fix.
+                var defaultAICollection = string.IsNullOrWhiteSpace(request.DefaultAICollection)
+                    ? $"aiassist_default_{System.Text.RegularExpressions.Regex.Replace(request.TenantName, @"[^a-zA-Z0-9_]", "_")}"
+                    : request.DefaultAICollection;
+
                 // Create tenant object from request
                 var tenant = new XR50Tenant
                 {
@@ -78,6 +85,7 @@ namespace XR50TrainingAssetRepo.Controllers
                     Description = request.Description,
                     OwnerName = request.OwnerName,
                     StorageType = request.StorageType,
+                    DefaultAICollection = defaultAICollection,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -344,22 +352,23 @@ namespace XR50TrainingAssetRepo.Controllers
             {
                 S3Example = new
                 {
-                    tenantName = "company-a",
+                    tenantName = "tenant-a",
                     tenantGroup = "enterprise",
-                    description = "Company A Production Environment",
+                    description = "Tenant A Production Environment",
                     storageType = "S3",
+                    defaultAICollection = "aiassist_default_tenant_a",
                     s3Config = new
                     {
-                        bucketName = "xr50-tenant-company-a",
+                        bucketName = "xr50-tenant-a",
                         bucketRegion = "eu-west-1",
-                        bucketArn = "arn:aws:s3:::xr50-tenant-company-a",
+                        bucketArn = "arn:aws:s3:::xr50-tenant-a",
                         endpoint = "https://storage.lab.synelixis.com"
                     },
                     owner = new
                     {
                         userName = "admin",
-                        fullName = "Company A Administrator",
-                        userEmail = "admin@company-a.com",
+                        fullName = "Tenant A Administrator",
+                        userEmail = "admin@tenant-a.com",
                         password = "secure-password-123",
                         admin = true
                     }
@@ -370,6 +379,7 @@ namespace XR50TrainingAssetRepo.Controllers
                     tenantGroup = "development",
                     description = "Test Environment for Development",
                     storageType = "OwnCloud",
+                    defaultAICollection = (string?)null,
                     ownCloudConfig = new
                     {
                         tenantDirectory = "test-tenant-files",
@@ -389,7 +399,8 @@ namespace XR50TrainingAssetRepo.Controllers
                     "For S3 storage: Ensure bucket is pre-provisioned by infrastructure team",
                     "For OwnCloud storage: Directory will be created automatically",
                     "S3 buckets must exist and be accessible before tenant creation",
-                    "All required fields must be provided based on storage type"
+                    "All required fields must be provided based on storage type",
+                    "defaultAICollection is optional; if omitted it is auto-derived as aiassist_default_{tenantName} so tenants don't share a chatbot collection"
                 }
             };
 

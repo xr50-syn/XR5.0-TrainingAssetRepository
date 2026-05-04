@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Services.Materials;
 
 namespace XR50TrainingAssetRepo.Tests.Services;
@@ -35,16 +35,16 @@ public class AIAssistantMaterialUpdateTests
         await materialService.UpdateAsync(updated);
 
         var chatbotApi = new RecordingChatbotApiService();
+        // The seeded material already has CollectionName set, so the tenant-default
+        // resolver is never invoked; the stubs below just satisfy DI.
+        var tenantService = new StubTenantService("test-tenant");
+        var tenantManagementService = new StubTenantManagementService("test-tenant", "assistant_collection");
         var aiAssistantService = new AIAssistantMaterialService(
             factory,
             chatbotApi,
-            NullLogger<AIAssistantMaterialService>.Instance,
-            new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["ChatbotApi:DefaultCollectionName"] = "assistant_collection"
-                })
-                .Build());
+            tenantService,
+            tenantManagementService,
+            NullLogger<AIAssistantMaterialService>.Instance);
 
         await aiAssistantService.SubmitForProcessingAsync(10);
 
@@ -169,5 +169,42 @@ public class AIAssistantMaterialUpdateTests
         public Task<bool> DocumentExistsAsync(string collectionName, string documentName) => Task.FromResult(false);
 
         public Task<bool> IsAvailableAsync() => Task.FromResult(true);
+    }
+
+    private sealed class StubTenantService : IXR50TenantService
+    {
+        private readonly string _tenantName;
+
+        public StubTenantService(string tenantName)
+        {
+            _tenantName = tenantName;
+        }
+
+        public string GetCurrentTenant() => _tenantName;
+        public Task<bool> ValidateTenantAsync(string tenantName) => Task.FromResult(true);
+        public Task<bool> TenantExistsAsync(string tenantName) => Task.FromResult(true);
+        public Task<XR50Tenant> CreateTenantAsync(XR50Tenant tenant) => Task.FromResult(tenant);
+        public string GetTenantSchema(string tenantName) => $"xr50_tenant_{tenantName}";
+    }
+
+    private sealed class StubTenantManagementService : IXR50TenantManagementService
+    {
+        private readonly XR50Tenant _tenant;
+
+        public StubTenantManagementService(string tenantName, string defaultAICollection)
+        {
+            _tenant = new XR50Tenant
+            {
+                TenantName = tenantName,
+                DefaultAICollection = defaultAICollection
+            };
+        }
+
+        public Task<IEnumerable<XR50Tenant>> GetAllTenantsAsync() => Task.FromResult<IEnumerable<XR50Tenant>>(new[] { _tenant });
+        public Task<XR50Tenant> GetTenantAsync(string tenantName) => Task.FromResult(_tenant);
+        public Task<XR50Tenant> CreateTenantAsync(XR50Tenant tenant) => Task.FromResult(tenant);
+        public Task<User> GetOwnerUserAsync(string ownerName, string tenantName) => Task.FromResult<User>(null!);
+        public Task DeleteTenantAsync(string tenantName) => Task.CompletedTask;
+        public Task DeleteTenantCompletelyAsync(string tenantName) => Task.CompletedTask;
     }
 }

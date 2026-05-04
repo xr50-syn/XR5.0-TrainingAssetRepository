@@ -16,29 +16,30 @@ namespace XR50TrainingAssetRepo.Services
     {
         private readonly HttpClient _httpClient;
         private readonly IAIAssistantMaterialService _aiAssistantMaterialService;
+        private readonly IXR50TenantService _tenantService;
+        private readonly IXR50TenantManagementService _tenantManagementService;
         private readonly IConfiguration _configuration;
         private readonly ILogger<AIAssistantService> _logger;
         private readonly string _baseUrl;
-        private readonly string _defaultCollectionName;
 
         public AIAssistantService(
             HttpClient httpClient,
             IAIAssistantMaterialService aiAssistantMaterialService,
+            IXR50TenantService tenantService,
+            IXR50TenantManagementService tenantManagementService,
             IConfiguration configuration,
             ILogger<AIAssistantService> logger)
         {
             _httpClient = httpClient;
             _aiAssistantMaterialService = aiAssistantMaterialService;
+            _tenantService = tenantService;
+            _tenantManagementService = tenantManagementService;
             _configuration = configuration;
             _logger = logger;
 
             _baseUrl = configuration["ChatbotApi:BaseUrl"]
                 ?? Environment.GetEnvironmentVariable("CHATBOT_API_BASE_URL")
                 ?? "http://localhost:5001";
-
-            _defaultCollectionName = configuration["ChatbotApi:DefaultCollectionName"]
-                ?? Environment.GetEnvironmentVariable("CHATBOT_API_DEFAULT_COLLECTION")
-                ?? "pdf_knowledge_base";
 
             // Bearer token authentication (v1 API)
             var bearerToken = configuration["ChatbotApi:BearerToken"]
@@ -54,16 +55,34 @@ namespace XR50TrainingAssetRepo.Services
             _httpClient.Timeout = TimeSpan.FromSeconds(60); // Longer timeout for audio generation
         }
 
+        // Resolve the current tenant's per-tenant default DataLens collection. Used as the
+        // fallback for AIAssistantMaterials that don't define their own CollectionName.
+        // Sharing one global collection across tenants would let a chatbot query in tenant A
+        // surface documents another tenant uploaded — see XR50Tenant.DefaultAICollection.
+        private async Task<string> GetTenantDefaultCollectionAsync()
+        {
+            var tenantName = _tenantService.GetCurrentTenant();
+            var tenant = await _tenantManagementService.GetTenantAsync(tenantName);
+            if (string.IsNullOrEmpty(tenant?.DefaultAICollection))
+            {
+                throw new InvalidOperationException(
+                    $"Tenant '{tenantName}' has no DefaultAICollection configured; cannot route AI assistant request to a default collection");
+            }
+            return tenant.DefaultAICollection;
+        }
+
         #region Default Endpoint Operations
 
         public async Task<AIAssistantAskResponse> AskAsync(string query, string? sessionId = null)
         {
-            return await AskCollectionAsync(_defaultCollectionName, query, sessionId, sourceFiles: null);
+            var collectionName = await GetTenantDefaultCollectionAsync();
+            return await AskCollectionAsync(collectionName, query, sessionId, sourceFiles: null);
         }
 
         public async Task<AIAssistantDocumentUploadResponse> UploadDocumentAsync(Stream fileStream, string fileName, string contentType)
         {
-            return await UploadDocumentToCollectionAsync(_defaultCollectionName, fileStream, fileName, contentType);
+            var collectionName = await GetTenantDefaultCollectionAsync();
+            return await UploadDocumentToCollectionAsync(collectionName, fileStream, fileName, contentType);
         }
 
         public async Task<bool> IsDefaultEndpointAvailableAsync()
@@ -91,7 +110,7 @@ namespace XR50TrainingAssetRepo.Services
                 throw new KeyNotFoundException($"AIAssistantMaterial with ID {aiAssistantMaterialId} not found");
             }
 
-            var collectionName = aiAssistantMaterial.CollectionName ?? _defaultCollectionName;
+            var collectionName = aiAssistantMaterial.CollectionName ?? await GetTenantDefaultCollectionAsync();
 
             // Check for existing valid session
             var existingSession = await _aiAssistantMaterialService.GetActiveSessionAsync(aiAssistantMaterialId);
@@ -143,7 +162,7 @@ namespace XR50TrainingAssetRepo.Services
                 throw new KeyNotFoundException($"AIAssistantMaterial with ID {aiAssistantMaterialId} not found");
             }
 
-            var collectionName = aiAssistantMaterial.CollectionName ?? _defaultCollectionName;
+            var collectionName = aiAssistantMaterial.CollectionName ?? await GetTenantDefaultCollectionAsync();
 
             _logger.LogInformation("Uploading document for AI Assistant material {AIAssistantMaterialId} to collection {CollectionName}: {FileName}",
                 aiAssistantMaterialId, collectionName, fileName);

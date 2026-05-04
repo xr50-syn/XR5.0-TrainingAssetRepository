@@ -10,9 +10,10 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string? OwnerName { get; set; }
         public string StorageType { get; set; } = "";
         public string? StorageEndpoint { get; set; }
+        public string? DefaultAICollection { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
-        
+
         // Storage-specific configuration (conditionally populated)
         public S3ConfigurationResponse? S3Config { get; set; }
         public OwnCloudConfigurationResponse? OwnCloudConfig { get; set; }
@@ -32,6 +33,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
                 OwnerName = tenant.OwnerName,
                 StorageType = tenant.StorageType,
                 StorageEndpoint = tenant.StorageEndpoint,
+                DefaultAICollection = tenant.DefaultAICollection,
                 CreatedAt = tenant.CreatedAt,
                 UpdatedAt = tenant.UpdatedAt
             };
@@ -87,7 +89,12 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         
         [Required]
         public string StorageType { get; set; } = "OwnCloud"; // "S3", "OwnCloud", "MinIO"
-        
+
+        // Optional. Per-tenant DataLens collection used as the fallback for AIAssistantMaterials
+        // that don't define their own CollectionName. If omitted, the controller derives one
+        // from the tenant name so tenants never share a collection.
+        public string? DefaultAICollection { get; set; }
+
         // Storage-specific configuration
         public S3ConfigurationRequest? S3Config { get; set; }
         public OwnCloudConfigurationRequest? OwnCloudConfig { get; set; }

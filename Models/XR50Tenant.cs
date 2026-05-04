@@ -26,7 +26,13 @@ namespace XR50TrainingAssetRepo.Models
         
         // OwnCloud specific properties
         public string? TenantDirectory { get; set; }
-        
+
+        // AI Assistant Configuration
+        // Per-tenant DataLens collection used as the fallback for AIAssistantMaterials that
+        // don't define their own CollectionName. Keeps tenants from sharing one global
+        // collection (which would expose documents across tenants through the chatbot).
+        public string? DefaultAICollection { get; set; }
+
         // User Management
         public User? Owner { get; set; }
         public virtual ICollection<TenantAdmin> TenantAdmins { get; set; } = new List<TenantAdmin>();

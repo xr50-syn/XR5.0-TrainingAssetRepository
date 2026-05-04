@@ -24,7 +24,6 @@ namespace XR50TrainingAssetRepo.Services
         // Polling intervals
         private readonly TimeSpan _activePollingInterval;
         private readonly TimeSpan _idleCheckInterval;
-        private readonly string _defaultCollectionName;
 
         public AiStatusSyncService(
             IServiceProvider serviceProvider,
@@ -42,10 +41,6 @@ namespace XR50TrainingAssetRepo.Services
             // Idle check: when no jobs are processing (default 5 minutes)
             var idleMinutes = configuration.GetValue<int>("AiStatusSync:IdleIntervalMinutes", 5);
             _idleCheckInterval = TimeSpan.FromMinutes(idleMinutes);
-
-            _defaultCollectionName = configuration["ChatbotApi:DefaultCollectionName"]
-                ?? Environment.GetEnvironmentVariable("CHATBOT_API_DEFAULT_COLLECTION")
-                ?? "pdf_knowledge_base";
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)

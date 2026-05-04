@@ -71,6 +71,7 @@ namespace XR50TrainingAssetRepo.Services
                     `S3BucketArn` varchar(255) NULL,
                     `StorageEndpoint` varchar(255) NULL,
                     `OwnerName` varchar(255) NULL,
+                    `DefaultAICollection` varchar(255) NULL,
                     `DatabaseName` varchar(100) NOT NULL,
                     `CreatedAt` datetime NOT NULL,
                     `IsActive` boolean NOT NULL DEFAULT 1
@@ -83,9 +84,9 @@ namespace XR50TrainingAssetRepo.Services
             var sql = @"
                 SELECT TenantName, TenantGroup, Description, StorageType, TenantDirectory,
                     S3BucketName, S3BucketRegion, S3BucketArn, StorageEndpoint,
-                    OwnerName, DatabaseName, CreatedAt, IsActive
-                FROM XR50TenantRegistry 
-                WHERE IsActive = 1 
+                    OwnerName, DefaultAICollection, DatabaseName, CreatedAt, IsActive
+                FROM XR50TenantRegistry
+                WHERE IsActive = 1
                 ORDER BY CreatedAt DESC";
 
             using var command = new MySqlCommand(sql, connection);
@@ -107,6 +108,7 @@ namespace XR50TrainingAssetRepo.Services
                     S3BucketArn = reader["S3BucketArn"]?.ToString(),
                     StorageEndpoint = reader["StorageEndpoint"]?.ToString(),
                     OwnerName = reader["OwnerName"]?.ToString(),
+                    DefaultAICollection = reader["DefaultAICollection"]?.ToString(),
                     TenantSchema = reader["DatabaseName"]?.ToString(),
                     CreatedAt = reader["CreatedAt"] != DBNull.Value ? Convert.ToDateTime(reader["CreatedAt"]) : DateTime.UtcNow
                 });
@@ -127,8 +129,8 @@ namespace XR50TrainingAssetRepo.Services
             var sql = @"
                 SELECT TenantName, TenantGroup, Description, StorageType, TenantDirectory,
                     S3BucketName, S3BucketRegion, S3BucketArn, StorageEndpoint,
-                    OwnerName, DatabaseName, CreatedAt, IsActive
-                FROM XR50TenantRegistry 
+                    OwnerName, DefaultAICollection, DatabaseName, CreatedAt, IsActive
+                FROM XR50TenantRegistry
                 WHERE TenantName = @tenantName AND IsActive = 1";
 
             using var command = new MySqlCommand(sql, connection);
@@ -151,6 +153,7 @@ namespace XR50TrainingAssetRepo.Services
                     S3BucketArn = reader["S3BucketArn"]?.ToString(),
                     StorageEndpoint = reader["StorageEndpoint"]?.ToString(),
                     OwnerName = reader["OwnerName"]?.ToString(),
+                    DefaultAICollection = reader["DefaultAICollection"]?.ToString(),
                     TenantSchema = reader["DatabaseName"]?.ToString(),
                     CreatedAt = reader["CreatedAt"] != DBNull.Value ? Convert.ToDateTime(reader["CreatedAt"]) : DateTime.UtcNow
                 };
@@ -231,7 +234,7 @@ namespace XR50TrainingAssetRepo.Services
 
             // FIXED: UPDATE with S3 fields
             var sql = @"
-                UPDATE XR50TenantRegistry 
+                UPDATE XR50TenantRegistry
                 SET TenantGroup = @tenantGroup,
                     Description = @description,
                     StorageType = @storageType,
@@ -240,7 +243,8 @@ namespace XR50TrainingAssetRepo.Services
                     S3BucketRegion = @s3BucketRegion,
                     S3BucketArn = @s3BucketArn,
                     StorageEndpoint = @storageEndpoint,
-                    OwnerName = @ownerName
+                    OwnerName = @ownerName,
+                    DefaultAICollection = @defaultAICollection
                 WHERE TenantName = @tenantName AND IsActive = 1";
 
             using var command = new MySqlCommand(sql, connection);
@@ -254,6 +258,7 @@ namespace XR50TrainingAssetRepo.Services
             command.Parameters.AddWithValue("@s3BucketArn", tenant.S3BucketArn ?? (object)DBNull.Value);
             command.Parameters.AddWithValue("@storageEndpoint", tenant.StorageEndpoint ?? (object)DBNull.Value);
             command.Parameters.AddWithValue("@ownerName", tenant.Owner?.UserName ?? tenant.OwnerName ?? "");
+            command.Parameters.AddWithValue("@defaultAICollection", tenant.DefaultAICollection ?? (object)DBNull.Value);
 
             await command.ExecuteNonQueryAsync();
 

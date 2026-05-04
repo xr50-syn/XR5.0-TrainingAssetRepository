@@ -14,22 +14,38 @@ namespace XR50TrainingAssetRepo.Services.Materials
     {
         private readonly IXR50TenantDbContextFactory _dbContextFactory;
         private readonly IChatbotApiService _chatbotApiService;
+        private readonly IXR50TenantService _tenantService;
+        private readonly IXR50TenantManagementService _tenantManagementService;
         private readonly ILogger<AIAssistantMaterialService> _logger;
-        private readonly string _defaultCollectionName;
 
         public AIAssistantMaterialService(
             IXR50TenantDbContextFactory dbContextFactory,
             IChatbotApiService chatbotApiService,
-            ILogger<AIAssistantMaterialService> logger,
-            IConfiguration configuration)
+            IXR50TenantService tenantService,
+            IXR50TenantManagementService tenantManagementService,
+            ILogger<AIAssistantMaterialService> logger)
         {
             _dbContextFactory = dbContextFactory;
             _chatbotApiService = chatbotApiService;
+            _tenantService = tenantService;
+            _tenantManagementService = tenantManagementService;
             _logger = logger;
+        }
 
-            _defaultCollectionName = configuration["ChatbotApi:DefaultCollectionName"]
-                ?? Environment.GetEnvironmentVariable("CHATBOT_API_DEFAULT_COLLECTION")
-                ?? "pdf_knowledge_base";
+        // Resolve the current tenant's per-tenant default DataLens collection. Used as the
+        // fallback for AIAssistantMaterials that don't define their own CollectionName.
+        // Sharing one global collection across tenants would let a chatbot query in tenant A
+        // surface documents another tenant uploaded — see XR50Tenant.DefaultAICollection.
+        private async Task<string> GetTenantDefaultCollectionAsync()
+        {
+            var tenantName = _tenantService.GetCurrentTenant();
+            var tenant = await _tenantManagementService.GetTenantAsync(tenantName);
+            if (string.IsNullOrEmpty(tenant?.DefaultAICollection))
+            {
+                throw new InvalidOperationException(
+                    $"Tenant '{tenantName}' has no DefaultAICollection configured; cannot bind AI Assistant material to a default collection");
+            }
+            return tenant.DefaultAICollection;
         }
 
         #region CRUD Operations
@@ -58,11 +74,11 @@ namespace XR50TrainingAssetRepo.Services.Materials
             aiAssistant.Updated_at = DateTime.UtcNow;
             aiAssistant.Type = MaterialType.AIAssistant;
 
-            // No explicit collection → bind to the shared default so queries route there.
+            // No explicit collection → bind to the per-tenant default so queries route there.
             // Status stays "notready" until the chatbot finishes its own processing step.
             if (string.IsNullOrEmpty(aiAssistant.CollectionName))
             {
-                aiAssistant.CollectionName = _defaultCollectionName;
+                aiAssistant.CollectionName = await GetTenantDefaultCollectionAsync();
             }
             if (string.IsNullOrEmpty(aiAssistant.AIAssistantStatus))
             {
@@ -154,11 +170,11 @@ namespace XR50TrainingAssetRepo.Services.Materials
             await context.SaveChangesAsync();
 
             // Resolve target collection. If the caller pre-set CollectionName (explicit per-material
-            // or named shared collection), honour it. Otherwise default to the configured shared
-            // collection — frontends that don't care about isolation just pile into one corpus.
+            // or named tenant-scoped collection), honour it. Otherwise fall back to the tenant's
+            // own default collection so material data stays inside this tenant.
             if (string.IsNullOrEmpty(aiAssistant.CollectionName))
             {
-                aiAssistant.CollectionName = _defaultCollectionName;
+                aiAssistant.CollectionName = await GetTenantDefaultCollectionAsync();
             }
             var collectionName = aiAssistant.CollectionName;
             await context.SaveChangesAsync();
@@ -356,13 +372,13 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 return aiAssistant;
             }
 
-            // Resolve collection name, fall back to the shared default if not set
+            // Resolve collection name, fall back to the per-tenant default if not set
             var collectionName = aiAssistant.CollectionName;
             if (string.IsNullOrEmpty(collectionName))
             {
-                collectionName = _defaultCollectionName;
+                collectionName = await GetTenantDefaultCollectionAsync();
                 aiAssistant.CollectionName = collectionName;
-                _logger.LogInformation("Bound AI Assistant material {AIAssistantId} to default collection {CollectionName}",
+                _logger.LogInformation("Bound AI Assistant material {AIAssistantId} to tenant default collection {CollectionName}",
                     aiAssistantId, collectionName);
             }
 

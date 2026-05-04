@@ -160,6 +160,7 @@ namespace XR50TrainingAssetRepo.Services
                     `S3BucketArn` varchar(255) NULL,
                     `StorageEndpoint` varchar(255) NULL,
                     `OwnerName` varchar(255) NULL,
+                    `DefaultAICollection` varchar(255) NULL,
                     `DatabaseName` varchar(100) NOT NULL,
                     `CreatedAt` datetime NOT NULL,
                     `IsActive` boolean NOT NULL DEFAULT 1
@@ -168,14 +169,14 @@ namespace XR50TrainingAssetRepo.Services
 
             // FIXED: INSERT with S3 fields
             var insertCommand = new MySqlCommand(@"
-                INSERT INTO `XR50TenantRegistry` 
-                    (`TenantName`, `TenantGroup`, `Description`, `StorageType`, `TenantDirectory`, 
-                    `S3BucketName`, `S3BucketRegion`, `S3BucketArn`, `StorageEndpoint`, 
-                    `OwnerName`, `DatabaseName`, `CreatedAt`, `IsActive`)
-                VALUES 
+                INSERT INTO `XR50TenantRegistry`
+                    (`TenantName`, `TenantGroup`, `Description`, `StorageType`, `TenantDirectory`,
+                    `S3BucketName`, `S3BucketRegion`, `S3BucketArn`, `StorageEndpoint`,
+                    `OwnerName`, `DefaultAICollection`, `DatabaseName`, `CreatedAt`, `IsActive`)
+                VALUES
                     (@tenantName, @tenantGroup, @description, @storageType, @tenantDirectory,
                     @s3BucketName, @s3BucketRegion, @s3BucketArn, @storageEndpoint,
-                    @ownerName, @databaseName, @createdAt, 1)
+                    @ownerName, @defaultAICollection, @databaseName, @createdAt, 1)
                 ON DUPLICATE KEY UPDATE
                     `TenantGroup` = @tenantGroup,
                     `Description` = @description,
@@ -186,6 +187,7 @@ namespace XR50TrainingAssetRepo.Services
                     `S3BucketArn` = @s3BucketArn,
                     `StorageEndpoint` = @storageEndpoint,
                     `OwnerName` = @ownerName,
+                    `DefaultAICollection` = @defaultAICollection,
                     `DatabaseName` = @databaseName", connection);
 
             // FIXED: Parameters with S3 fields
@@ -212,7 +214,8 @@ namespace XR50TrainingAssetRepo.Services
                 await CreateOwnerUserInTenantDatabase(tenant.Owner, tenantDbName);
             }
             insertCommand.Parameters.AddWithValue("@ownerName", ownerName);
-            
+            insertCommand.Parameters.AddWithValue("@defaultAICollection", tenant.DefaultAICollection ?? (object)DBNull.Value);
+
             insertCommand.Parameters.AddWithValue("@databaseName", tenantDbName);
             insertCommand.Parameters.AddWithValue("@createdAt", DateTime.UtcNow);
 

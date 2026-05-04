@@ -53,16 +53,17 @@ namespace XR50TrainingAssetRepo.Services
         private readonly IConfiguration _configuration;
         private readonly IXR50TenantDbContextFactory _dbContextFactory;
         private readonly IMaterialServiceBase _materialServiceBase;
+        private readonly IXR50TenantService _tenantService;
         private readonly IXR50TenantManagementService _tenantManagementService;
         private readonly IStorageService _storageService; // Unified storage interface
         private readonly IChatbotApiService _chatbotApiService;
         private readonly ILogger<AssetService> _logger;
-        private readonly string _defaultCollectionName;
 
         public AssetService(
             IConfiguration configuration,
             IXR50TenantDbContextFactory dbContextFactory,
             IMaterialServiceBase materialServiceBase,
+            IXR50TenantService tenantService,
             IXR50TenantManagementService tenantManagementService,
             IStorageService storageService,
             IChatbotApiService chatbotApiService,
@@ -71,13 +72,26 @@ namespace XR50TrainingAssetRepo.Services
             _configuration = configuration;
             _dbContextFactory = dbContextFactory;
             _materialServiceBase = materialServiceBase;
+            _tenantService = tenantService;
             _tenantManagementService = tenantManagementService;
             _storageService = storageService;
             _chatbotApiService = chatbotApiService;
             _logger = logger;
-            _defaultCollectionName = configuration["ChatbotApi:DefaultCollectionName"]
-                ?? Environment.GetEnvironmentVariable("CHATBOT_API_DEFAULT_COLLECTION")
-                ?? "pdf_knowledge_base";
+        }
+
+        // Resolve the current tenant's per-tenant default DataLens collection. Used as the
+        // fallback when an asset isn't owned by an AIAssistantMaterial. See
+        // XR50Tenant.DefaultAICollection for why this must not be a global value.
+        private async Task<string> GetTenantDefaultCollectionAsync()
+        {
+            var tenantName = _tenantService.GetCurrentTenant();
+            var tenant = await _tenantManagementService.GetTenantAsync(tenantName);
+            if (string.IsNullOrEmpty(tenant?.DefaultAICollection))
+            {
+                throw new InvalidOperationException(
+                    $"Tenant '{tenantName}' has no DefaultAICollection configured; cannot resolve a default collection for asset AI status sync");
+            }
+            return tenant.DefaultAICollection;
         }
 
         public async Task<IEnumerable<Asset>> GetAllAssetsAsync()
@@ -992,6 +1006,9 @@ namespace XR50TrainingAssetRepo.Services
             // Build asset-to-collection mapping
             var assetCollectionMap = await BuildAssetCollectionMapAsync(context, processingAssets.Select(a => a.Id).ToList());
 
+            // Tenant-scoped fallback for assets not owned by any AIAssistantMaterial.
+            var tenantDefaultCollection = await GetTenantDefaultCollectionAsync();
+
             var updatedCount = 0;
 
             foreach (var asset in processingAssets)
@@ -1001,7 +1018,7 @@ namespace XR50TrainingAssetRepo.Services
 
                 try
                 {
-                    var collectionName = assetCollectionMap.GetValueOrDefault(asset.Id, _defaultCollectionName);
+                    var collectionName = assetCollectionMap.GetValueOrDefault(asset.Id, tenantDefaultCollection);
                     var status = await _chatbotApiService.GetJobStatusAsync(asset.JobId!, collectionName);
 
                     _logger.LogInformation("Asset {AssetId} status check returned: Status='{Status}'",
@@ -1067,7 +1084,7 @@ namespace XR50TrainingAssetRepo.Services
 
         /// <summary>
         /// Resolves the DataLens collection name for an asset by finding its owning AIAssistantMaterial.
-        /// Falls back to the default collection if the asset is not associated with any material.
+        /// Falls back to the current tenant's default collection if the asset is not associated with any material.
         /// </summary>
         private async Task<string> ResolveCollectionNameForAssetAsync(XR50TrainingContext context, int assetId)
         {
@@ -1081,7 +1098,7 @@ namespace XR50TrainingAssetRepo.Services
                 return aiAssistantMaterial.CollectionName;
             }
 
-            return _defaultCollectionName;
+            return await GetTenantDefaultCollectionAsync();
         }
 
         /// <summary>
