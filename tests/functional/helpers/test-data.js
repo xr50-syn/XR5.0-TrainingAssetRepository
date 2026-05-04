@@ -242,13 +242,14 @@ function createChatbotMaterial(suffix = '', endpoint = 'https://test.xr50.work')
 
 /**
  * Generate an AI Assistant material in Mode B (empty assets).
- * The server should bind the material to the shared default DataLens collection
- * (ChatbotApi:DefaultCollectionName, e.g. "tap_assistant") and skip uploads.
+ * The server binds the material to the tenant's DefaultAICollection
+ * (set at tenant creation; auto-derived as aiassist_default_{tenantName}
+ * when not supplied). Tenants never share a collection.
  */
 function createAIAssistantMaterialEmpty(suffix = '') {
   return {
     name: `Test AI Assistant Empty ${suffix || timestamp}`,
-    description: 'Mode B: no assets, queries fall back to shared default collection',
+    description: 'Mode B: no assets, queries fall back to the tenant default collection',
     type: 'ai_assistant',
     unique_id: Math.floor(Math.random() * 100000),
     related: [],
