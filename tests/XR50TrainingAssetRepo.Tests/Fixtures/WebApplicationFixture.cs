@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using XR50TrainingAssetRepo.Models;
 
@@ -59,10 +60,13 @@ public class WebApplicationFixture : WebApplicationFactory<Program>
                 services.Remove(factoryDescriptor);
             }
 
-            // Add in-memory database with a consistent name for all requests in this fixture
+            // Add in-memory database with a consistent name for all requests in this fixture.
+            // InMemory has no real transactions; production services call BeginTransactionAsync,
+            // so we silence the warning rather than fail every transactional test path.
             services.AddDbContext<XR50TrainingContext>(options =>
             {
-                options.UseInMemoryDatabase(dbName);
+                options.UseInMemoryDatabase(dbName)
+                       .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning));
             });
 
             // Register test DbContext factory that returns the in-memory context
@@ -93,26 +97,23 @@ public class WebApplicationFixture : WebApplicationFactory<Program>
 }
 
 /// <summary>
-/// Test implementation of IXR50TenantDbContextFactory that returns the in-memory context.
+/// Test implementation of IXR50TenantDbContextFactory.
+/// Creates a fresh context per call so production code's `using var ctx = factory.CreateDbContext()`
+/// pattern works correctly. All contexts share the same InMemory database name (set in
+/// WebApplicationFixture._databaseName), so data persists across calls within a fixture instance.
 /// </summary>
 public class TestDbContextFactory : IXR50TenantDbContextFactory
 {
-    private readonly XR50TrainingContext _context;
+    private readonly DbContextOptions<XR50TrainingContext> _options;
 
-    public TestDbContextFactory(XR50TrainingContext context)
+    public TestDbContextFactory(DbContextOptions<XR50TrainingContext> options)
     {
-        _context = context;
+        _options = options;
     }
 
-    public XR50TrainingContext CreateDbContext()
-    {
-        return _context;
-    }
+    public XR50TrainingContext CreateDbContext() => new XR50TrainingContext(_options);
 
-    public XR50TrainingContext CreateAdminDbContext()
-    {
-        return _context;
-    }
+    public XR50TrainingContext CreateAdminDbContext() => new XR50TrainingContext(_options);
 }
 
 /// <summary>
