@@ -26,6 +26,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = Split-Path -Parent $ScriptDir
 $ComposeFile = Join-Path $ProjectRoot "docker-compose.yaml"
 $EnvFile = Join-Path $ProjectRoot ".env.minio"
+$EnvExampleFile = Join-Path $ProjectRoot ".env.minio.example"
 $Profile = "sandbox"
 $ApiUrl = "http://localhost:5286"
 $HealthEndpoint = "$ApiUrl/health"
@@ -241,7 +242,7 @@ function Main {
         if (Test-Path $EnvFile) {
             docker compose --env-file $EnvFile --profile $Profile up -d
         } else {
-            Write-Warning "Environment file $EnvFile not found, using defaults"
+            Write-Warning "Environment file $EnvFile not found. Copy $EnvExampleFile to $EnvFile and set local secrets if defaults are not sufficient."
             docker compose --profile $Profile up -d
         }
 

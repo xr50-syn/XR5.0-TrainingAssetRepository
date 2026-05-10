@@ -1,4 +1,0 @@
-{
-    "CodeGPT.apiKey": "Anthropic",
-    "CodeGPT.Autocomplete.provider": "Ollama - codellama:code"
-}

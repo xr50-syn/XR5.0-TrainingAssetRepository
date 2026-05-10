@@ -1,7 +1,7 @@
 {
   "userName": "trainee123",
   "fullName": "Test Trainee",
-  "userEmail": "test1@syn",
-  "password": "123321",
+  "userEmail": "test.user@example.com",
+  "password": "example-password",
   "admin": false
 }

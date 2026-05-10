@@ -362,7 +362,7 @@ namespace XR50TrainingAssetRepo.Controllers
                         bucketName = "xr50-tenant-a",
                         bucketRegion = "eu-west-1",
                         bucketArn = "arn:aws:s3:::xr50-tenant-a",
-                        endpoint = "https://storage.lab.synelixis.com"
+                        endpoint = "https://s3.example.com"
                     },
                     owner = new
                     {

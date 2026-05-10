@@ -27,7 +27,8 @@ cd XR5.0-TrainingAssetRepository
 ### Step 2: Configure Environment
 ```bash
 # Copy the sandbox environment configuration
-cp .env.sandbox .env
+cp .env.sandbox.example .env
+# Edit .env and replace change_me values before starting
 ```
 
 ### Step 3: Start the Sandbox

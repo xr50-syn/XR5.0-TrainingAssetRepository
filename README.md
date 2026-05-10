@@ -12,7 +12,8 @@ git clone https://github.com/xr50-syn/XR5.0-TrainingAssetRepository.git
 cd XR5.0-TrainingAssetRepository
 
 # Start sandbox environment (MinIO + MariaDB + Keycloak)
-cp .env.sandbox .env
+cp .env.sandbox.example .env
+# Edit .env and replace change_me values before starting
 docker-compose --profile sandbox up -d
 
 # Create sample buckets (choose your OS)

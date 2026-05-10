@@ -31,7 +31,7 @@ git clone <repository-url>
 cd XR5.0-TrainingAssetRepository
 
 # Configure for S3 production
-cp .env.prod .env
+cp .env.prod.example .env
 # Edit .env with your AWS credentials:
 # AWS_ACCESS_KEY_ID=your_key_here
 # AWS_SECRET_ACCESS_KEY=your_secret_here

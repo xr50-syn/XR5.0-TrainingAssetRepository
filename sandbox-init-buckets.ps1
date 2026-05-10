@@ -5,9 +5,20 @@ Write-Host ""
 Write-Host "This script creates sample buckets in MinIO for sandbox testing."
 Write-Host ""
 
-# Set MinIO credentials for this session.
-$env:AWS_ACCESS_KEY_ID = "minioadmin"
-$env:AWS_SECRET_ACCESS_KEY = "minioadmin"
+# Load local environment if present.
+if (Test-Path ".env") {
+  Get-Content ".env" | ForEach-Object {
+    if ($_ -match '^\s*#' -or $_ -notmatch '=') { return }
+    $name, $value = $_ -split '=', 2
+    if ($name) {
+      [Environment]::SetEnvironmentVariable($name.Trim(), $value.Trim(), "Process")
+    }
+  }
+}
+
+if ([string]::IsNullOrWhiteSpace($env:AWS_ACCESS_KEY_ID) -or [string]::IsNullOrWhiteSpace($env:AWS_SECRET_ACCESS_KEY)) {
+  throw "Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in .env or the current shell."
+}
 
 # Wait for MinIO to be fully ready.
 Write-Host "Waiting for MinIO to be ready..."

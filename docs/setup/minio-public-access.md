@@ -10,9 +10,9 @@ This guide shows how to make MinIO buckets publicly accessible so files can be d
 
 ## Prerequisites
 
-- MinIO is running on the VM at `http://192.168.190.33:9000`
+- MinIO is running on the VM at `http://minio.example.com:9000`
 - You have access to the VM or MinIO Web Console
-- Files uploaded through the application will return URLs like: `http://192.168.190.33:9000/bucket-name/file-name`
+- Files uploaded through the application will return URLs like: `http://minio.example.com:9000/bucket-name/file-name`
 
 ---
 
@@ -27,7 +27,7 @@ This guide shows how to make MinIO buckets publicly accessible so files can be d
 
 2. **Configure Connection**
    ```powershell
-   mc.exe alias set myminio http://192.168.190.33:9000 minioadmin minioadmin
+   mc.exe alias set myminio http://minio.example.com:9000 MINIO_ACCESS_KEY MINIO_SECRET_KEY
    ```
 
 3. **Make Bucket Public**
@@ -51,7 +51,7 @@ This guide shows how to make MinIO buckets publicly accessible so files can be d
 
 2. **Configure Connection**
    ```bash
-   ./mc alias set myminio http://192.168.190.33:9000 minioadmin minioadmin
+   ./mc alias set myminio http://minio.example.com:9000 MINIO_ACCESS_KEY MINIO_SECRET_KEY
    ```
 
 3. **Make Bucket Public**
@@ -66,8 +66,8 @@ This guide shows how to make MinIO buckets publicly accessible so files can be d
 ### Setup (One-time)
 
 ```bash
-aws configure set aws_access_key_id minioadmin
-aws configure set aws_secret_access_key minioadmin
+aws configure set aws_access_key_id MINIO_ACCESS_KEY
+aws configure set aws_secret_access_key MINIO_SECRET_KEY
 aws configure set region us-east-1
 ```
 
@@ -91,17 +91,17 @@ aws configure set region us-east-1
 
 2. **Apply policy**:
    ```bash
-   aws --endpoint-url http://192.168.190.33:9000 s3api put-bucket-policy --bucket BUCKET_NAME --policy file://public-policy.json
+   aws --endpoint-url http://minio.example.com:9000 s3api put-bucket-policy --bucket BUCKET_NAME --policy file://public-policy.json
    ```
 
 ---
 
 ## Method 3: Using MinIO Web Console
 
-1. Open browser to `http://192.168.190.33:9001`
+1. Open browser to `http://minio.example.com:9001`
 2. Login:
-   - Username: `minioadmin`
-   - Password: `minioadmin`
+   - Username: your configured MinIO access key
+   - Password: your configured MinIO secret key
 3. Navigate to **Buckets** → Click your bucket name
 4. Look for **Access Policy** or **Anonymous** settings
 5. Set to **Public** or **Download** (read-only)
@@ -126,7 +126,7 @@ Based on environment:
 After making a bucket public, test with curl:
 
 ```bash
-curl http://192.168.190.33:9000/BUCKET_NAME/FILE_NAME
+curl http://minio.example.com:9000/BUCKET_NAME/FILE_NAME
 ```
 
 If successful, you'll see the file contents. If still getting `AccessDenied`, the policy hasn't been applied correctly.
@@ -138,7 +138,7 @@ If successful, you'll see the file contents. If still getting `AccessDenied`, th
 ### "Access Denied" Error
 - Verify bucket name is correct
 - Check that policy was applied: `mc anonymous get myminio/BUCKET_NAME`
-- Ensure MinIO is accessible at `http://192.168.190.33:9000`
+- Ensure MinIO is accessible at `http://minio.example.com:9000`
 
 ### "Connection Refused"
 - Verify MinIO is running: `docker ps | grep minio`
@@ -147,7 +147,7 @@ If successful, you'll see the file contents. If still getting `AccessDenied`, th
 
 ### Files Still Not Accessible
 - Check file actually exists in bucket
-- Verify the full URL path matches: `http://192.168.190.33:9000/{bucket}/{filename}`
+- Verify the full URL path matches: `http://minio.example.com:9000/{bucket}/{filename}`
 - Try accessing through MinIO Console first
 
 ---
@@ -163,7 +163,7 @@ mc.exe anonymous set none myminio/BUCKET_NAME
 Or using AWS CLI:
 
 ```bash
-aws --endpoint-url http://192.168.190.33:9000 s3api delete-bucket-policy --bucket BUCKET_NAME
+aws --endpoint-url http://minio.example.com:9000 s3api delete-bucket-policy --bucket BUCKET_NAME
 ```
 
 ---

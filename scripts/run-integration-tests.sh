@@ -28,6 +28,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 COMPOSE_FILE="$PROJECT_ROOT/docker-compose.yaml"
 ENV_FILE="$PROJECT_ROOT/.env.minio"
+ENV_EXAMPLE_FILE="$PROJECT_ROOT/.env.minio.example"
 PROFILE="sandbox"
 API_URL="http://localhost:5286"
 HEALTH_ENDPOINT="$API_URL/health"
@@ -253,7 +254,7 @@ main() {
     if [ -f "$ENV_FILE" ]; then
         docker compose --env-file "$ENV_FILE" --profile "$PROFILE" up -d
     else
-        log_warning "Environment file $ENV_FILE not found, using defaults"
+        log_warning "Environment file $ENV_FILE not found. Copy $ENV_EXAMPLE_FILE to $ENV_FILE and set local secrets if defaults are not sufficient."
         docker compose --profile "$PROFILE" up -d
     fi
 

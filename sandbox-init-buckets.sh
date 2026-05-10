@@ -7,9 +7,15 @@ echo ""
 echo "This script creates sample buckets in MinIO for sandbox testing."
 echo ""
 
-# Set MinIO credentials
-export AWS_ACCESS_KEY_ID=minioadmin
-export AWS_SECRET_ACCESS_KEY=minioadmin
+# Load local environment if present.
+if [ -f .env ]; then
+  set -a
+  . ./.env
+  set +a
+fi
+
+: "${AWS_ACCESS_KEY_ID:?Set AWS_ACCESS_KEY_ID in .env or the current shell}"
+: "${AWS_SECRET_ACCESS_KEY:?Set AWS_SECRET_ACCESS_KEY in .env or the current shell}"
 
 # Wait for MinIO to be fully ready
 echo "Waiting for MinIO to be ready..."
