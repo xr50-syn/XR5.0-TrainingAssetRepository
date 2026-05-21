@@ -26,6 +26,8 @@ namespace XR50TrainingAssetRepo.Services
         Task<bool> MigrateQuizEvaluationColumnsAsync(string tenantName);
         Task<bool> MigrateAIAssistantCollectionColumnsAsync(string tenantName);
         Task<bool> MigrateAIAssistantMaterialAssetJobsTableAsync(string tenantName);
+        Task<bool> MigrateInnovChatbotColumnsAsync(string tenantName);
+        Task<bool> MigrateInnovChatbotMaterialAssetJobsTableAsync(string tenantName);
     }
 
     public class XR50ManualTableCreator : IXR50ManualTableCreator
@@ -67,6 +69,20 @@ namespace XR50TrainingAssetRepo.Services
             if (!jobsTableMigrated)
             {
                 _logger.LogWarning("Tables created for tenant {TenantName} but AIAssistantMaterialAssetJobs table migration failed", tenantName);
+                return false;
+            }
+
+            var innovColumnsMigrated = await MigrateInnovChatbotColumnsAsync(tenantName);
+            if (!innovColumnsMigrated)
+            {
+                _logger.LogWarning("Tables created for tenant {TenantName} but INNOV chatbot column migration failed", tenantName);
+                return false;
+            }
+
+            var innovJobsTableMigrated = await MigrateInnovChatbotMaterialAssetJobsTableAsync(tenantName);
+            if (!innovJobsTableMigrated)
+            {
+                _logger.LogWarning("Tables created for tenant {TenantName} but InnovChatbotMaterialAssetJobs table migration failed", tenantName);
                 return false;
             }
 
@@ -371,6 +387,12 @@ namespace XR50TrainingAssetRepo.Services
             `AIAssistantAssetIds` text DEFAULT NULL,
             `CollectionName` varchar(255) DEFAULT NULL,
 
+            -- INNOV Chatbot Material specific columns
+            `InnovPilot` varchar(255) DEFAULT NULL,
+            `InnovStatus` varchar(20) DEFAULT 'notready',
+            `InnovAssetIds` text DEFAULT NULL,
+            `InnovExpertiseLevel` varchar(50) DEFAULT NULL,
+
             -- Quiz-specific columns
             `EvaluationMode` tinyint(1) NOT NULL DEFAULT 0,
             `MinScore` int DEFAULT NULL,
@@ -633,6 +655,26 @@ namespace XR50TrainingAssetRepo.Services
                     INDEX `IX_AIAssistantMaterialAssetJobs_Status` (`Status`),
                     CONSTRAINT `FK_AIAssistantMaterialAssetJobs_Materials_AIAssistantMaterialId`
                         FOREIGN KEY (`AIAssistantMaterialId`) REFERENCES `Materials` (`id`) ON DELETE CASCADE
+                )",
+
+                // INNOV Chatbot Material/Asset Jobs - per-(material, asset) INNOV ingest state.
+                // Keyed on (MaterialId, AssetId) so the same Asset can have independent job state
+                // across multiple InnovChatbotMaterials pointing at different pilots.
+                @"CREATE TABLE IF NOT EXISTS `InnovChatbotMaterialAssetJobs` (
+                    `Id` int NOT NULL AUTO_INCREMENT,
+                    `InnovChatbotMaterialId` int NOT NULL,
+                    `AssetId` int NOT NULL,
+                    `Pilot` varchar(255) NOT NULL,
+                    `CollectionName` varchar(255) DEFAULT NULL,
+                    `Status` varchar(20) NOT NULL DEFAULT 'pending',
+                    `ErrorMessage` text DEFAULT NULL,
+                    `CreatedAt` datetime(6) NOT NULL,
+                    `UpdatedAt` datetime(6) NOT NULL,
+                    PRIMARY KEY (`Id`),
+                    UNIQUE INDEX `IX_InnovChatbotMaterialAssetJobs_Material_Asset` (`InnovChatbotMaterialId`, `AssetId`),
+                    INDEX `IX_InnovChatbotMaterialAssetJobs_Status` (`Status`),
+                    CONSTRAINT `FK_InnovChatbotMaterialAssetJobs_Materials`
+                        FOREIGN KEY (`InnovChatbotMaterialId`) REFERENCES `Materials` (`id`) ON DELETE CASCADE
                 )"
             };
         }
@@ -1703,6 +1745,140 @@ namespace XR50TrainingAssetRepo.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error migrating AIAssistantMaterialAssetJobs table for tenant: {TenantName}", tenantName);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Migrates existing tenant databases to add INNOV chatbot material columns to the
+        /// Materials table. Idempotent: each column is added only if missing.
+        /// </summary>
+        public async Task<bool> MigrateInnovChatbotColumnsAsync(string tenantName)
+        {
+            try
+            {
+                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
+                var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
+
+                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+
+                _logger.LogInformation("=== Migrating INNOV chatbot columns for tenant: {TenantName} ===", tenantName);
+
+                using var connection = new MySqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                var innovColumns = new Dictionary<string, string>
+                {
+                    { "InnovPilot", "ALTER TABLE `Materials` ADD COLUMN `InnovPilot` varchar(255) DEFAULT NULL" },
+                    { "InnovStatus", "ALTER TABLE `Materials` ADD COLUMN `InnovStatus` varchar(20) DEFAULT 'notready'" },
+                    { "InnovAssetIds", "ALTER TABLE `Materials` ADD COLUMN `InnovAssetIds` text DEFAULT NULL" },
+                    { "InnovExpertiseLevel", "ALTER TABLE `Materials` ADD COLUMN `InnovExpertiseLevel` varchar(50) DEFAULT NULL" }
+                };
+
+                foreach (var column in innovColumns)
+                {
+                    var checkQuery = @"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_SCHEMA = @dbName
+                        AND TABLE_NAME = 'Materials'
+                        AND COLUMN_NAME = @columnName";
+
+                    using (var checkCmd = new MySqlCommand(checkQuery, connection))
+                    {
+                        checkCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                        checkCmd.Parameters.AddWithValue("@columnName", column.Key);
+                        var exists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+
+                        if (!exists)
+                        {
+                            _logger.LogInformation("Adding {Column} column to Materials table...", column.Key);
+                            using (var addCmd = new MySqlCommand(column.Value, connection))
+                            {
+                                await addCmd.ExecuteNonQueryAsync();
+                                _logger.LogInformation("Successfully added {Column} column to Materials", column.Key);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogInformation("{Column} column already exists in Materials", column.Key);
+                        }
+                    }
+                }
+
+                _logger.LogInformation("=== INNOV chatbot columns migration completed for tenant: {TenantName} ===", tenantName);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating INNOV chatbot columns for tenant: {TenantName}", tenantName);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Creates the InnovChatbotMaterialAssetJobs table on existing tenant DBs.
+        /// Per-(material, asset) INNOV ingest tracking.
+        /// </summary>
+        public async Task<bool> MigrateInnovChatbotMaterialAssetJobsTableAsync(string tenantName)
+        {
+            try
+            {
+                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
+                var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
+
+                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+
+                _logger.LogInformation("=== Migrating InnovChatbotMaterialAssetJobs table for tenant: {TenantName} ===", tenantName);
+
+                using var connection = new MySqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                var tableCheckQuery = @"SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                    WHERE TABLE_SCHEMA = @dbName AND TABLE_NAME = 'InnovChatbotMaterialAssetJobs'";
+
+                bool tableExists;
+                using (var checkCmd = new MySqlCommand(tableCheckQuery, connection))
+                {
+                    checkCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                    tableExists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+                }
+
+                if (tableExists)
+                {
+                    _logger.LogInformation("InnovChatbotMaterialAssetJobs table already exists for tenant: {TenantName}", tenantName);
+                    return true;
+                }
+
+                const string createSql = @"
+                    CREATE TABLE `InnovChatbotMaterialAssetJobs` (
+                        `Id` int NOT NULL AUTO_INCREMENT,
+                        `InnovChatbotMaterialId` int NOT NULL,
+                        `AssetId` int NOT NULL,
+                        `Pilot` varchar(255) NOT NULL,
+                        `CollectionName` varchar(255) DEFAULT NULL,
+                        `Status` varchar(20) NOT NULL DEFAULT 'pending',
+                        `ErrorMessage` text DEFAULT NULL,
+                        `CreatedAt` datetime(6) NOT NULL,
+                        `UpdatedAt` datetime(6) NOT NULL,
+                        PRIMARY KEY (`Id`),
+                        UNIQUE KEY `IX_InnovChatbotMaterialAssetJobs_Material_Asset` (`InnovChatbotMaterialId`, `AssetId`),
+                        KEY `IX_InnovChatbotMaterialAssetJobs_Status` (`Status`),
+                        CONSTRAINT `FK_InnovChatbotMaterialAssetJobs_Materials`
+                            FOREIGN KEY (`InnovChatbotMaterialId`) REFERENCES `Materials` (`id`) ON DELETE CASCADE
+                    )";
+
+                using (var createCmd = new MySqlCommand(createSql, connection))
+                {
+                    await createCmd.ExecuteNonQueryAsync();
+                    _logger.LogInformation("Successfully created InnovChatbotMaterialAssetJobs table for tenant: {TenantName}", tenantName);
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating InnovChatbotMaterialAssetJobs table for tenant: {TenantName}", tenantName);
                 return false;
             }
         }

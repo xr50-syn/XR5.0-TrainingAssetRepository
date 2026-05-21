@@ -33,6 +33,16 @@ namespace XR50TrainingAssetRepo.Models
         // collection (which would expose documents across tenants through the chatbot).
         public string? DefaultAICollection { get; set; }
 
+        // INNOV Chatbot ("LLM Engine") Configuration
+        // Per-tenant connection to the partner LLM Engine. The API token is a secret: it is
+        // stored in the tenant registry but must never be logged or echoed in responses.
+        public string? InnovChatbotBaseUrl { get; set; }
+        public string? InnovChatbotApiToken { get; set; }
+        // Fallback pilot for InnovChatbotMaterials that don't define their own Pilot.
+        public string? InnovChatbotDefaultPilot { get; set; }
+
+        public bool IsInnovChatbotConfigured() => !string.IsNullOrEmpty(InnovChatbotBaseUrl);
+
         // User Management
         public User? Owner { get; set; }
         public virtual ICollection<TenantAdmin> TenantAdmins { get; set; } = new List<TenantAdmin>();

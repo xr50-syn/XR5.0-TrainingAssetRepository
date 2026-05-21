@@ -315,6 +315,7 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("users", new OpenApiInfo   { Title = "6. User Management", Version = "v1" });
     c.SwaggerDoc("chat", new OpenApiInfo { Title = "7. Chat API", Version = "v1", Description = "Chatbot conversation endpoints" });
     c.SwaggerDoc("ai-assistant", new OpenApiInfo { Title = "8. AI Assistant API", Version = "v1", Description = "AI assistant conversation and document upload endpoints" });
+    c.SwaggerDoc("innov-chatbot", new OpenApiInfo { Title = "9. INNOV Chatbot API", Version = "v1", Description = "INNOV LLM Engine chatbot conversation and document ingestion endpoints" });
 
     c.SwaggerDoc("all", new OpenApiInfo { 
         Title = "Complete XR50 Training Asset Repository API", 
@@ -340,6 +341,7 @@ builder.Services.AddSwaggerGen(c =>
             "users" => controllerName.Contains("Users"),
             "chat" => controllerName.Equals("Chat", StringComparison.OrdinalIgnoreCase),
             "ai-assistant" => controllerName.Equals("AIAssistant", StringComparison.OrdinalIgnoreCase),
+            "innov-chatbot" => controllerName.Equals("InnovChatbot", StringComparison.OrdinalIgnoreCase),
             "test" => controllerName.Contains("test"),
             _ => false
         };
@@ -571,11 +573,18 @@ public static class ServiceCollectionExtensions
         services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IImageMaterialService, XR50TrainingAssetRepo.Services.Materials.ImageMaterialService>();
         services.AddScoped<XR50TrainingAssetRepo.Services.Materials.ISimpleMaterialService, XR50TrainingAssetRepo.Services.Materials.SimpleMaterialService>();
         services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IAIAssistantMaterialService, XR50TrainingAssetRepo.Services.Materials.AIAssistantMaterialService>();
+        services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IInnovChatbotMaterialService, XR50TrainingAssetRepo.Services.Materials.InnovChatbotMaterialService>();
         services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IUserMaterialService, XR50TrainingAssetRepo.Services.Materials.UserMaterialService>();
         services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IQuizProgressService, XR50TrainingAssetRepo.Services.Materials.QuizProgressService>();
 
         // Chatbot API Service (HttpClient-based)
         services.AddHttpClient<IChatbotApiService, ChatbotApiService>();
+
+        // Chatbot provider seam: both DataLens (adapter over IChatbotApiService) and INNOV
+        // (native, per-tenant connection) implement IChatbotProvider so material services can
+        // select a backend by key. INNOV uses IHttpClientFactory (AddHttpClient registered above).
+        services.AddScoped<XR50TrainingAssetRepo.Services.Chatbot.IChatbotProvider, XR50TrainingAssetRepo.Services.Chatbot.DataLensChatbotProvider>();
+        services.AddScoped<XR50TrainingAssetRepo.Services.Chatbot.IChatbotProvider, XR50TrainingAssetRepo.Services.Chatbot.InnovChatbotProvider>();
 
         // Chat Service for chatbot conversations
         services.AddHttpClient<IChatService, ChatService>();

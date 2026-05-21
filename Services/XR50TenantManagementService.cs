@@ -72,6 +72,9 @@ namespace XR50TrainingAssetRepo.Services
                     `StorageEndpoint` varchar(255) NULL,
                     `OwnerName` varchar(255) NULL,
                     `DefaultAICollection` varchar(255) NULL,
+                    `InnovChatbotBaseUrl` varchar(500) NULL,
+                    `InnovChatbotApiToken` varchar(1000) NULL,
+                    `InnovChatbotDefaultPilot` varchar(255) NULL,
                     `DatabaseName` varchar(100) NOT NULL,
                     `CreatedAt` datetime NOT NULL,
                     `IsActive` boolean NOT NULL DEFAULT 1
@@ -84,7 +87,8 @@ namespace XR50TrainingAssetRepo.Services
             var sql = @"
                 SELECT TenantName, TenantGroup, Description, StorageType, TenantDirectory,
                     S3BucketName, S3BucketRegion, S3BucketArn, StorageEndpoint,
-                    OwnerName, DefaultAICollection, DatabaseName, CreatedAt, IsActive
+                    OwnerName, DefaultAICollection, InnovChatbotBaseUrl, InnovChatbotApiToken,
+                    InnovChatbotDefaultPilot, DatabaseName, CreatedAt, IsActive
                 FROM XR50TenantRegistry
                 WHERE IsActive = 1
                 ORDER BY CreatedAt DESC";
@@ -109,6 +113,9 @@ namespace XR50TrainingAssetRepo.Services
                     StorageEndpoint = reader["StorageEndpoint"]?.ToString(),
                     OwnerName = reader["OwnerName"]?.ToString(),
                     DefaultAICollection = reader["DefaultAICollection"]?.ToString(),
+                    InnovChatbotBaseUrl = reader["InnovChatbotBaseUrl"]?.ToString(),
+                    InnovChatbotApiToken = reader["InnovChatbotApiToken"]?.ToString(),
+                    InnovChatbotDefaultPilot = reader["InnovChatbotDefaultPilot"]?.ToString(),
                     TenantSchema = reader["DatabaseName"]?.ToString(),
                     CreatedAt = reader["CreatedAt"] != DBNull.Value ? Convert.ToDateTime(reader["CreatedAt"]) : DateTime.UtcNow
                 });
@@ -129,7 +136,8 @@ namespace XR50TrainingAssetRepo.Services
             var sql = @"
                 SELECT TenantName, TenantGroup, Description, StorageType, TenantDirectory,
                     S3BucketName, S3BucketRegion, S3BucketArn, StorageEndpoint,
-                    OwnerName, DefaultAICollection, DatabaseName, CreatedAt, IsActive
+                    OwnerName, DefaultAICollection, InnovChatbotBaseUrl, InnovChatbotApiToken,
+                    InnovChatbotDefaultPilot, DatabaseName, CreatedAt, IsActive
                 FROM XR50TenantRegistry
                 WHERE TenantName = @tenantName AND IsActive = 1";
 
@@ -154,6 +162,9 @@ namespace XR50TrainingAssetRepo.Services
                     StorageEndpoint = reader["StorageEndpoint"]?.ToString(),
                     OwnerName = reader["OwnerName"]?.ToString(),
                     DefaultAICollection = reader["DefaultAICollection"]?.ToString(),
+                    InnovChatbotBaseUrl = reader["InnovChatbotBaseUrl"]?.ToString(),
+                    InnovChatbotApiToken = reader["InnovChatbotApiToken"]?.ToString(),
+                    InnovChatbotDefaultPilot = reader["InnovChatbotDefaultPilot"]?.ToString(),
                     TenantSchema = reader["DatabaseName"]?.ToString(),
                     CreatedAt = reader["CreatedAt"] != DBNull.Value ? Convert.ToDateTime(reader["CreatedAt"]) : DateTime.UtcNow
                 };
@@ -244,7 +255,10 @@ namespace XR50TrainingAssetRepo.Services
                     S3BucketArn = @s3BucketArn,
                     StorageEndpoint = @storageEndpoint,
                     OwnerName = @ownerName,
-                    DefaultAICollection = @defaultAICollection
+                    DefaultAICollection = @defaultAICollection,
+                    InnovChatbotBaseUrl = @innovChatbotBaseUrl,
+                    InnovChatbotApiToken = @innovChatbotApiToken,
+                    InnovChatbotDefaultPilot = @innovChatbotDefaultPilot
                 WHERE TenantName = @tenantName AND IsActive = 1";
 
             using var command = new MySqlCommand(sql, connection);
@@ -259,6 +273,9 @@ namespace XR50TrainingAssetRepo.Services
             command.Parameters.AddWithValue("@storageEndpoint", tenant.StorageEndpoint ?? (object)DBNull.Value);
             command.Parameters.AddWithValue("@ownerName", tenant.Owner?.UserName ?? tenant.OwnerName ?? "");
             command.Parameters.AddWithValue("@defaultAICollection", tenant.DefaultAICollection ?? (object)DBNull.Value);
+            command.Parameters.AddWithValue("@innovChatbotBaseUrl", tenant.InnovChatbotBaseUrl ?? (object)DBNull.Value);
+            command.Parameters.AddWithValue("@innovChatbotApiToken", tenant.InnovChatbotApiToken ?? (object)DBNull.Value);
+            command.Parameters.AddWithValue("@innovChatbotDefaultPilot", tenant.InnovChatbotDefaultPilot ?? (object)DBNull.Value);
 
             await command.ExecuteNonQueryAsync();
 

@@ -55,6 +55,7 @@ namespace XR50TrainingAssetRepo.Data
         public DbSet<UserMaterialScore> UserMaterialScores { get; set; } = null!;
         public DbSet<AIAssistantSession> AIAssistantSessions { get; set; } = null!;
         public DbSet<AIAssistantMaterialAssetJob> AIAssistantMaterialAssetJobs { get; set; } = null!;
+        public DbSet<InnovChatbotMaterialAssetJob> InnovChatbotMaterialAssetJobs { get; set; } = null!;
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured && _tenantService != null && _configuration != null)
@@ -140,6 +141,7 @@ namespace XR50TrainingAssetRepo.Data
                 .HasValue<MQTT_TemplateMaterial>("MQTT_TemplateMaterial")
                 .HasValue<DefaultMaterial>("DefaultMaterial")
                 .HasValue<AIAssistantMaterial>("AIAssistantMaterial")
+                .HasValue<InnovChatbotMaterial>("InnovChatbotMaterial")
                 .HasValue<QuizMaterial>("QuizMaterial");
 
             // Configure specific properties for MQTT_TemplateMaterial
@@ -285,6 +287,38 @@ namespace XR50TrainingAssetRepo.Data
                 .IsUnique();
 
             modelBuilder.Entity<AIAssistantMaterialAssetJob>()
+                .HasIndex(j => j.Status);
+
+            // InnovChatbotMaterial configuration
+            modelBuilder.Entity<InnovChatbotMaterial>()
+                .Property(m => m.Pilot)
+                .HasColumnName("InnovPilot");
+            modelBuilder.Entity<InnovChatbotMaterial>()
+                .Property(m => m.InnovStatus)
+                .HasColumnName("InnovStatus");
+            modelBuilder.Entity<InnovChatbotMaterial>()
+                .Property(m => m.InnovAssetIds)
+                .HasColumnName("InnovAssetIds");
+            modelBuilder.Entity<InnovChatbotMaterial>()
+                .Property(m => m.ExpertiseLevel)
+                .HasColumnName("InnovExpertiseLevel");
+
+            // InnovChatbotMaterialAssetJob — per-(material, asset) INNOV ingest state.
+            // Unique per (material, asset) pair; deleted when the material is deleted.
+            modelBuilder.Entity<InnovChatbotMaterialAssetJob>()
+                .HasKey(j => j.Id);
+
+            modelBuilder.Entity<InnovChatbotMaterialAssetJob>()
+                .HasOne(j => j.InnovChatbotMaterial)
+                .WithMany()
+                .HasForeignKey(j => j.InnovChatbotMaterialId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<InnovChatbotMaterialAssetJob>()
+                .HasIndex(j => new { j.InnovChatbotMaterialId, j.AssetId })
+                .IsUnique();
+
+            modelBuilder.Entity<InnovChatbotMaterialAssetJob>()
                 .HasIndex(j => j.Status);
 
             modelBuilder.Entity<QuestionnaireMaterial>()

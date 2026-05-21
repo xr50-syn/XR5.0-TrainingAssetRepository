@@ -611,6 +611,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 MQTT_TemplateMaterial => MaterialType.MQTT_Template,
                 QuizMaterial => MaterialType.Quiz,
                 AIAssistantMaterial => MaterialType.AIAssistant,
+                InnovChatbotMaterial => MaterialType.InnovChatbot,
                 DefaultMaterial => MaterialType.Default,
                 _ => MaterialType.Default
             };

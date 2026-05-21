@@ -11,6 +11,13 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string StorageType { get; set; } = "";
         public string? StorageEndpoint { get; set; }
         public string? DefaultAICollection { get; set; }
+
+        // INNOV chatbot config — base URL and default pilot are echoed; the API token is a secret
+        // and is never returned. InnovChatbotConfigured reports whether a token is set.
+        public string? InnovChatbotBaseUrl { get; set; }
+        public string? InnovChatbotDefaultPilot { get; set; }
+        public bool InnovChatbotConfigured { get; set; }
+
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
 
@@ -34,6 +41,9 @@ namespace XR50TrainingAssetRepo.Models.DTOs
                 StorageType = tenant.StorageType,
                 StorageEndpoint = tenant.StorageEndpoint,
                 DefaultAICollection = tenant.DefaultAICollection,
+                InnovChatbotBaseUrl = tenant.InnovChatbotBaseUrl,
+                InnovChatbotDefaultPilot = tenant.InnovChatbotDefaultPilot,
+                InnovChatbotConfigured = !string.IsNullOrEmpty(tenant.InnovChatbotApiToken),
                 CreatedAt = tenant.CreatedAt,
                 UpdatedAt = tenant.UpdatedAt
             };
@@ -94,6 +104,12 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         // that don't define their own CollectionName. If omitted, the controller derives one
         // from the tenant name so tenants never share a collection.
         public string? DefaultAICollection { get; set; }
+
+        // Optional. Per-tenant INNOV chatbot ("LLM Engine") connection. The API token is a secret;
+        // it is stored but never returned in tenant responses.
+        public string? InnovChatbotBaseUrl { get; set; }
+        public string? InnovChatbotApiToken { get; set; }
+        public string? InnovChatbotDefaultPilot { get; set; }
 
         // Storage-specific configuration
         public S3ConfigurationRequest? S3Config { get; set; }

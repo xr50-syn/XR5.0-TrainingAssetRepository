@@ -57,7 +57,9 @@ namespace XR50TrainingAssetRepo.Models
         [EnumMember(Value = "default")]
         Default,
         [EnumMember(Value = "ai_assistant")]
-        AIAssistant
+        AIAssistant,
+        [EnumMember(Value = "innov_chatbot")]
+        InnovChatbot
     }
 
     public class ChecklistMaterial : Material
@@ -363,6 +365,113 @@ namespace XR50TrainingAssetRepo.Models
 
         [JsonIgnore]
         public AIAssistantMaterial? AIAssistantMaterial { get; set; }
+    }
+
+    /// <summary>
+    /// INNOV "LLM Engine" chatbot material. Documents (assets) are ingested into an INNOV pilot
+    /// and chat queries run against that pilot. Mirrors the AIAssistant ingest/status pattern but
+    /// targets the INNOV backend (per-tenant connection) and has no client-managed sessions.
+    /// </summary>
+    public class InnovChatbotMaterial : Material
+    {
+        /// <summary>
+        /// INNOV pilot this material targets. Falls back to the tenant's default pilot when null.
+        /// </summary>
+        public string? Pilot { get; set; }
+
+        /// <summary>
+        /// Aggregate ingest status computed from the per-asset job rows: "ready", "process", "notready".
+        /// </summary>
+        public string InnovStatus { get; set; } = "notready";
+
+        /// <summary>
+        /// JSON array of asset IDs ingested into the pilot. Example: "[1, 3, 5]".
+        /// </summary>
+        public string? InnovAssetIds { get; set; }
+
+        /// <summary>
+        /// Optional default response adaptation level: "beginner", "intermediate", "expert".
+        /// </summary>
+        public string? ExpertiseLevel { get; set; }
+
+        public InnovChatbotMaterial()
+        {
+            Type = Type.InnovChatbot;
+        }
+
+        /// <summary>
+        /// Helper to get asset IDs as a list.
+        /// </summary>
+        public List<int> GetAssetIdsList()
+        {
+            if (string.IsNullOrEmpty(InnovAssetIds))
+                return new List<int>();
+
+            try
+            {
+                return System.Text.Json.JsonSerializer.Deserialize<List<int>>(InnovAssetIds) ?? new List<int>();
+            }
+            catch
+            {
+                return new List<int>();
+            }
+        }
+
+        /// <summary>
+        /// Helper to set asset IDs from a list.
+        /// </summary>
+        public void SetAssetIdsList(List<int> assetIds)
+        {
+            InnovAssetIds = System.Text.Json.JsonSerializer.Serialize(assetIds);
+        }
+    }
+
+    /// <summary>
+    /// Per-(material, asset) INNOV ingest state. Mirrors AIAssistantMaterialAssetJob: each
+    /// InnovChatbotMaterial tracks its own ingest per asset, keyed on (material, asset), so the same
+    /// Asset row can be ingested into different pilots by different materials independently.
+    /// </summary>
+    public class InnovChatbotMaterialAssetJob
+    {
+        [Key]
+        public int Id { get; set; }
+
+        public int InnovChatbotMaterialId { get; set; }
+
+        public int AssetId { get; set; }
+
+        /// <summary>
+        /// INNOV pilot the asset was submitted to. Snapshot at submit time.
+        /// </summary>
+        [Required]
+        [StringLength(255)]
+        public string Pilot { get; set; } = string.Empty;
+
+        /// <summary>
+        /// INNOV collection name returned by the upload for this document, when available.
+        /// </summary>
+        [StringLength(255)]
+        public string? CollectionName { get; set; }
+
+        /// <summary>
+        /// Status: "pending", "processing", "completed", "failed".
+        /// The material's aggregate InnovStatus is computed from these.
+        /// </summary>
+        [Required]
+        [StringLength(20)]
+        public string Status { get; set; } = "pending";
+
+        /// <summary>
+        /// Last error reported by INNOV or the submit call, if any.
+        /// </summary>
+        public string? ErrorMessage { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+
+        public DateTime UpdatedAt { get; set; }
+
+        [JsonIgnore]
+        public InnovChatbotMaterial? InnovChatbotMaterial { get; set; }
     }
 
     public class QuizMaterial : Material

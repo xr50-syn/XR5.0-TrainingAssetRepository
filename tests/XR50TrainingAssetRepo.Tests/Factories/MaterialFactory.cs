@@ -255,6 +255,26 @@ public static class MaterialFactory
     }
 
     /// <summary>
+    /// Creates an INNOV chatbot material with optional asset IDs and pilot.
+    /// </summary>
+    public static object CreateInnovChatbotRequest(
+        string? name = null,
+        List<int>? assetIds = null,
+        string? pilot = null,
+        string? expertiseLevel = null)
+    {
+        return new
+        {
+            name = name ?? $"Test INNOV Chatbot {Guid.NewGuid():N}",
+            description = "Test INNOV chatbot material for pilot-scoped Q&A",
+            type = "innov_chatbot",
+            pilot,
+            expertiseLevel,
+            assetIds = assetIds ?? new List<int>()
+        };
+    }
+
+    /// <summary>
     /// Creates a chatbot material (for comparison with AI Assistant).
     /// </summary>
     public static object CreateChatbotRequest(

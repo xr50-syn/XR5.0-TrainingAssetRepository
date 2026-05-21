@@ -86,6 +86,9 @@ namespace XR50TrainingAssetRepo.Controllers
                     OwnerName = request.OwnerName,
                     StorageType = request.StorageType,
                     DefaultAICollection = defaultAICollection,
+                    InnovChatbotBaseUrl = request.InnovChatbotBaseUrl,
+                    InnovChatbotApiToken = request.InnovChatbotApiToken,
+                    InnovChatbotDefaultPilot = request.InnovChatbotDefaultPilot,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };

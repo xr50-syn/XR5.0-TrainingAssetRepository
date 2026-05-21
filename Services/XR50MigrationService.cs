@@ -64,6 +64,8 @@ namespace XR50TrainingAssetRepo.Services
                 // converge on the same post-create schema state.
                 await _tableCreator.MigrateAIAssistantCollectionColumnsAsync(tenant.TenantName);
                 await _tableCreator.MigrateAIAssistantMaterialAssetJobsTableAsync(tenant.TenantName);
+                await _tableCreator.MigrateInnovChatbotColumnsAsync(tenant.TenantName);
+                await _tableCreator.MigrateInnovChatbotMaterialAssetJobsTableAsync(tenant.TenantName);
 
                 // 3. Verify tables were created
                 var tables = await _tableCreator.GetExistingTablesAsync(tenant.TenantName);
@@ -161,6 +163,9 @@ namespace XR50TrainingAssetRepo.Services
                     `StorageEndpoint` varchar(255) NULL,
                     `OwnerName` varchar(255) NULL,
                     `DefaultAICollection` varchar(255) NULL,
+                    `InnovChatbotBaseUrl` varchar(500) NULL,
+                    `InnovChatbotApiToken` varchar(1000) NULL,
+                    `InnovChatbotDefaultPilot` varchar(255) NULL,
                     `DatabaseName` varchar(100) NOT NULL,
                     `CreatedAt` datetime NOT NULL,
                     `IsActive` boolean NOT NULL DEFAULT 1
@@ -172,11 +177,13 @@ namespace XR50TrainingAssetRepo.Services
                 INSERT INTO `XR50TenantRegistry`
                     (`TenantName`, `TenantGroup`, `Description`, `StorageType`, `TenantDirectory`,
                     `S3BucketName`, `S3BucketRegion`, `S3BucketArn`, `StorageEndpoint`,
-                    `OwnerName`, `DefaultAICollection`, `DatabaseName`, `CreatedAt`, `IsActive`)
+                    `OwnerName`, `DefaultAICollection`, `InnovChatbotBaseUrl`, `InnovChatbotApiToken`,
+                    `InnovChatbotDefaultPilot`, `DatabaseName`, `CreatedAt`, `IsActive`)
                 VALUES
                     (@tenantName, @tenantGroup, @description, @storageType, @tenantDirectory,
                     @s3BucketName, @s3BucketRegion, @s3BucketArn, @storageEndpoint,
-                    @ownerName, @defaultAICollection, @databaseName, @createdAt, 1)
+                    @ownerName, @defaultAICollection, @innovChatbotBaseUrl, @innovChatbotApiToken,
+                    @innovChatbotDefaultPilot, @databaseName, @createdAt, 1)
                 ON DUPLICATE KEY UPDATE
                     `TenantGroup` = @tenantGroup,
                     `Description` = @description,
@@ -188,6 +195,9 @@ namespace XR50TrainingAssetRepo.Services
                     `StorageEndpoint` = @storageEndpoint,
                     `OwnerName` = @ownerName,
                     `DefaultAICollection` = @defaultAICollection,
+                    `InnovChatbotBaseUrl` = @innovChatbotBaseUrl,
+                    `InnovChatbotApiToken` = @innovChatbotApiToken,
+                    `InnovChatbotDefaultPilot` = @innovChatbotDefaultPilot,
                     `DatabaseName` = @databaseName", connection);
 
             // FIXED: Parameters with S3 fields
@@ -215,6 +225,9 @@ namespace XR50TrainingAssetRepo.Services
             }
             insertCommand.Parameters.AddWithValue("@ownerName", ownerName);
             insertCommand.Parameters.AddWithValue("@defaultAICollection", tenant.DefaultAICollection ?? (object)DBNull.Value);
+            insertCommand.Parameters.AddWithValue("@innovChatbotBaseUrl", tenant.InnovChatbotBaseUrl ?? (object)DBNull.Value);
+            insertCommand.Parameters.AddWithValue("@innovChatbotApiToken", tenant.InnovChatbotApiToken ?? (object)DBNull.Value);
+            insertCommand.Parameters.AddWithValue("@innovChatbotDefaultPilot", tenant.InnovChatbotDefaultPilot ?? (object)DBNull.Value);
 
             insertCommand.Parameters.AddWithValue("@databaseName", tenantDbName);
             insertCommand.Parameters.AddWithValue("@createdAt", DateTime.UtcNow);

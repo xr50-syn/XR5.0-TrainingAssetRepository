@@ -61,6 +61,7 @@ namespace XR50TrainingAssetRepo.Controllers
         private readonly IAssetService _assetService;
         private readonly ILearningPathService _learningPathService;
         private readonly IAIAssistantMaterialService _aiAssistantMaterialService;
+        private readonly IInnovChatbotMaterialService _innovChatbotMaterialService;
         private readonly IUserMaterialService _userMaterialService;
         private readonly IConfiguration _configuration;
         private readonly IWebHostEnvironment _environment;
@@ -79,6 +80,7 @@ namespace XR50TrainingAssetRepo.Controllers
             IAssetService assetService,
             ILearningPathService learningPathService,
             IAIAssistantMaterialService aiAssistantMaterialService,
+            IInnovChatbotMaterialService innovChatbotMaterialService,
             IUserMaterialService userMaterialService,
             IConfiguration configuration,
             IWebHostEnvironment environment,
@@ -96,6 +98,7 @@ namespace XR50TrainingAssetRepo.Controllers
             _assetService = assetService;
             _learningPathService = learningPathService;
             _aiAssistantMaterialService = aiAssistantMaterialService;
+            _innovChatbotMaterialService = innovChatbotMaterialService;
             _userMaterialService = userMaterialService;
             _configuration = configuration;
             _environment = environment;
@@ -274,6 +277,7 @@ public async Task<ActionResult<object>> GetCompleteMaterialDetails(string tenant
             MaterialType.Chatbot => await GetChatbotDetails(id),
             MaterialType.MQTT_Template => await GetMQTTTemplateDetails(id),
             MaterialType.AIAssistant => await GetAIAssistantDetails(id),
+            MaterialType.InnovChatbot => await GetInnovChatbotDetails(id),
             _ => await GetBasicMaterialDetails(id)
         };
 
@@ -816,6 +820,59 @@ private async Task<object?> GetAIAssistantDetails(int materialId)
         HasActiveSession = activeSession != null,
         SessionId = activeSession?.SessionId,
         SessionCreatedAt = activeSession?.CreatedAt,
+        Assets = assets,
+        Related = related
+    };
+}
+
+private async Task<object?> GetInnovChatbotDetails(int materialId)
+{
+    var innov = await _innovChatbotMaterialService.GetByIdAsync(materialId);
+    if (innov == null) return null;
+
+    // Asset-level ingest state is reported from this material's own per-(material, asset) job
+    // rows, so the same Asset in different materials can show independent processing states.
+    var assetIds = innov.GetAssetIdsList();
+    var jobRows = await _innovChatbotMaterialService.GetAssetJobsAsync(materialId);
+    var jobByAsset = jobRows.ToDictionary(j => j.AssetId, j => j);
+    var assets = new List<object>();
+
+    foreach (var assetId in assetIds)
+    {
+        var assetEntity = await _assetService.GetAssetAsync(assetId);
+        if (assetEntity != null)
+        {
+            jobByAsset.TryGetValue(assetId, out var job);
+            assets.Add(new
+            {
+                Id = assetEntity.Id,
+                Filename = assetEntity.Filename,
+                Description = assetEntity.Description,
+                Filetype = assetEntity.Filetype,
+                Src = assetEntity.Src,
+                URL = assetEntity.URL,
+                Status = job?.Status ?? "notready",
+                Pilot = job?.Pilot,
+                CollectionName = job?.CollectionName,
+                ErrorMessage = job?.ErrorMessage
+            });
+        }
+    }
+
+    var related = await GetRelatedMaterialsAsync(materialId);
+
+    return new
+    {
+        id = innov.id.ToString(),
+        Name = innov.Name,
+        Description = innov.Description,
+        Type = GetLowercaseType(innov.Type),
+        Unique_id = innov.Unique_id,
+        Created_at = innov.Created_at,
+        Updated_at = innov.Updated_at,
+        Pilot = innov.Pilot,
+        ExpertiseLevel = innov.ExpertiseLevel,
+        InnovStatus = innov.InnovStatus,
         Assets = assets,
         Related = related
     };
@@ -1642,6 +1699,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     "questionnaire" => await CreateQuestionnaireFromJson(tenantName, materialData),
                     "quiz" => await CreateQuizFromJson(tenantName, materialData),
                     "ai_assistant" => await CreateAIAssistantFromJson(tenantName, materialData),
+                    "innov_chatbot" => await CreateInnovChatbotFromJson(tenantName, materialData),
                     _ => await CreateBasicMaterialFromJson(tenantName, materialData)
                 };
             }
@@ -1706,6 +1764,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     "questionnaire" => await CreateQuestionnaireFromJson(tenantName, materialData),
                     "quiz" => await CreateQuizFromJson(tenantName, materialData),
                     "ai_assistant" => await CreateAIAssistantFromJson(tenantName, materialData),
+                    "innov_chatbot" => await CreateInnovChatbotFromJson(tenantName, materialData),
                     _ => await CreateBasicMaterialFromJson(tenantName, materialData)
                 };
             }
@@ -1737,7 +1796,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         private static readonly HashSet<string> ValidMaterialTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "image", "video", "pdf", "unity", "chatbot", "questionnaire",
-            "checklist", "workflow", "mqtt_template", "answers", "quiz", "ai_assistant", "default"
+            "checklist", "workflow", "mqtt_template", "answers", "quiz", "ai_assistant", "innov_chatbot", "default"
         };
 
         /// <summary>
@@ -1796,6 +1855,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 XR50TrainingAssetRepo.Models.Type.Answers => "answers",
                 XR50TrainingAssetRepo.Models.Type.Quiz => "quiz",
                 XR50TrainingAssetRepo.Models.Type.AIAssistant => "ai_assistant",
+                XR50TrainingAssetRepo.Models.Type.InnovChatbot => "innov_chatbot",
                 XR50TrainingAssetRepo.Models.Type.Default => "default",
                 _ => "default"
             };
@@ -2612,6 +2672,79 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             }
         }
 
+        private async Task<ActionResult<CreateMaterialResponse>> CreateInnovChatbotFromJson(string tenantName, JsonElement jsonElement)
+        {
+            try
+            {
+                _logger.LogInformation("Creating INNOV chatbot material from JSON");
+
+                var innov = new InnovChatbotMaterial();
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "name", out var nameProp))
+                    innov.Name = nameProp.GetString();
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "description", out var descProp))
+                    innov.Description = descProp.GetString();
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "unique_id", out var uniqueIdProp) && uniqueIdProp.ValueKind == JsonValueKind.Number)
+                    innov.Unique_id = uniqueIdProp.GetInt32();
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "pilot", out var pilotProp))
+                    innov.Pilot = pilotProp.GetString();
+
+                if (TryGetPropertyCaseInsensitive(jsonElement, "expertiseLevel", out var expProp) ||
+                    TryGetPropertyCaseInsensitive(jsonElement, "expertise_level", out expProp))
+                    innov.ExpertiseLevel = expProp.GetString();
+
+                // Reuse the shared asset-id parser (accepts config.assets[].id, top-level assets[].id,
+                // and legacy assetIds[]).
+                var assetIds = ParseAIAssistantAssetIds(jsonElement);
+
+                InnovChatbotMaterial createdMaterial;
+                var warnings = new List<string>();
+                if (assetIds.Any())
+                {
+                    var result = await _innovChatbotMaterialService.CreateWithAssetsAsync(innov, assetIds);
+                    createdMaterial = result.Material;
+                    warnings = result.Warnings;
+                }
+                else
+                {
+                    createdMaterial = await _innovChatbotMaterialService.CreateAsync(innov);
+                }
+
+                _logger.LogInformation("Created INNOV chatbot material {Name} with ID {Id} and {AssetCount} assets",
+                    createdMaterial.Name, createdMaterial.id, assetIds.Count);
+
+                await ProcessRelatedMaterialsAsync(createdMaterial.id, jsonElement);
+
+                var response = new CreateMaterialResponse
+                {
+                    Status = warnings.Count == 0 ? "success" : "partial",
+                    Message = warnings.Count == 0
+                        ? "INNOV chatbot material created successfully"
+                        : "INNOV chatbot material created with warnings; see Warnings",
+                    id = createdMaterial.id,
+                    Name = createdMaterial.Name,
+                    Description = createdMaterial.Description,
+                    Type = GetLowercaseType(createdMaterial.Type),
+                    Unique_id = createdMaterial.Unique_id,
+                    AssetIds = createdMaterial.GetAssetIdsList(),
+                    Warnings = warnings.Count > 0 ? warnings : null,
+                    Created_at = createdMaterial.Created_at
+                };
+
+                return CreatedAtAction(nameof(GetMaterial),
+                    new { tenantName, id = createdMaterial.id },
+                    response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating INNOV chatbot material from JSON");
+                throw;
+            }
+        }
+
         private async Task<ActionResult<CreateMaterialResponse>> CreateBasicMaterialFromJson(string tenantName, JsonElement jsonElement)
         {
             try
@@ -2706,6 +2839,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         10 => "quiz",
                         11 => "default",
                         12 => "ai_assistant",
+                        13 => "innov_chatbot",
                         _ => "default"
                     };
                     _logger.LogInformation("Found type (numeric {NumericType}), converted to: {Type}", numericType, typeValue);
@@ -2737,6 +2871,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         10 => "quiz",
                         11 => "default",
                         12 => "ai_assistant",
+                        13 => "innov_chatbot",
                         _ => "default"
                     };
                     _logger.LogInformation("Found materialType (numeric {NumericType}), converted to: {Type}", numericType, typeValue);
@@ -2757,6 +2892,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 ("quizmaterial", _) or (_, "quiz") => new QuizMaterial(),
                 ("mqtt_templatematerial", _) or (_, "mqtt_template") => new MQTT_TemplateMaterial(),
                 ("aiassistantmaterial", _) or (_, "ai_assistant") or (_, "aiassistant") => new AIAssistantMaterial(),
+                ("innovchatbotmaterial", _) or (_, "innov_chatbot") or (_, "innovchatbot") => new InnovChatbotMaterial(),
                 ("defaultmaterial", _) or (_, "default") => new DefaultMaterial(),
                 _ => new DefaultMaterial() // Default fallback
             };
