@@ -795,6 +795,7 @@ private async Task<object?> GetAIAssistantDetails(int materialId)
                 URL = assetEntity.URL,
                 AiAvailable = MapJobStatusToAiAvailable(job?.Status),
                 JobId = job?.JobId,
+                DocumentName = job?.DocumentName,
                 CollectionName = job?.CollectionName,
                 ErrorMessage = job?.ErrorMessage
             });
@@ -4834,7 +4835,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             {
                 id = m.id.ToString(),
                 Name = m.Name,
-                Description = m.Description
+                Description = m.Description,
+                Type = GetLowercaseType(m.Type)
             }).ToList<object>();
         }
 
@@ -4846,7 +4848,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             {
                 id = m.id.ToString(),
                 name = m.Name,
-                description = m.Description
+                description = m.Description,
+                type = GetLowercaseType(m.Type)
             }).ToList<object>();
         }
 
@@ -4858,7 +4861,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             {
                 id = m.id.ToString(),
                 name = m.Name,
-                description = m.Description
+                description = m.Description,
+                type = GetLowercaseType(m.Type)
             }).ToList<object>();
         }
 

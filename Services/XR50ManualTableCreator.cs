@@ -646,6 +646,7 @@ namespace XR50TrainingAssetRepo.Services
                     `AssetId` int NOT NULL,
                     `CollectionName` varchar(255) NOT NULL,
                     `JobId` varchar(255) DEFAULT NULL,
+                    `DocumentName` varchar(255) DEFAULT NULL,
                     `Status` varchar(20) NOT NULL DEFAULT 'pending',
                     `ErrorMessage` text DEFAULT NULL,
                     `CreatedAt` datetime(6) NOT NULL,
@@ -1713,6 +1714,26 @@ namespace XR50TrainingAssetRepo.Services
                 if (tableExists)
                 {
                     _logger.LogInformation("AIAssistantMaterialAssetJobs table already exists for tenant: {TenantName}", tenantName);
+
+                    // Ensure columns added after the table's original schema are present on
+                    // already-provisioned tenants (CREATE TABLE IF NOT EXISTS won't add them).
+                    var colCheckQuery = @"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_SCHEMA = @dbName AND TABLE_NAME = 'AIAssistantMaterialAssetJobs'
+                        AND COLUMN_NAME = 'DocumentName'";
+                    using (var colCmd = new MySqlCommand(colCheckQuery, connection))
+                    {
+                        colCmd.Parameters.AddWithValue("@dbName", tenantDbName);
+                        var colExists = Convert.ToInt32(await colCmd.ExecuteScalarAsync()) > 0;
+                        if (!colExists)
+                        {
+                            using var addCmd = new MySqlCommand(
+                                "ALTER TABLE `AIAssistantMaterialAssetJobs` ADD COLUMN `DocumentName` varchar(255) DEFAULT NULL AFTER `JobId`",
+                                connection);
+                            await addCmd.ExecuteNonQueryAsync();
+                            _logger.LogInformation("Added DocumentName column to AIAssistantMaterialAssetJobs for tenant: {TenantName}", tenantName);
+                        }
+                    }
+
                     return true;
                 }
 
@@ -1723,6 +1744,7 @@ namespace XR50TrainingAssetRepo.Services
                         `AssetId` int NOT NULL,
                         `CollectionName` varchar(255) NOT NULL,
                         `JobId` varchar(255) DEFAULT NULL,
+                        `DocumentName` varchar(255) DEFAULT NULL,
                         `Status` varchar(20) NOT NULL DEFAULT 'pending',
                         `ErrorMessage` text DEFAULT NULL,
                         `CreatedAt` datetime(6) NOT NULL,

@@ -158,6 +158,14 @@ namespace XR50TrainingAssetRepo.Services
                 {
                     var status = await chatbotApiService.GetJobStatusAsync(job.JobId!, job.CollectionName);
 
+                    // Capture the DataLens-side document name as soon as it is reported, regardless
+                    // of which terminal/non-terminal branch the status falls into below.
+                    if (!string.IsNullOrEmpty(status.Document) && job.DocumentName != status.Document)
+                    {
+                        job.DocumentName = status.Document;
+                        job.UpdatedAt = now;
+                    }
+
                     if (status.Status == "completed")
                     {
                         job.Status = "completed";

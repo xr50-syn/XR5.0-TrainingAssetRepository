@@ -347,6 +347,14 @@ namespace XR50TrainingAssetRepo.Models
         public string? JobId { get; set; }
 
         /// <summary>
+        /// Backend document name reported by DataLens for this submission
+        /// (ProcessingJobStatusResponse/DocumentInfoResponse.document_name). Populated from
+        /// job-status polling; null until the first status sync returns it.
+        /// </summary>
+        [StringLength(255)]
+        public string? DocumentName { get; set; }
+
+        /// <summary>
         /// Status: "pending", "processing", "completed", "failed".
         /// The AIAssistantMaterial's aggregate AIAssistantStatus is computed from these.
         /// </summary>
