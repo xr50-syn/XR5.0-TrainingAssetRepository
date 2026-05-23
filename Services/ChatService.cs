@@ -1,28 +1,35 @@
-using System.Text.Json;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services.Materials;
 
 namespace XR50TrainingAssetRepo.Services
 {
     /// <summary>
-    /// Service for proxying chat requests to external chatbot APIs.
+    /// Service backing the generic Chat API.
+    ///
+    /// The configured chatbot backend is DataLens, whose query endpoint is
+    /// /api/v1/collections/{collection}/inferences. The legacy root /ask path this service used to
+    /// POST to no longer exists on DataLens (it returned 500/404), so chat requests are now routed
+    /// through the AIAssistant inference path against the tenant's DefaultAICollection. That reuses
+    /// DataLens bearer auth, collection resolution, and tolerant response parsing (no unhandled
+    /// JsonException -> 500).
+    ///
+    /// Note: DataLens has no per-ChatbotMaterial collection, so material-scoped chat also targets
+    /// the tenant default collection. If per-bot collections are needed later, add a collection
+    /// field to ChatbotMaterial and pass it through.
     /// </summary>
     public class ChatService : IChatService
     {
-        private readonly HttpClient _httpClient;
+        private readonly IAIAssistantService _aiAssistantService;
         private readonly ISimpleMaterialService _simpleMaterialService;
-        private readonly IConfiguration _configuration;
         private readonly ILogger<ChatService> _logger;
 
         public ChatService(
-            HttpClient httpClient,
+            IAIAssistantService aiAssistantService,
             ISimpleMaterialService simpleMaterialService,
-            IConfiguration configuration,
             ILogger<ChatService> logger)
         {
-            _httpClient = httpClient;
+            _aiAssistantService = aiAssistantService;
             _simpleMaterialService = simpleMaterialService;
-            _configuration = configuration;
             _logger = logger;
         }
 
@@ -34,94 +41,16 @@ namespace XR50TrainingAssetRepo.Services
                 throw new KeyNotFoundException($"ChatbotMaterial with ID {chatbotMaterialId} not found");
             }
 
-            var endpoint = GetEndpointFromChatbot(chatbot.ChatbotConfig);
-            if (string.IsNullOrEmpty(endpoint))
-            {
-                throw new InvalidOperationException($"ChatbotMaterial {chatbotMaterialId} has no endpoint configured");
-            }
-
-            _logger.LogInformation("Sending query to chatbot {ChatbotId} at {Endpoint}", chatbotMaterialId, endpoint);
-
-            var formContent = new FormUrlEncodedContent(new[]
-            {
-                new KeyValuePair<string, string>("query", query),
-                new KeyValuePair<string, string>("session_id", sessionId ?? string.Empty)
-            });
-
-            var askUrl = endpoint.TrimEnd('/') + "/ask";
-
-            try
-            {
-                var response = await _httpClient.PostAsync(askUrl, formContent);
-                response.EnsureSuccessStatusCode();
-
-                var responseContent = await response.Content.ReadAsStringAsync();
-
-                _logger.LogDebug("Received response from chatbot: {Response}",
-                    responseContent.Length > 500 ? responseContent.Substring(0, 500) + "..." : responseContent);
-
-                var chatResponse = JsonSerializer.Deserialize<ChatAskResponse>(responseContent, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-
-                return chatResponse ?? new ChatAskResponse
-                {
-                    Query = query,
-                    SessionId = sessionId ?? string.Empty
-                };
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogError(ex, "Failed to communicate with chatbot endpoint {Endpoint}", askUrl);
-                throw new InvalidOperationException($"Failed to communicate with chatbot: {ex.Message}", ex);
-            }
+            _logger.LogInformation("Routing chat for chatbot {ChatbotId} to DataLens inferences", chatbotMaterialId);
+            var response = await _aiAssistantService.AskAsync(query, sessionId);
+            return MapFromAIAssistant(response);
         }
 
         public async Task<ChatAskResponse> AskAsync(string query, string? sessionId = null)
         {
-            var endpoint = _configuration.GetValue<string>("ChatbotApi:BaseUrl");
-            if (string.IsNullOrEmpty(endpoint))
-            {
-                throw new InvalidOperationException("No default chatbot endpoint configured");
-            }
-
-            _logger.LogInformation("Sending query to default chatbot at {Endpoint}", endpoint);
-
-            var formContent = new FormUrlEncodedContent(new[]
-            {
-                new KeyValuePair<string, string>("query", query),
-                new KeyValuePair<string, string>("session_id", sessionId ?? string.Empty)
-            });
-
-            var askUrl = endpoint.TrimEnd('/') + "/ask";
-
-            try
-            {
-                var response = await _httpClient.PostAsync(askUrl, formContent);
-                response.EnsureSuccessStatusCode();
-
-                var responseContent = await response.Content.ReadAsStringAsync();
-
-                _logger.LogDebug("Received response from default chatbot: {Response}",
-                    responseContent.Length > 500 ? responseContent.Substring(0, 500) + "..." : responseContent);
-
-                var chatResponse = JsonSerializer.Deserialize<ChatAskResponse>(responseContent, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-
-                return chatResponse ?? new ChatAskResponse
-                {
-                    Query = query,
-                    SessionId = sessionId ?? string.Empty
-                };
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogError(ex, "Failed to communicate with default chatbot endpoint {Endpoint}", askUrl);
-                throw new InvalidOperationException($"Failed to communicate with chatbot: {ex.Message}", ex);
-            }
+            _logger.LogInformation("Routing default chat to DataLens inferences");
+            var response = await _aiAssistantService.AskAsync(query, sessionId);
+            return MapFromAIAssistant(response);
         }
 
         public async Task<bool> IsEndpointAvailableAsync(int chatbotMaterialId)
@@ -131,76 +60,26 @@ namespace XR50TrainingAssetRepo.Services
             {
                 return false;
             }
-
-            var endpoint = GetEndpointFromChatbot(chatbot.ChatbotConfig);
-            if (string.IsNullOrEmpty(endpoint))
-            {
-                return false;
-            }
-
-            try
-            {
-                var response = await _httpClient.GetAsync(endpoint);
-                return response.IsSuccessStatusCode;
-            }
-            catch
-            {
-                return false;
-            }
+            return await _aiAssistantService.IsDefaultEndpointAvailableAsync();
         }
 
-        public async Task<bool> IsDefaultEndpointAvailableAsync()
+        public Task<bool> IsDefaultEndpointAvailableAsync()
+            => _aiAssistantService.IsDefaultEndpointAvailableAsync();
+
+        // Map the AIAssistant (DataLens) response shape onto the Chat API response shape.
+        private static ChatAskResponse MapFromAIAssistant(AIAssistantAskResponse r)
         {
-            var endpoint = _configuration.GetValue<string>("ChatbotApi:BaseUrl");
-            if (string.IsNullOrEmpty(endpoint))
+            return new ChatAskResponse
             {
-                return false;
-            }
-
-            try
-            {
-                var response = await _httpClient.GetAsync(endpoint);
-                return response.IsSuccessStatusCode;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Extracts the endpoint URL from ChatbotConfig.
-        /// Supports both plain URL strings and JSON config with an "endpoint" property.
-        /// Falls back to default chatbot URL from configuration if not specified.
-        /// </summary>
-        private string? GetEndpointFromChatbot(string? chatbotConfig)
-        {
-            if (string.IsNullOrEmpty(chatbotConfig))
-            {
-                // Fall back to default chatbot URL from configuration
-                return _configuration.GetValue<string>("Chatbot:DefaultEndpoint");
-            }
-
-            // Try to parse as JSON first
-            if (chatbotConfig.TrimStart().StartsWith("{"))
-            {
-                try
+                SessionId = r.SessionId,
+                Query = r.Query,
+                Response = new ChatResponseContent
                 {
-                    var config = JsonSerializer.Deserialize<JsonElement>(chatbotConfig);
-                    if (config.TryGetProperty("endpoint", out var endpointProp) ||
-                        config.TryGetProperty("Endpoint", out endpointProp))
-                    {
-                        return endpointProp.GetString();
-                    }
-                }
-                catch (JsonException)
-                {
-                    // Not valid JSON, treat as plain URL
-                }
-            }
-
-            // Treat as plain URL
-            return chatbotConfig;
+                    Speech = new ChatSpeechContent { Text = r.Text, Link = r.AudioUrl },
+                    Markdown = r.Markdown
+                },
+                Sources = r.Sources
+            };
         }
     }
 }

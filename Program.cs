@@ -586,8 +586,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<XR50TrainingAssetRepo.Services.Chatbot.IChatbotProvider, XR50TrainingAssetRepo.Services.Chatbot.DataLensChatbotProvider>();
         services.AddScoped<XR50TrainingAssetRepo.Services.Chatbot.IChatbotProvider, XR50TrainingAssetRepo.Services.Chatbot.InnovChatbotProvider>();
 
-        // Chat Service for chatbot conversations
-        services.AddHttpClient<IChatService, ChatService>();
+        // Chat Service for chatbot conversations. Delegates to the DataLens inference path
+        // (IAIAssistantService), so it no longer needs its own HttpClient.
+        services.AddScoped<IChatService, ChatService>();
 
         // AI Assistant Service (HttpClient-based)
         services.AddHttpClient<IAIAssistantService, AIAssistantService>();
