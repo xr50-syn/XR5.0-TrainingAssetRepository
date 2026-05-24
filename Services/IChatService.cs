@@ -13,16 +13,18 @@ namespace XR50TrainingAssetRepo.Services
         /// <param name="chatbotMaterialId">The ID of the ChatbotMaterial containing the endpoint configuration</param>
         /// <param name="query">The user's question</param>
         /// <param name="sessionId">Optional session ID for conversation continuity</param>
+        /// <param name="sourceFiles">Optional comma-separated source document filenames to restrict the search to</param>
         /// <returns>The chatbot's response</returns>
-        Task<ChatAskResponse> AskAsync(int chatbotMaterialId, string query, string? sessionId = null);
+        Task<ChatAskResponse> AskAsync(int chatbotMaterialId, string query, string? sessionId = null, string? sourceFiles = null);
 
         /// <summary>
         /// Sends a query to the default chatbot endpoint.
         /// </summary>
         /// <param name="query">The user's question</param>
         /// <param name="sessionId">Optional session ID for conversation continuity</param>
+        /// <param name="sourceFiles">Optional comma-separated source document filenames to restrict the search to</param>
         /// <returns>The chatbot's response</returns>
-        Task<ChatAskResponse> AskAsync(string query, string? sessionId = null);
+        Task<ChatAskResponse> AskAsync(string query, string? sessionId = null, string? sourceFiles = null);
 
         /// <summary>
         /// Checks if the chatbot endpoint for a given material is available.

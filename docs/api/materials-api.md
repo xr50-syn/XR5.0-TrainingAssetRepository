@@ -453,6 +453,35 @@ ID mismatch: route=3, body=5
 
 ---
 
+## Material Types: Chatbot family (`chatbot`, `ai_assistant`, `innov_chatbot`)
+
+Conversational material types are created like any other material (via `POST /materials` /
+`/materials/json` with the matching `type`), but their **conversation** and ingestion endpoints
+live under dedicated controllers. See the **[Chat API](chat-api.md)** for full request/response
+formats.
+
+```jsonc
+// innov_chatbot — pilot-scoped INNOV "LLM Engine" RAG chatbot
+{
+  "name": "Pilot assistant",
+  "type": "innov_chatbot",
+  "pilot": "pilot-9",            // optional; falls back to the tenant's InnovChatbotDefaultPilot
+  "expertiseLevel": "expert",    // optional: beginner | intermediate | expert
+  "assetIds": [1, 2]             // optional; auto-submitted for ingestion into the pilot
+}
+```
+
+| Type | Backend | Conversation endpoint |
+|------|---------|-----------------------|
+| `chatbot` | DataLens (default collection) | `POST /api/{tenantName}/chat/{id}/ask` |
+| `ai_assistant` | DataLens RAG | `POST /api/{tenantName}/ai-assistant/{id}/ask` |
+| `innov_chatbot` | INNOV LLM Engine | `POST /api/{tenantName}/innov-chatbot/{id}/chat` |
+
+`innov_chatbot` requires per-tenant INNOV configuration (`InnovChatbotBaseUrl`,
+`InnovChatbotApiToken`, `InnovChatbotDefaultPilot`) — see [Chat API](chat-api.md).
+
+---
+
 ## Related Materials
 
 Related materials can be attached at two levels:
@@ -489,6 +518,14 @@ Related materials can be attached at two levels:
 ```
 
 Only the `id` is required in the related object. Other properties (name, description) are ignored during update but can be included for readability.
+
+In **GET detail responses**, each related entry includes `id`, `name`, `description`, and **`type`** — the related material's type (e.g. `video`, `pdf`, `innov_chatbot`):
+
+```json
+"related": [
+  { "id": "10", "name": "Supporting Document", "description": "...", "type": "pdf" }
+]
+```
 
 ---
 

@@ -45,7 +45,8 @@ namespace XR50TrainingAssetRepo.Controllers
 
             try
             {
-                var response = await _chatService.AskAsync(request.Query, request.SessionId);
+                var sourceFiles = JoinDocuments(request.Documents);
+                var response = await _chatService.AskAsync(request.Query, request.SessionId, sourceFiles);
 
                 _logger.LogInformation("Chat response received, session {SessionId}", response.SessionId);
 
@@ -75,12 +76,14 @@ namespace XR50TrainingAssetRepo.Controllers
         public async Task<ActionResult<ChatAskResponse>> AskForm(
             string tenantName,
             [FromForm] string query,
-            [FromForm] string? session_id = null)
+            [FromForm] string? session_id = null,
+            [FromForm] string? source_files = null)
         {
             return await Ask(tenantName, new ChatAskRequest
             {
                 Query = query,
-                SessionId = session_id
+                SessionId = session_id,
+                Documents = SplitDocuments(source_files)
             });
         }
 
@@ -126,7 +129,8 @@ namespace XR50TrainingAssetRepo.Controllers
 
             try
             {
-                var response = await _chatService.AskAsync(chatbotId, request.Query, request.SessionId);
+                var sourceFiles = JoinDocuments(request.Documents);
+                var response = await _chatService.AskAsync(chatbotId, request.Query, request.SessionId, sourceFiles);
 
                 _logger.LogInformation("Chat response received for chatbot {ChatbotId}, session {SessionId}",
                     chatbotId, response.SessionId);
@@ -164,14 +168,27 @@ namespace XR50TrainingAssetRepo.Controllers
             string tenantName,
             int chatbotId,
             [FromForm] string query,
-            [FromForm] string? session_id = null)
+            [FromForm] string? session_id = null,
+            [FromForm] string? source_files = null)
         {
             return await AskChatbot(tenantName, chatbotId, new ChatAskRequest
             {
                 Query = query,
-                SessionId = session_id
+                SessionId = session_id,
+                Documents = SplitDocuments(source_files)
             });
         }
+
+        // Joins selected document filenames into the comma-separated form DataLens expects
+        // for the inference `source_files` parameter. Returns null when nothing is selected.
+        private static string? JoinDocuments(List<string>? documents)
+            => (documents != null && documents.Count > 0) ? string.Join(",", documents) : null;
+
+        // Splits a comma-separated source_files form value into a document list (null when empty).
+        private static List<string>? SplitDocuments(string? csv)
+            => string.IsNullOrWhiteSpace(csv)
+                ? null
+                : csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
         /// <summary>
         /// Gets all available chatbots for the tenant.

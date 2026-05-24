@@ -73,10 +73,10 @@ namespace XR50TrainingAssetRepo.Services
 
         #region Default Endpoint Operations
 
-        public async Task<AIAssistantAskResponse> AskAsync(string query, string? sessionId = null)
+        public async Task<AIAssistantAskResponse> AskAsync(string query, string? sessionId = null, string? sourceFiles = null)
         {
             var collectionName = await GetTenantDefaultCollectionAsync();
-            return await AskCollectionAsync(collectionName, query, sessionId, sourceFiles: null);
+            return await AskCollectionAsync(collectionName, query, sessionId, sourceFiles);
         }
 
         public async Task<AIAssistantDocumentUploadResponse> UploadDocumentAsync(Stream fileStream, string fileName, string contentType)
@@ -223,7 +223,14 @@ namespace XR50TrainingAssetRepo.Services
 
             if (!string.IsNullOrEmpty(sourceFiles))
             {
-                queryParams.Add($"source_files={Uri.EscapeDataString(sourceFiles)}");
+                // DataLens matches source_files on the document BASE NAME (no extension), even
+                // though the documents listing returns names with ".pdf". Strip known extensions
+                // so callers can pass filenames exactly as listed.
+                var normalized = NormalizeSourceFiles(sourceFiles);
+                if (!string.IsNullOrEmpty(normalized))
+                {
+                    queryParams.Add($"source_files={Uri.EscapeDataString(normalized)}");
+                }
             }
 
             var inferenceUrl = $"api/v1/collections/{Uri.EscapeDataString(collectionName)}/inferences?{string.Join("&", queryParams)}";
@@ -299,6 +306,32 @@ namespace XR50TrainingAssetRepo.Services
         }
 
         #endregion
+
+        // Known document extensions to strip from source_files entries. Only a recognized
+        // trailing extension is removed, so dotted base names (e.g. "XR5.0-General Flyer") survive.
+        private static readonly string[] KnownDocExtensions =
+            { ".pdf", ".doc", ".docx", ".txt", ".md", ".html", ".htm", ".json", ".xml", ".csv" };
+
+        private static string NormalizeSourceFiles(string sourceFiles)
+        {
+            var names = sourceFiles
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(StripDocExtension)
+                .Where(n => !string.IsNullOrWhiteSpace(n));
+            return string.Join(",", names);
+        }
+
+        private static string StripDocExtension(string name)
+        {
+            foreach (var ext in KnownDocExtensions)
+            {
+                if (name.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
+                {
+                    return name[..^ext.Length];
+                }
+            }
+            return name;
+        }
 
         #region Response Parsing
 

@@ -15,6 +15,13 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         /// If not provided, the chatbot will treat this as a new conversation.
         /// </summary>
         public string? SessionId { get; set; }
+
+        /// <summary>
+        /// Optional: restrict the answer to specific source document filenames within the
+        /// collection (maps to the DataLens inference `source_files` parameter). When empty/null,
+        /// the whole collection is searched. Example: ["PSF60_assignment3.pdf"].
+        /// </summary>
+        public List<string>? Documents { get; set; }
     }
 
     /// <summary>

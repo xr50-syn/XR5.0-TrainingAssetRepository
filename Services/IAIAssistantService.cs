@@ -16,8 +16,9 @@ namespace XR50TrainingAssetRepo.Services
         /// </summary>
         /// <param name="query">The user's question</param>
         /// <param name="sessionId">Optional session ID for conversation continuity</param>
+        /// <param name="sourceFiles">Optional comma-separated source document filenames to restrict the search to</param>
         /// <returns>The AI assistant's response including text and audio URL</returns>
-        Task<AIAssistantAskResponse> AskAsync(string query, string? sessionId = null);
+        Task<AIAssistantAskResponse> AskAsync(string query, string? sessionId = null, string? sourceFiles = null);
 
         /// <summary>
         /// Uploads a document to the default AI assistant for knowledge extraction.

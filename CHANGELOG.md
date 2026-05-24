@@ -2,6 +2,74 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2026-05-24
+
+### Added - INNOV Chatbot Material Type (second RAG backend)
+
+#### Summary
+Added support for a second external chatbot backend — the INNOV **"XR5.0 LLM Engine"** — as a new `innov_chatbot` material type, alongside the existing DataLens-backed `ai_assistant`. Documents (assets) are ingested into an INNOV *pilot* and chat queries run against that pilot. The two backends are kept as **separate material types** behind a shared `IChatbotProvider` seam, so the DataLens/`ai_assistant` behaviour is unchanged.
+
+#### New material type and endpoints
+- `innov_chatbot` material — created like any other material via `POST /api/{tenantName}/materials` (or `/materials/json`) with `"type": "innov_chatbot"` (optional `pilot`, `expertiseLevel`, `assetIds`).
+- New controller `XR50InnovChatbotController` at `/api/{tenantName}/innov-chatbot`:
+  - `POST /{id}/chat` (+ `/chat/form`) — query the pilot (`query`, optional `expertiseLevel`)
+  - `POST /{id}/documents` — upload a document directly to the pilot
+  - `POST /{id}/submit` — ingest the material's associated assets into the pilot
+  - `GET /{id}/documents`, `GET /{id}`, `GET` (list), `GET /{id}/health`
+  - `DELETE /{id}/history` — clear the pilot's server-side chat history
+
+#### Per-tenant configuration
+The INNOV connection is configured **per tenant** (not global): `InnovChatbotBaseUrl`, `InnovChatbotApiToken`, `InnovChatbotDefaultPilot`, settable on `POST /tenants`. Authentication uses a **static bearer token**. The API token is a secret: it is stored in the tenant registry but **never returned** — tenant responses expose `innovChatbotConfigured` (bool) instead.
+
+#### Provider seam
+New `IChatbotProvider` abstraction (`Services/Chatbot/`): `InnovChatbotProvider` (native INNOV client) and `DataLensChatbotProvider` (thin adapter over the existing DataLens client). The adapter introduces no behaviour change to the DataLens stack; it exists so both backends are reachable through one interface.
+
+#### Error handling
+Transport failures to the INNOV backend (unreachable host/timeout) surface as a clean `400` (with a descriptive message), not an unhandled `500`. The app stays healthy.
+
+#### Affected files
+- `Models/Material.cs` — `InnovChatbotMaterial`, `InnovChatbotMaterialAssetJob`, `Type.InnovChatbot`
+- `Services/Chatbot/IChatbotProvider.cs`, `InnovChatbotProvider.cs`, `DataLensChatbotProvider.cs`
+- `Services/Materials/IInnovChatbotMaterialService.cs`, `InnovChatbotMaterialService.cs`
+- `Controllers/XR50InnovChatbotController.cs`, `Models/DTOs/XR50InnovChatbotDtos.cs`
+- `Data/XR50DbContext.cs`, `Services/XR50ManualTableCreator.cs`, `Services/XR50MigrationService.cs`
+- `Models/XR50Tenant.cs`, `Models/DTOs/XR50TenantDtos.cs`, `Controllers/XR50TenantController.cs`, `Services/XR50TenantManagementService.cs`
+- `Controllers/XR50MaterialsController.cs` (creation dispatch + detail), `Services/Materials/MaterialService.cs`, `Program.cs`
+
+### Changed - Chat API now targets DataLens inferences
+
+#### Summary
+The generic Chat API (`/api/{tenantName}/chat`) previously POSTed to a `{endpoint}/ask` path that no longer exists on DataLens (it returned 404/500). It now routes through the DataLens **inference** path (`/api/v1/collections/{collection}/inferences`) against the tenant's `DefaultAICollection`, reusing bearer auth, collection resolution, and tolerant response parsing. A malformed/unexpected backend response no longer causes an unhandled `500`.
+
+#### Affected files
+- `Services/ChatService.cs` (rewritten to delegate to the DataLens inference path), `Services/IChatService.cs`, `Program.cs` (registration changed from `AddHttpClient` to `AddScoped`)
+
+### Added - Document-scoped chat (`source_files`)
+
+#### Summary
+Chat requests can now restrict the answer to specific source documents within the collection, mapping to the DataLens inference `source_files` parameter.
+- JSON: `ChatAskRequest.documents` — an array of document filenames.
+- Form: `source_files` (comma-separated) on the `/ask/form` and `/{id}/ask/form` endpoints.
+
+Filenames can be passed exactly as the documents listing shows them (with extension); the extension is stripped before the call because DataLens matches `source_files` on the document **base name**. Centralised in `AskCollectionAsync`, so this also fixes the AI Assistant material flow's auto-`source_files`.
+
+#### Affected files
+- `Models/DTOs/XR50ChatDtos.cs`, `Services/IChatService.cs`, `Services/ChatService.cs`, `Services/IAIAssistantService.cs`, `Services/AIAssistantService.cs`, `Controllers/XR50ChatController.cs`
+
+### Added - `document_name` on AI Assistant asset jobs
+
+Per-(material, asset) AI Assistant job rows (`AIAssistantMaterialAssetJob`) now record the DataLens-reported `document_name`, populated from job-status polling and surfaced in the material detail response. Added as a nullable column with an idempotent migration for existing tenant databases.
+
+#### Affected files
+- `Models/Material.cs`, `Services/AiStatusSyncService.cs`, `Services/XR50ManualTableCreator.cs`, `Controllers/XR50MaterialsController.cs`
+
+### Changed - `related[]` entries include `type`
+
+All `related` arrays in material detail responses (top-level and subcomponent-level: workflow steps, video timestamps, checklist/questionnaire entries, quiz questions/answers, image annotations) now include the related material's `type` (e.g. `video`, `pdf`, `innov_chatbot`) alongside `id`/`name`/`description`.
+
+#### Affected files
+- `Controllers/XR50MaterialsController.cs`
+
 ## [Unreleased] - 2025-11-20
 
 ### Changed - Binary Stream File Type Detection for Assets

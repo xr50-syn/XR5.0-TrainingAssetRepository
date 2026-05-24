@@ -33,7 +33,7 @@ namespace XR50TrainingAssetRepo.Services
             _logger = logger;
         }
 
-        public async Task<ChatAskResponse> AskAsync(int chatbotMaterialId, string query, string? sessionId = null)
+        public async Task<ChatAskResponse> AskAsync(int chatbotMaterialId, string query, string? sessionId = null, string? sourceFiles = null)
         {
             var chatbot = await _simpleMaterialService.GetChatbotByIdAsync(chatbotMaterialId);
             if (chatbot == null)
@@ -42,14 +42,14 @@ namespace XR50TrainingAssetRepo.Services
             }
 
             _logger.LogInformation("Routing chat for chatbot {ChatbotId} to DataLens inferences", chatbotMaterialId);
-            var response = await _aiAssistantService.AskAsync(query, sessionId);
+            var response = await _aiAssistantService.AskAsync(query, sessionId, sourceFiles);
             return MapFromAIAssistant(response);
         }
 
-        public async Task<ChatAskResponse> AskAsync(string query, string? sessionId = null)
+        public async Task<ChatAskResponse> AskAsync(string query, string? sessionId = null, string? sourceFiles = null)
         {
             _logger.LogInformation("Routing default chat to DataLens inferences");
-            var response = await _aiAssistantService.AskAsync(query, sessionId);
+            var response = await _aiAssistantService.AskAsync(query, sessionId, sourceFiles);
             return MapFromAIAssistant(response);
         }
 
