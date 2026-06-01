@@ -51,17 +51,6 @@ namespace XR50TrainingAssetRepo.Services
         Task<AIAssistantAskResponse> AskAsync(int aiAssistantMaterialId, string query, string? sessionId = null);
 
         /// <summary>
-        /// Uploads a document to a specific AIAssistantMaterial for knowledge extraction.
-        /// The document will be associated with the AIAssistantMaterial.
-        /// </summary>
-        /// <param name="aiAssistantMaterialId">The ID of the AIAssistantMaterial</param>
-        /// <param name="fileStream">The document file stream</param>
-        /// <param name="fileName">The file name</param>
-        /// <param name="contentType">The content type (e.g., application/pdf)</param>
-        /// <returns>Upload response with job ID for tracking</returns>
-        Task<AIAssistantDocumentUploadResponse> UploadDocumentAsync(int aiAssistantMaterialId, Stream fileStream, string fileName, string contentType);
-
-        /// <summary>
         /// Gets documents (assets) associated with an AIAssistantMaterial.
         /// </summary>
         /// <param name="aiAssistantMaterialId">The ID of the AIAssistantMaterial</param>

@@ -154,22 +154,6 @@ namespace XR50TrainingAssetRepo.Services
             return response;
         }
 
-        public async Task<AIAssistantDocumentUploadResponse> UploadDocumentAsync(int aiAssistantMaterialId, Stream fileStream, string fileName, string contentType)
-        {
-            var aiAssistantMaterial = await _aiAssistantMaterialService.GetByIdAsync(aiAssistantMaterialId);
-            if (aiAssistantMaterial == null)
-            {
-                throw new KeyNotFoundException($"AIAssistantMaterial with ID {aiAssistantMaterialId} not found");
-            }
-
-            var collectionName = aiAssistantMaterial.CollectionName ?? await GetTenantDefaultCollectionAsync();
-
-            _logger.LogInformation("Uploading document for AI Assistant material {AIAssistantMaterialId} to collection {CollectionName}: {FileName}",
-                aiAssistantMaterialId, collectionName, fileName);
-
-            return await UploadDocumentToCollectionAsync(collectionName, fileStream, fileName, contentType);
-        }
-
         public async Task<IEnumerable<AIAssistantDocumentInfo>> GetDocumentsAsync(int aiAssistantMaterialId)
         {
             var aiAssistantMaterial = await _aiAssistantMaterialService.GetByIdAsync(aiAssistantMaterialId);

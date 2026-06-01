@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services;
 using XR50TrainingAssetRepo.Services.Materials;
@@ -13,15 +14,18 @@ namespace XR50TrainingAssetRepo.Controllers
     {
         private readonly IAIAssistantService _aiAssistantService;
         private readonly IAIAssistantMaterialService _aiAssistantMaterialService;
+        private readonly IAssetService _assetService;
         private readonly ILogger<AIAssistantController> _logger;
 
         public AIAssistantController(
             IAIAssistantService aiAssistantService,
             IAIAssistantMaterialService aiAssistantMaterialService,
+            IAssetService assetService,
             ILogger<AIAssistantController> logger)
         {
             _aiAssistantService = aiAssistantService;
             _aiAssistantMaterialService = aiAssistantMaterialService;
+            _assetService = assetService;
             _logger = logger;
         }
 
@@ -232,12 +236,13 @@ namespace XR50TrainingAssetRepo.Controllers
         /// <returns>Upload response with job ID for tracking</returns>
         [HttpPost("{aiAssistantId}/documents")]
         [Consumes("multipart/form-data")]
-        public async Task<ActionResult<AIAssistantDocumentUploadResponse>> UploadDocumentToMaterial(
+        public async Task<ActionResult<object>> UploadDocumentToMaterial(
             string tenantName,
             int aiAssistantId,
-            IFormFile file)
+            IFormFile file,
+            [FromForm] string? description = null)
         {
-            _logger.LogInformation("Document upload to AI assistant material {AIAssistantId} in tenant {TenantName}: {FileName}",
+            _logger.LogInformation("Adding document to AI assistant material {AIAssistantId} in tenant {TenantName}: {FileName}",
                 aiAssistantId, tenantName, file?.FileName);
 
             if (file == null || file.Length == 0)
@@ -245,30 +250,66 @@ namespace XR50TrainingAssetRepo.Controllers
                 return this.ProblemBadRequest("No file provided.");
             }
 
+            // The material must exist before we create an asset for it.
+            var material = await _aiAssistantMaterialService.GetByIdAsync(aiAssistantId);
+            if (material == null)
+            {
+                _logger.LogWarning("AIAssistantMaterial {AIAssistantId} not found in tenant {TenantName}", aiAssistantId, tenantName);
+                return this.ProblemNotFound($"AIAssistantMaterial with ID {aiAssistantId} not found");
+            }
+
             try
             {
-                using var stream = file.OpenReadStream();
-                var response = await _aiAssistantService.UploadDocumentAsync(
-                    aiAssistantId, stream, file.FileName, file.ContentType);
+                // 1. Persist the uploaded file as a tenant Asset (storage + magic-byte type detection).
+                var asset = new Asset { Filename = file.FileName, Description = description };
+                var created = await _assetService.CreateAssetAsync(asset, tenantName, file);
 
-                _logger.LogInformation("Document uploaded successfully to material {AIAssistantId}. Job ID: {JobId}",
-                    aiAssistantId, response.JobId);
+                // 2. Attach the asset to the assistant's tracked asset list.
+                await _aiAssistantMaterialService.AddAssetAsync(aiAssistantId, created.Id);
 
-                return Ok(response);
+                // 3. Submit for processing (ensures collection + records a tracked job row). A
+                //    chatbot-side failure must not lose the attachment, so surface it as a warning
+                //    and let the next submit/sync retry -- mirrors the create-with-assets flow.
+                string? warning = null;
+                try
+                {
+                    await _aiAssistantMaterialService.SubmitForProcessingAsync(aiAssistantId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Asset {AssetId} attached to material {AIAssistantId} but submission failed; will retry on next sync",
+                        created.Id, aiAssistantId);
+                    warning = $"Document attached but submission failed: {ex.Message}";
+                }
+
+                var refreshed = await _aiAssistantMaterialService.GetByIdAsync(aiAssistantId);
+
+                _logger.LogInformation("Added document asset {AssetId} to AI assistant material {AIAssistantId} (status {Status})",
+                    created.Id, aiAssistantId, refreshed?.AIAssistantStatus);
+
+                return Ok(new
+                {
+                    status = warning == null ? "success" : "partial",
+                    message = warning ?? "Document added to AI assistant material",
+                    aiAssistantId,
+                    assetId = created.Id,
+                    fileName = created.Filename,
+                    aiAssistantStatus = refreshed?.AIAssistantStatus ?? "notready",
+                    warnings = warning == null ? null : new[] { warning }
+                });
             }
             catch (KeyNotFoundException ex)
             {
-                _logger.LogWarning("AIAssistantMaterial {AIAssistantId} not found in tenant {TenantName}", aiAssistantId, tenantName);
                 return this.ProblemNotFound(ex.Message);
             }
             catch (InvalidOperationException ex)
             {
-                _logger.LogError(ex, "Document upload failed for material {AIAssistantId}", aiAssistantId);
+                _logger.LogError(ex, "Failed to add document to material {AIAssistantId}", aiAssistantId);
                 return this.ProblemBadRequest(ex.Message);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unexpected error uploading document to material {AIAssistantId}", aiAssistantId);
+                _logger.LogError(ex, "Unexpected error adding document to material {AIAssistantId}", aiAssistantId);
                 return this.ProblemServerError("Internal server error.");
             }
         }
