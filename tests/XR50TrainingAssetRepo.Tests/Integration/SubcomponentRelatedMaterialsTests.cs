@@ -99,7 +99,7 @@ public class SubcomponentRelatedMaterialsTests : IClassFixture<WebApplicationFix
         var detail = await GetMaterialDetailAsync(checklistId);
 
         // Assert
-        var entries = detail.GetProperty("Config").GetProperty("entries");
+        var entries = detail.GetProperty("config").GetProperty("entries");
         entries.GetArrayLength().Should().Be(1);
 
         var firstEntry = entries[0];
@@ -141,7 +141,7 @@ public class SubcomponentRelatedMaterialsTests : IClassFixture<WebApplicationFix
         var detail = await GetMaterialDetailAsync(checklistId);
 
         // Assert
-        var entries = detail.GetProperty("Config").GetProperty("entries");
+        var entries = detail.GetProperty("config").GetProperty("entries");
         var firstEntry = entries[0];
         firstEntry.TryGetProperty("related", out var related).Should().BeTrue();
         related.GetArrayLength().Should().Be(1);
@@ -175,7 +175,7 @@ public class SubcomponentRelatedMaterialsTests : IClassFixture<WebApplicationFix
         var detail = await GetMaterialDetailAsync(checklistId);
 
         // Assert
-        var entries = detail.GetProperty("Config").GetProperty("entries");
+        var entries = detail.GetProperty("config").GetProperty("entries");
         entries.GetArrayLength().Should().Be(2);
 
         // First entry should have 2 related materials
@@ -220,7 +220,7 @@ public class SubcomponentRelatedMaterialsTests : IClassFixture<WebApplicationFix
         var detail = await GetMaterialDetailAsync(workflowId);
 
         // Assert
-        var steps = detail.GetProperty("Config").GetProperty("steps");
+        var steps = detail.GetProperty("config").GetProperty("steps");
         steps.GetArrayLength().Should().Be(1);
 
         var firstStep = steps[0];
@@ -258,7 +258,7 @@ public class SubcomponentRelatedMaterialsTests : IClassFixture<WebApplicationFix
         var detail = await GetMaterialDetailAsync(workflowId);
 
         // Assert
-        var steps = detail.GetProperty("Config").GetProperty("steps");
+        var steps = detail.GetProperty("config").GetProperty("steps");
         steps[0].TryGetProperty("related", out var related).Should().BeTrue();
         related.GetArrayLength().Should().Be(1);
     }
@@ -294,7 +294,7 @@ public class SubcomponentRelatedMaterialsTests : IClassFixture<WebApplicationFix
         var detail = await GetMaterialDetailAsync(videoId);
 
         // Assert
-        var timestamps = detail.GetProperty("Config").GetProperty("timestamps");
+        var timestamps = detail.GetProperty("config").GetProperty("timestamps");
         timestamps.GetArrayLength().Should().Be(1);
 
         var firstTimestamp = timestamps[0];
@@ -334,7 +334,7 @@ public class SubcomponentRelatedMaterialsTests : IClassFixture<WebApplicationFix
         var detail = await GetMaterialDetailAsync(videoId);
 
         // Assert
-        var timestamps = detail.GetProperty("Config").GetProperty("timestamps");
+        var timestamps = detail.GetProperty("config").GetProperty("timestamps");
         timestamps[0].TryGetProperty("related", out var related).Should().BeTrue();
         related.GetArrayLength().Should().Be(1);
     }
@@ -376,7 +376,7 @@ public class SubcomponentRelatedMaterialsTests : IClassFixture<WebApplicationFix
         var detail = await GetMaterialDetailAsync(quizId);
 
         // Assert
-        var questions = detail.GetProperty("Config").GetProperty("Questions");
+        var questions = detail.GetProperty("config").GetProperty("questions");
         questions.GetArrayLength().Should().Be(1);
 
         var firstQuestion = questions[0];
@@ -422,7 +422,7 @@ public class SubcomponentRelatedMaterialsTests : IClassFixture<WebApplicationFix
         var detail = await GetMaterialDetailAsync(quizId);
 
         // Assert
-        var questions = detail.GetProperty("Config").GetProperty("Questions");
+        var questions = detail.GetProperty("config").GetProperty("questions");
         questions[0].TryGetProperty("related", out var related).Should().BeTrue();
         related.GetArrayLength().Should().Be(1);
     }
@@ -469,8 +469,8 @@ public class SubcomponentRelatedMaterialsTests : IClassFixture<WebApplicationFix
         var detail = await GetMaterialDetailAsync(quizId);
 
         // Assert
-        var questions = detail.GetProperty("Config").GetProperty("Questions");
-        var answers = questions[0].GetProperty("Answers");
+        var questions = detail.GetProperty("config").GetProperty("questions");
+        var answers = questions[0].GetProperty("answers");
         answers.GetArrayLength().Should().Be(2);
 
         var firstAnswer = answers[0];
@@ -521,8 +521,8 @@ public class SubcomponentRelatedMaterialsTests : IClassFixture<WebApplicationFix
         var detail = await GetMaterialDetailAsync(quizId);
 
         // Assert
-        var questions = detail.GetProperty("Config").GetProperty("Questions");
-        var answers = questions[0].GetProperty("Answers");
+        var questions = detail.GetProperty("config").GetProperty("questions");
+        var answers = questions[0].GetProperty("answers");
         answers[0].TryGetProperty("related", out var related).Should().BeTrue();
         related.GetArrayLength().Should().Be(1);
     }
@@ -566,10 +566,10 @@ public class SubcomponentRelatedMaterialsTests : IClassFixture<WebApplicationFix
         var detail = await GetMaterialDetailAsync(quizId);
 
         // Assert
-        var questions = detail.GetProperty("Config").GetProperty("Questions");
+        var questions = detail.GetProperty("config").GetProperty("questions");
         questions.GetArrayLength().Should().Be(1);
 
-        var answers = questions[0].GetProperty("Answers");
+        var answers = questions[0].GetProperty("answers");
         answers.GetArrayLength().Should().Be(2);
 
         // First answer should have related material
