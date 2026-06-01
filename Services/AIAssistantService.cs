@@ -180,13 +180,27 @@ namespace XR50TrainingAssetRepo.Services
 
             var assets = await _aiAssistantMaterialService.GetAssetsAsync(aiAssistantMaterialId);
 
-            return assets.Select(a => new AIAssistantDocumentInfo
+            // Per-asset processing state lives in this material's AIAssistantMaterialAssetJob rows
+            // (created at submit, kept current by AiStatusSyncService) — NOT on the Asset entity's
+            // AiAvailable/JobId, which the asset-level flow owns and the material submit never sets.
+            // Source jobId/status/uploadedAt from the job rows; an asset with no job row yet is
+            // "notready". One row per (material, asset); take the latest defensively.
+            var jobsByAsset = (await _aiAssistantMaterialService.GetAssetJobsAsync(aiAssistantMaterialId))
+                .GroupBy(j => j.AssetId)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(j => j.UpdatedAt).First());
+
+            return assets.Select(a =>
             {
-                AssetId = a.Id,
-                FileName = a.Filename,
-                Status = a.AiAvailable ?? "notready",
-                JobId = a.JobId,
-                UploadedAt = null
+                jobsByAsset.TryGetValue(a.Id, out var job);
+                return new AIAssistantDocumentInfo
+                {
+                    AssetId = a.Id,
+                    FileName = a.Filename,
+                    // DataLens job status: pending | processing | completed | failed; no row yet = notready.
+                    Status = job?.Status ?? "notready",
+                    JobId = job?.JobId,
+                    UploadedAt = job?.CreatedAt
+                };
             });
         }
 

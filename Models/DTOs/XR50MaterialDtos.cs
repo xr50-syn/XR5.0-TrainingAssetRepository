@@ -22,6 +22,9 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public int? Unique_id { get; set; }
         public int? AssetId { get; set; }
         public List<int>? AssetIds { get; set; }
+        // Resolved DataLens collection the material was bound to (explicit or tenant default).
+        // Populated for AI Assistant materials so callers can confirm the target collection.
+        public string? CollectionName { get; set; }
         public List<string>? Warnings { get; set; }
         public DateTime? Created_at { get; set; }
     }

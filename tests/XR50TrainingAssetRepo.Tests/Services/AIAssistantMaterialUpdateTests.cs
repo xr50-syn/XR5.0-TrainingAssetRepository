@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Services.Materials;
@@ -60,6 +61,77 @@ public class AIAssistantMaterialUpdateTests
         jobs[0].Status.Should().Be("completed");
         jobs[1].Status.Should().Be("completed");
         jobs[2].Status.Should().Be("pending");
+    }
+
+    [Fact]
+    public async Task GetDocuments_SourcesJobIdAndStatus_FromJobRows_NotAssetFields()
+    {
+        var options = new DbContextOptionsBuilder<XR50TrainingContext>()
+            .UseInMemoryDatabase($"ai-assistant-docs-{Guid.NewGuid()}")
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        var factory = new NewContextFactory(options);
+
+        using (var context = factory.CreateDbContext())
+        {
+            context.Assets.AddRange(
+                new Asset { Id = 1, Filename = "doc-1.pdf", Filetype = "pdf", Type = AssetType.PDF, URL = "https://example.test/doc-1.pdf" },
+                new Asset { Id = 2, Filename = "doc-2.pdf", Filetype = "pdf", Type = AssetType.PDF, URL = "https://example.test/doc-2.pdf" });
+
+            var material = new AIAssistantMaterial
+            {
+                id = 20,
+                Name = "Docs view",
+                AIAssistantStatus = "process",
+                CollectionName = "docs_collection"
+            };
+            material.SetAssetIdsList(new List<int> { 1, 2 });
+            context.Materials.Add(material);
+
+            // Asset 1 has a completed DataLens job; asset 2 has no job row yet.
+            context.AIAssistantMaterialAssetJobs.Add(new AIAssistantMaterialAssetJob
+            {
+                AIAssistantMaterialId = 20,
+                AssetId = 1,
+                CollectionName = "docs_collection",
+                JobId = "dl-job-1",
+                Status = "completed",
+                CreatedAt = DateTime.UtcNow.AddMinutes(-2),
+                UpdatedAt = DateTime.UtcNow.AddMinutes(-1)
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        var aiAssistantMaterialService = new AIAssistantMaterialService(
+            factory,
+            new RecordingChatbotApiService(),
+            new StubTenantService("test-tenant"),
+            new StubTenantManagementService("test-tenant", "tenant_default"),
+            NullLogger<AIAssistantMaterialService>.Instance);
+
+        var service = new AIAssistantService(
+            new HttpClient(),
+            aiAssistantMaterialService,
+            new StubTenantService("test-tenant"),
+            new StubTenantManagementService("test-tenant", "tenant_default"),
+            new ConfigurationBuilder().Build(),
+            NullLogger<AIAssistantService>.Instance);
+
+        var docs = (await service.GetDocumentsAsync(20)).OrderBy(d => d.AssetId).ToList();
+
+        docs.Should().HaveCount(2);
+
+        // Asset 1: jobId + status come from the job row, not the (unset) Asset.JobId/AiAvailable.
+        docs[0].AssetId.Should().Be(1);
+        docs[0].JobId.Should().Be("dl-job-1");
+        docs[0].Status.Should().Be("completed");
+        docs[0].UploadedAt.Should().NotBeNull();
+
+        // Asset 2: no job row yet → no DataLens job, notready.
+        docs[1].AssetId.Should().Be(2);
+        docs[1].JobId.Should().BeNull();
+        docs[1].Status.Should().Be("notready");
     }
 
     private static async Task SeedAssistantWithCompletedAssetJobsAsync(IXR50TenantDbContextFactory factory)

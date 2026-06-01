@@ -2623,6 +2623,18 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 if (TryGetPropertyCaseInsensitive(jsonElement, "unique_id", out var uniqueIdProp) && uniqueIdProp.ValueKind == JsonValueKind.Number)
                     aiAssistant.Unique_id = uniqueIdProp.GetInt32();
 
+                // Honor an explicit target collection. A tenant may keep distinct document sets
+                // (e.g. different document types) in separate DataLens collections and want this
+                // assistant to ingest into / chat against a chosen one. When omitted, the service
+                // falls back to the tenant's DefaultAICollection (see CreateAsync/CreateWithAssetsAsync).
+                if (TryGetPropertyCaseInsensitive(jsonElement, "collectionName", out var collectionProp) ||
+                    TryGetPropertyCaseInsensitive(jsonElement, "collection_name", out collectionProp))
+                {
+                    var collectionName = collectionProp.GetString();
+                    if (!string.IsNullOrWhiteSpace(collectionName))
+                        aiAssistant.CollectionName = collectionName.Trim();
+                }
+
                 // Parse asset IDs from JSON. See ParseAIAssistantAssetIds for accepted shapes.
                 var assetIds = ParseAIAssistantAssetIds(jsonElement);
 
@@ -2658,6 +2670,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     Type = GetLowercaseType(createdMaterial.Type),
                     Unique_id = createdMaterial.Unique_id,
                     AssetIds = createdMaterial.GetAssetIdsList(),
+                    CollectionName = createdMaterial.CollectionName,
                     Warnings = warnings.Count > 0 ? warnings : null,
                     Created_at = createdMaterial.Created_at
                 };
@@ -3721,6 +3734,16 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     break;
 
                 case AIAssistantMaterial aiAssistant:
+                    // Explicit target collection (see CreateAIAssistantFromJson for the rationale).
+                    // Only applied when present and non-blank so an omitted field never clobbers an
+                    // existing binding on update — the PUT path additionally preserves it.
+                    if (TryGetPropertyCaseInsensitive(jsonElement, "collectionName", out var aiCollectionProp) ||
+                        TryGetPropertyCaseInsensitive(jsonElement, "collection_name", out aiCollectionProp))
+                    {
+                        var aiCollectionName = aiCollectionProp.GetString();
+                        if (!string.IsNullOrWhiteSpace(aiCollectionName))
+                            aiAssistant.CollectionName = aiCollectionName.Trim();
+                    }
                     if (TryGetPropertyCaseInsensitive(jsonElement, "serviceJobId", out var jobIdProp) && jobIdProp.ValueKind == JsonValueKind.String)
                         aiAssistant.ServiceJobId = jobIdProp.GetString();
                     if (TryGetPropertyCaseInsensitive(jsonElement, "aiAssistantStatus", out var statusProp) && statusProp.ValueKind == JsonValueKind.String)
@@ -3948,6 +3971,15 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     if (!TryGetPropertyCaseInsensitive(jsonElement, "aiAssistantStatus", out _))
                     {
                         newAi.AIAssistantStatus = existingAi.AIAssistantStatus;
+                    }
+
+                    // CollectionName is only parsed when the client explicitly sends a non-blank
+                    // value (PopulateTypeSpecificProperties), so a PUT that omits it leaves newAi
+                    // with a null collection. UpdateAsync's SetValues would then wipe the existing
+                    // binding; preserve it instead.
+                    if (string.IsNullOrEmpty(newAi.CollectionName))
+                    {
+                        newAi.CollectionName = existingAi.CollectionName;
                     }
                 }
 
