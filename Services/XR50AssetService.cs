@@ -968,6 +968,12 @@ namespace XR50TrainingAssetRepo.Services
                 // Resolve collection name: check if asset belongs to an AIAssistantMaterial
                 var collectionName = await ResolveCollectionNameForAssetAsync(context, assetId);
 
+                // The normal Chat path submits straight to the tenant's DefaultAICollection, which
+                // is created lazily — the AIAssistantMaterial flow owns provisioning for its own
+                // collections, but a tenant that has never created one has no DataLens collection
+                // yet, so this submit would 502 on a cold gateway. Ensure it exists first.
+                await _chatbotApiService.EnsureCollectionExistsAsync(collectionName);
+
                 var jobId = await _chatbotApiService.SubmitDocumentAsync(assetId, asset.URL, asset.Filetype ?? "pdf", collectionName);
                 asset.JobId = jobId;
                 asset.AiAvailable = "process";
