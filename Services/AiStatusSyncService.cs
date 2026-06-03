@@ -112,6 +112,15 @@ namespace XR50TrainingAssetRepo.Services
                     var processingCount = await SyncTenantAssetsAsync(
                         chatbotApiService, tenant.TenantName);
 
+                    // The AI Assistant material flow and the normal Chat path track jobs in
+                    // separate tables: the former in AIAssistantMaterialAssetJobs (handled
+                    // above), the latter on the Asset row itself (JobId + AiAvailable). The
+                    // background sync must cover both, otherwise normal-Chat assets stay at
+                    // "process" forever after DataLens finishes — the symmetric counterpart
+                    // to the EnsureCollection gap on the submit side.
+                    processingCount += await SyncTenantStandaloneAssetJobsAsync(
+                        chatbotApiService, tenant);
+
                     totalProcessingJobs += processingCount;
                 }
                 catch (Exception ex)
@@ -212,6 +221,103 @@ namespace XR50TrainingAssetRepo.Services
             else
             {
                 // "processing" transitions still need a flush
+                await context.SaveChangesAsync();
+            }
+
+            return stillProcessingCount;
+        }
+
+        /// <summary>
+        /// Sync this tenant's in-flight standalone-asset jobs — the ones submitted via
+        /// /assets/{id}/submit (normal Chat path). State lives directly on the Asset row
+        /// (AiAvailable + JobId), not on AIAssistantMaterialAssetJobs. Mirrors the on-demand
+        /// AssetService.SyncAssetAiStatusesAsync logic so the background loop keeps these
+        /// rows current without the operator having to hit the manual sync endpoint.
+        /// </summary>
+        private async Task<int> SyncTenantStandaloneAssetJobsAsync(
+            IChatbotApiService chatbotApiService,
+            XR50Tenant tenant)
+        {
+            using var context = CreateTenantContext(tenant.TenantName);
+
+            var processingAssets = await context.Assets
+                .Where(a => a.AiAvailable == "process" && !string.IsNullOrEmpty(a.JobId))
+                .ToListAsync();
+
+            if (!processingAssets.Any())
+            {
+                return 0;
+            }
+
+            _logger.LogDebug("Checking {Count} in-flight standalone-asset jobs for tenant {Tenant}",
+                processingAssets.Count, tenant.TenantName);
+
+            // Per-asset collection: AIAssistantMaterial-owned → that collection; else tenant
+            // default. Same resolution AssetService.BuildAssetCollectionMapAsync performs.
+            var assetIds = processingAssets.Select(a => a.Id).ToList();
+            var collectionMap = new Dictionary<int, string>();
+            var aiAssistantMaterials = await context.Materials
+                .OfType<AIAssistantMaterial>()
+                .Where(m => m.AIAssistantAssetIds != null && m.CollectionName != null)
+                .ToListAsync();
+            foreach (var material in aiAssistantMaterials)
+            {
+                var materialAssetIds = material.GetAssetIdsList();
+                foreach (var assetId in materialAssetIds.Where(id => assetIds.Contains(id)))
+                {
+                    collectionMap[assetId] = material.CollectionName!;
+                }
+            }
+
+            var defaultCollection = tenant.DefaultAICollection;
+            var updated = false;
+            var stillProcessingCount = 0;
+
+            foreach (var asset in processingAssets)
+            {
+                var collectionName = collectionMap.GetValueOrDefault(asset.Id, defaultCollection ?? "");
+                if (string.IsNullOrEmpty(collectionName))
+                {
+                    // No collection to poll against — leave processing so the operator
+                    // notices via the manual sync or by inspecting tenant config.
+                    stillProcessingCount++;
+                    continue;
+                }
+
+                try
+                {
+                    var status = await chatbotApiService.GetJobStatusAsync(asset.JobId!, collectionName);
+
+                    if (status.Status == "completed")
+                    {
+                        asset.AiAvailable = "ready";
+                        updated = true;
+                        _logger.LogInformation("Asset {AssetId} AI processing completed - updating to 'ready' ({Collection})",
+                            asset.Id, collectionName);
+                    }
+                    else if (status.Status == "failed")
+                    {
+                        asset.AiAvailable = "notready";
+                        asset.JobId = null;
+                        updated = true;
+                        _logger.LogWarning("Asset {AssetId} AI processing failed ({Collection}): {Error}",
+                            asset.Id, collectionName, status.Error);
+                    }
+                    else
+                    {
+                        stillProcessingCount++;
+                    }
+                }
+                catch (ChatbotApiException ex)
+                {
+                    _logger.LogDebug(ex, "Failed to check status for standalone-asset job {JobId} (asset {AssetId})",
+                        asset.JobId, asset.Id);
+                    stillProcessingCount++; // Treat transient errors as still-processing
+                }
+            }
+
+            if (updated)
+            {
                 await context.SaveChangesAsync();
             }
 

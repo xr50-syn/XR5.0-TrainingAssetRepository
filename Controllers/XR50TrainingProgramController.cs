@@ -67,8 +67,13 @@ namespace XR50TrainingAssetRepo.Controllers
                     Description = jsonElement.TryGetProperty("description", out var desc) ? desc.GetString() : null,
                     Objectives = jsonElement.TryGetProperty("objectives", out var obj) ? obj.GetString() : null,
                     Requirements = jsonElement.TryGetProperty("requirements", out var req) ? req.GetString() : null,
-                    min_level_rank = jsonElement.TryGetProperty("min_level_rank", out var minRank) && minRank.ValueKind == JsonValueKind.Number ? minRank.GetInt32() : null,
-                    max_level_rank = jsonElement.TryGetProperty("max_level_rank", out var maxRank) && maxRank.ValueKind == JsonValueKind.Number ? maxRank.GetInt32() : null,
+                    // Accept both JSON numbers and numeric strings. The GUI may serialize rank
+                    // fields either way per field, and an inconsistent client previously caused
+                    // silently dropped requirements (only Number was honored). ParseNullableInt
+                    // matches what required_upto_level_rank already did and what
+                    // ParseLearningPathArray uses for per-path ranks.
+                    min_level_rank = jsonElement.TryGetProperty("min_level_rank", out var minRank) ? ParseNullableInt(minRank) : null,
+                    max_level_rank = jsonElement.TryGetProperty("max_level_rank", out var maxRank) ? ParseNullableInt(maxRank) : null,
                     required_upto_level_rank = jsonElement.TryGetProperty("required_upto_level_rank", out var reqRank) ? ParseNullableInt(reqRank) : null
                 };
 
@@ -227,8 +232,13 @@ namespace XR50TrainingAssetRepo.Controllers
                     Description = jsonElement.TryGetProperty("description", out var desc) ? desc.GetString() : null,
                     Objectives = jsonElement.TryGetProperty("objectives", out var obj) ? obj.GetString() : null,
                     Requirements = jsonElement.TryGetProperty("requirements", out var req) ? req.GetString() : null,
-                    min_level_rank = jsonElement.TryGetProperty("min_level_rank", out var minRank) && minRank.ValueKind == JsonValueKind.Number ? minRank.GetInt32() : null,
-                    max_level_rank = jsonElement.TryGetProperty("max_level_rank", out var maxRank) && maxRank.ValueKind == JsonValueKind.Number ? maxRank.GetInt32() : null,
+                    // Accept both JSON numbers and numeric strings. The GUI may serialize rank
+                    // fields either way per field, and an inconsistent client previously caused
+                    // silently dropped requirements (only Number was honored). ParseNullableInt
+                    // matches what required_upto_level_rank already did and what
+                    // ParseLearningPathArray uses for per-path ranks.
+                    min_level_rank = jsonElement.TryGetProperty("min_level_rank", out var minRank) ? ParseNullableInt(minRank) : null,
+                    max_level_rank = jsonElement.TryGetProperty("max_level_rank", out var maxRank) ? ParseNullableInt(maxRank) : null,
                     required_upto_level_rank = jsonElement.TryGetProperty("required_upto_level_rank", out var reqRank) ? ParseNullableInt(reqRank) : null
                 };
 
