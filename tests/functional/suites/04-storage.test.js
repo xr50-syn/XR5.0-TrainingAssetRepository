@@ -36,7 +36,7 @@ describe('S3 Storage Operations', () => {
       const testFile = testData.createTestTextFile('Verification test content');
 
       const response = await apiClient.uploadBuffer(
-        `${config.ASSETS_API_URL}/upload`,
+        `${config.ASSETS_API_URL}`,
         testFile.buffer,
         testFile.filename,
         {
@@ -50,7 +50,7 @@ describe('S3 Storage Operations', () => {
 
       if (response.status >= 400) {
         console.log('\n--- TEXT FILE UPLOAD FAILED ---');
-        console.log('URL:', `${config.ASSETS_API_URL}/upload`);
+        console.log('URL:', `${config.ASSETS_API_URL}`);
         console.log('Filename:', testFile.filename);
         console.log('Buffer size:', testFile.buffer.length);
         apiClient.logResponse(response, 'UPLOAD');
@@ -70,7 +70,7 @@ describe('S3 Storage Operations', () => {
       const testImage = testData.createTestImageFile();
 
       const response = await apiClient.uploadBuffer(
-        `${config.ASSETS_API_URL}/upload`,
+        `${config.ASSETS_API_URL}`,
         testImage.buffer,
         testImage.filename,
         {
@@ -84,7 +84,7 @@ describe('S3 Storage Operations', () => {
 
       if (response.status >= 400) {
         console.log('\n--- IMAGE UPLOAD FAILED ---');
-        console.log('URL:', `${config.ASSETS_API_URL}/upload`);
+        console.log('URL:', `${config.ASSETS_API_URL}`);
         console.log('Filename:', testImage.filename);
         console.log('Buffer size:', testImage.buffer.length);
         apiClient.logResponse(response, 'UPLOAD');
@@ -133,8 +133,8 @@ describe('S3 Storage Operations', () => {
       expect([200, 404]).toContain(response.status);
 
       if (response.status === 200) {
-        expect(response.data).toHaveProperty('exists');
-        expect(response.data).toHaveProperty('size');
+        expect(response.data).toHaveProperty('fileExists');
+        expect(response.data).toHaveProperty('fileSize');
       }
     });
   });
@@ -157,13 +157,13 @@ describe('S3 Storage Operations', () => {
       }
     });
 
-    test('download preserves file content', async () => {
+    test('download returns a presigned URL for the uploaded file', async () => {
       // Upload a new file with known content
       const knownContent = `Test content ${Date.now()}`;
       const testFile = testData.createTestTextFile(knownContent);
 
       const uploadResponse = await apiClient.uploadBuffer(
-        `${config.ASSETS_API_URL}/upload`,
+        `${config.ASSETS_API_URL}`,
         testFile.buffer,
         testFile.filename,
         { description: 'Content verification test' }
@@ -177,12 +177,17 @@ describe('S3 Storage Operations', () => {
       const assetId = uploadResponse.data.id;
       global.__TEST_CONFIG__?.createdResources?.assets?.push(assetId);
 
-      // Download and verify content
+      // GET /assets/{id}/download returns a presigned download URL (JSON), not the raw bytes.
+      // (The URL points at the storage backend's internal host, so the byte round-trip is not
+      // exercised from the host test runner here.)
       const downloadResponse = await apiClient.downloadAsset(assetId);
+      expect([200, 302]).toContain(downloadResponse.status);
 
       if (downloadResponse.status === 200) {
-        const downloadedContent = Buffer.from(downloadResponse.data).toString('utf-8');
-        expect(downloadedContent).toBe(knownContent);
+        const body = JSON.parse(Buffer.from(downloadResponse.data).toString('utf-8'));
+        const url = body.downloadUrl || body.DownloadUrl;
+        expect(typeof url).toBe('string');
+        expect(url.length).toBeGreaterThan(0);
       }
     });
   });
@@ -193,7 +198,7 @@ describe('S3 Storage Operations', () => {
       const testFile = testData.createTestTextFile('Delete test');
 
       const uploadResponse = await apiClient.uploadBuffer(
-        `${config.ASSETS_API_URL}/upload`,
+        `${config.ASSETS_API_URL}`,
         testFile.buffer,
         `delete-test-${Date.now()}.txt`,
         { description: 'Delete test' }

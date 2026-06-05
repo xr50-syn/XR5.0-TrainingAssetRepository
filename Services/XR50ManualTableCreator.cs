@@ -100,7 +100,7 @@ namespace XR50TrainingAssetRepo.Services
                 _logger.LogInformation("Base connection: {BaseConnection}", baseConnectionString.Replace("Password=", "Password=***"));
                 _logger.LogInformation("Base database name: {BaseDatabaseName}", baseDatabaseName);
                 
-                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={databaseName}", StringComparison.OrdinalIgnoreCase);
+                var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, databaseName);
                 _logger.LogInformation("Target connection: {TargetConnection}", connectionString.Replace("Password=", "Password=***"));
                 
                 // Check if replacement worked
@@ -190,7 +190,7 @@ namespace XR50TrainingAssetRepo.Services
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
                 
                 // Use case-insensitive replacement (same as table creation)
-                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={databaseName}", StringComparison.OrdinalIgnoreCase);
+                var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, databaseName);
 
                 _logger.LogInformation("Getting tables from database: {DatabaseName}", databaseName);
                 _logger.LogInformation("Connection string for verification: {ConnectionString}", connectionString.Replace("Password=", "Password=***"));
@@ -251,7 +251,7 @@ namespace XR50TrainingAssetRepo.Services
                 var tenantDbName = _tenantService.GetTenantSchema(tenantName);
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
-                var connectionString = baseConnectionString.Replace($"Database={baseDatabaseName}", $"Database={tenantDbName}");
+                var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
                 _logger.LogInformation("Dropping all tables in tenant database: {TenantDatabase}", tenantDbName);
 
@@ -688,7 +688,7 @@ namespace XR50TrainingAssetRepo.Services
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
-                var connectionString = baseConnectionString.Replace($"Database={baseDatabaseName}", $"Database={tenantDbName}");
+                var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
                 _logger.LogInformation("=== Migrating Asset.Type column for tenant: {TenantName} ===", tenantName);
 
@@ -764,7 +764,7 @@ namespace XR50TrainingAssetRepo.Services
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
-                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+                var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
                 _logger.LogInformation("=== Migrating Annotations columns for tenant: {TenantName} ===", tenantName);
 
@@ -853,7 +853,7 @@ namespace XR50TrainingAssetRepo.Services
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
-                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+                var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
                 _logger.LogInformation("=== Migrating SubcomponentMaterialRelationships table for tenant: {TenantName} ===", tenantName);
 
@@ -918,7 +918,7 @@ namespace XR50TrainingAssetRepo.Services
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
-                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+                var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
                 _logger.LogInformation("=== Migrating Program Assignment Rank columns for tenant: {TenantName} ===", tenantName);
 
@@ -1020,7 +1020,7 @@ namespace XR50TrainingAssetRepo.Services
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
-                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+                var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
                 _logger.LogInformation("=== Migrating QuizAnswers table for tenant: {TenantName} ===", tenantName);
 
@@ -1125,7 +1125,7 @@ namespace XR50TrainingAssetRepo.Services
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
-                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+                var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
                 _logger.LogInformation("=== Starting AI Assistant/AI columns migration for tenant: {TenantName} ===", tenantName);
 
@@ -1284,7 +1284,7 @@ namespace XR50TrainingAssetRepo.Services
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
-                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+                var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
                 _logger.LogInformation("=== Migrating User Material tables for tenant: {TenantName} ===", tenantName);
 
@@ -1365,7 +1365,7 @@ namespace XR50TrainingAssetRepo.Services
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
-                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+                var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
                 _logger.LogInformation("=== Migrating MaterialRelationships rank columns for tenant: {TenantName} ===", tenantName);
 
@@ -1434,7 +1434,7 @@ namespace XR50TrainingAssetRepo.Services
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
-                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+                var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
                 _logger.LogInformation("=== Migrating UserMaterial tables to include ProgramId in keys for tenant: {TenantName} ===", tenantName);
 
@@ -1553,7 +1553,7 @@ namespace XR50TrainingAssetRepo.Services
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
-                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+                var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
                 _logger.LogInformation("=== Migrating Quiz evaluation columns for tenant: {TenantName} ===", tenantName);
 
@@ -1617,7 +1617,7 @@ namespace XR50TrainingAssetRepo.Services
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
-                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+                var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
                 _logger.LogInformation("=== Migrating AI Assistant collection columns for tenant: {TenantName} ===", tenantName);
 
@@ -1694,7 +1694,7 @@ namespace XR50TrainingAssetRepo.Services
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
-                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+                var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
                 _logger.LogInformation("=== Migrating AIAssistantMaterialAssetJobs table for tenant: {TenantName} ===", tenantName);
 
@@ -1783,7 +1783,7 @@ namespace XR50TrainingAssetRepo.Services
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
-                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+                var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
                 _logger.LogInformation("=== Migrating INNOV chatbot columns for tenant: {TenantName} ===", tenantName);
 
@@ -1849,7 +1849,7 @@ namespace XR50TrainingAssetRepo.Services
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
-                var connectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+                var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
                 _logger.LogInformation("=== Migrating InnovChatbotMaterialAssetJobs table for tenant: {TenantName} ===", tenantName);
 

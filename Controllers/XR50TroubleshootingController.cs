@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Services;
+using XR50TrainingAssetRepo.Infrastructure;
 using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 
 namespace XR50TrainingAssetRepo.Controllers
@@ -100,6 +101,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Get all tenant databases
         
         [HttpGet("databases")]
+        [DevelopmentOnly]
         public async Task<ActionResult<List<string>>> GetAllTenantDatabases()
         {
             try
@@ -153,6 +155,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Force recreate a tenant database
         
         [HttpPost("force-recreate/{tenantName}")]
+        [DevelopmentOnly]
         public async Task<ActionResult> ForceRecreateTenant(string tenantName)
         {
             try
@@ -224,6 +227,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Completely rebuild tenant database (drop and recreate all tables)
         
         [HttpPost("rebuild/{tenantName}")]
+        [DevelopmentOnly]
         public async Task<ActionResult> RebuildTenantDatabase(string tenantName)
         {
             try
@@ -277,6 +281,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Completely delete tenant database (WARNING: This will delete all data!)
         
         [HttpDelete("delete-database/{tenantName}")]
+        [DevelopmentOnly]
         public async Task<ActionResult> DeleteTenantDatabase(string tenantName)
         {
             try
@@ -308,6 +313,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Completely delete tenant (database AND registry entry) - WARNING: PERMANENT!
         
         [HttpDelete("delete-completely/{tenantName}")]
+        [DevelopmentOnly]
         public async Task<ActionResult> DeleteTenantCompletely(string tenantName)
         {
             try

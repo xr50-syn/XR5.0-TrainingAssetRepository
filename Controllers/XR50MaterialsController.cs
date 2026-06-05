@@ -151,8 +151,8 @@ namespace XR50TrainingAssetRepo.Controllers
         {
             try
             {
-                // Log all claims for debugging
-                _logger.LogInformation("Token claims: {Claims}",
+                // Claims can contain PII (email, sub) - keep out of the default Information logs.
+                _logger.LogDebug("Token claims: {Claims}",
                     string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}")));
 
                 // Extract user ID from JWT token claims
@@ -2814,7 +2814,8 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         }
         private Material? ParseMaterialFromJson(JsonElement jsonElement)
         {
-            _logger.LogInformation("Parsing material JSON: {Json}", jsonElement.ToString());
+            // Full request body may contain user-supplied content - log only at Debug.
+            _logger.LogDebug("Parsing material JSON: {Json}", jsonElement.ToString());
 
             // Get the discriminator/type from the JSON (case-insensitive)
             string? discriminator = null;

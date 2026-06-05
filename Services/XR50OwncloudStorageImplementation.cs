@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text;
 using XR50TrainingAssetRepo.Models;
@@ -400,34 +399,21 @@ namespace XR50TrainingAssetRepo.Services
                 throw new ArgumentException("User must have valid username and password for WebDAV operations");
             }
 
+            if (method is not ("PUT" or "DELETE" or "HEAD" or "GET"))
+            {
+                throw new ArgumentException($"Unsupported user WebDAV method: {method}");
+            }
+
             try
             {
-                var webdavBase = _configuration.GetValue<string>("TenantSettings:BaseWebDAV");
-                var username = user.UserName;
-                var password = user.Password;
+                _logger.LogDebug("Executing WebDAV request as USER {UserName}: {Method} {Path}",
+                    user.UserName, method, path);
 
-                //var encodedPath = System.Web.HttpUtility.UrlEncode(path);
-                var args = method switch
-                {
-                    "PUT" when !string.IsNullOrEmpty(filePath) =>
-                        $"-X PUT -u {username}:{password} --data-binary @\"{filePath}\" \"{webdavBase}/{path}\"",
-                    "DELETE" =>
-                        $"-X DELETE -u {username}:{password} \"{webdavBase}/{path}\"",
-                    "HEAD" =>
-                        $"-X HEAD -u {username}:{password} \"{webdavBase}/{path}\"",
-                    "GET" =>
-                        $"-X GET -u {username}:{password} \"{webdavBase}/{path}\"",
-                    _ => throw new ArgumentException($"Unsupported user WebDAV method: {method}")
-                };
-
-                _logger.LogDebug("Executing WebDAV command as USER {UserName}: {Method} {Path}", 
-                    username, method, path);
-
-                return await ExecuteCurlCommand(args, password);
+                return await SendWebDavAsync(method, path, filePath, user.UserName, user.Password);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to execute user WebDAV command: {Method} {Path} as user {UserName}", 
+                _logger.LogError(ex, "Failed to execute user WebDAV command: {Method} {Path} as user {UserName}",
                     method, path, user.UserName);
                 return false;
             }
@@ -439,32 +425,27 @@ namespace XR50TrainingAssetRepo.Services
         
         private async Task<bool> ExecuteWebDAVAsAdmin(string method, string path, string filePath = null)
         {
+            var username = _configuration.GetValue<string>("TenantSettings:Admin");
+            var password = _configuration.GetValue<string>("TenantSettings:Password");
+
+            if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+            {
+                throw new InvalidOperationException("Admin credentials not configured");
+            }
+
+            if (method is not ("MKCOL" or "PUT" or "DELETE"))
+            {
+                throw new ArgumentException($"Unsupported admin WebDAV method: {method}");
+            }
+
+            // MKCOL targets a collection (directory) and requires a trailing slash.
+            var requestPath = method == "MKCOL" ? $"{path}/" : path;
+
             try
             {
-                var webdavBase = _configuration.GetValue<string>("TenantSettings:BaseWebDAV");
-                var username = _configuration.GetValue<string>("TenantSettings:Admin");
-                var password = _configuration.GetValue<string>("TenantSettings:Password");
+                _logger.LogDebug("Executing WebDAV request as ADMIN: {Method} {Path}", method, path);
 
-                if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
-                {
-                    throw new InvalidOperationException("Admin credentials not configured");
-                }
-
-                
-                var args = method switch
-                {
-                    "MKCOL" =>
-                        $"-X MKCOL -u {username}:{password} \"{webdavBase}/{path}/\"",
-                    "PUT" when !string.IsNullOrEmpty(filePath) =>
-                        $"-X PUT -u {username}:{password} --data-binary @\"{filePath}\" \"{webdavBase}/{path}\"",
-                    "DELETE" =>
-                        $"-X DELETE -u {username}:{password} \"{webdavBase}/{path}\"",
-                    _ => throw new ArgumentException($"Unsupported admin WebDAV method: {method}")
-                };
-
-                _logger.LogDebug("Executing WebDAV command as ADMIN: {Method} {Path}", method, path);
-
-                return await ExecuteCurlCommand(args, password);
+                return await SendWebDavAsync(method, requestPath, filePath, username, password);
             }
             catch (Exception ex)
             {
@@ -496,40 +477,38 @@ namespace XR50TrainingAssetRepo.Services
 
             return tenant;
         }
-        private async Task<bool> ExecuteCurlCommand(string args, string password)
+        /// <summary>
+        /// Issues a WebDAV request via <see cref="HttpClient"/>. Replaces the previous curl shell-out, which
+        /// interpolated tenant-controlled paths and plaintext credentials into a process argument string
+        /// (command-injection + credentials exposed on the process command line and in logs). Credentials are
+        /// passed via a Basic auth header and never logged; path/filename are carried as a URI, so there is no
+        /// shell to inject into.
+        /// </summary>
+        private async Task<bool> SendWebDavAsync(string method, string path, string filePath, string username, string password)
         {
-           
-            var startInfo = new ProcessStartInfo
+            var webdavBase = _configuration.GetValue<string>("TenantSettings:BaseWebDAV");
+            var url = $"{webdavBase}/{path}";
+
+            using var request = new HttpRequestMessage(new HttpMethod(method), url);
+
+            var authBytes = Encoding.UTF8.GetBytes($"{username}:{password}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
+
+            if (method == "PUT" && !string.IsNullOrEmpty(filePath))
             {
-                FileName = "curl",
-                Arguments = args,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            var maskedArgs = args.Replace(password, "***PASSWORD***");
-            _logger.LogInformation(" EXECUTING CURL COMMAND: curl {Args}", maskedArgs);
-    
-            // Also log it in a format you can copy-paste and test manually
-            _logger.LogInformation("COPY-PASTE COMMAND: curl {Args}", maskedArgs);
-            using var process = Process.Start(startInfo);
-            if (process == null)
-            {
-                throw new InvalidOperationException("Failed to start curl process");
+                var fileBytes = await File.ReadAllBytesAsync(filePath);
+                request.Content = new ByteArrayContent(fileBytes);
+                request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
             }
 
-            string output = await process.StandardOutput.ReadToEndAsync();
-            string error = await process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync();
+            using var response = await _httpClient.SendAsync(request);
 
-            _logger.LogDebug("WebDAV command completed. Exit code: {ExitCode}", process.ExitCode);
-
-            if (!string.IsNullOrEmpty(error) && process.ExitCode != 0)
+            if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("WebDAV command stderr: {Error}", error);
+                _logger.LogWarning("WebDAV {Method} {Path} returned status {StatusCode}", method, path, response.StatusCode);
             }
 
-            return process.ExitCode == 0;
+            return response.IsSuccessStatusCode;
         }
 
         #endregion

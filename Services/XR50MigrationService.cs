@@ -37,7 +37,7 @@ namespace XR50TrainingAssetRepo.Services
             _logger.LogInformation("Tenant database name: {TenantDatabase}", tenantDbName);
             
             // Connection to MySQL server (not specific database)
-            var adminConnectionString = baseConnectionString.Replace($"Database={GetBaseDatabaseName()}", "Database=mysql");
+            var adminConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, "mysql");
             _logger.LogInformation("Admin connection: {AdminConnection}", adminConnectionString.Replace("Password=", "Password=***"));
 
             using var connection = new MySqlConnection(adminConnectionString);
@@ -107,7 +107,7 @@ namespace XR50TrainingAssetRepo.Services
                 // 1. Ensure database exists
                 var tenantDbName = GetTenantDatabase(tenantName);
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
-                var adminConnectionString = baseConnectionString.Replace($"Database={GetBaseDatabaseName()}", "Database=mysql");
+                var adminConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, "mysql");
 
                 using (var connection = new MySqlConnection(adminConnectionString))
                 {
@@ -241,7 +241,7 @@ namespace XR50TrainingAssetRepo.Services
             {
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
-                var tenantConnectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDbName}", StringComparison.OrdinalIgnoreCase);
+                var tenantConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
                 _logger.LogInformation("Creating owner user {UserName} in tenant database: {TenantDatabase}", owner.UserName, tenantDbName);
 
@@ -283,7 +283,7 @@ namespace XR50TrainingAssetRepo.Services
             {
                 var tenantDbName = GetTenantDatabase(tenantName);
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
-                var adminConnectionString = baseConnectionString.Replace($"Database={GetBaseDatabaseName()}", "Database=mysql");
+                var adminConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, "mysql");
 
                 _logger.LogInformation("Deleting tenant database: {TenantDatabase} for tenant: {TenantName}", tenantDbName, tenantName);
 

@@ -382,20 +382,14 @@ namespace XR50TrainingAssetRepo.Services
         private XR50TrainingContext CreateTenantContext(string tenantName)
         {
             var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
-            var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
             var tenantDbName = GetTenantSchema(tenantName);
-            // Use case-insensitive replacement for connection string (database= vs Database=)
-            var tenantConnectionString = Regex.Replace(
-                baseConnectionString ?? "",
-                $"database={Regex.Escape(baseDatabaseName)}",
-                $"database={tenantDbName}",
-                RegexOptions.IgnoreCase);
+            var tenantConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
-            _logger.LogDebug("Created tenant connection for {Tenant}: base={Base}, tenant={TenantDb}",
-                tenantName, baseDatabaseName, tenantDbName);
+            _logger.LogDebug("Created tenant connection for {Tenant}: tenant={TenantDb}",
+                tenantName, tenantDbName);
 
             var optionsBuilder = new DbContextOptionsBuilder<XR50TrainingContext>();
-            optionsBuilder.UseMySql(tenantConnectionString!, ServerVersion.AutoDetect(tenantConnectionString!));
+            optionsBuilder.UseMySql(tenantConnectionString, ServerVersion.AutoDetect(tenantConnectionString));
 
             var tenantService = new DirectTenantService(tenantName);
             return new XR50TrainingContext(optionsBuilder.Options, tenantService, _configuration);

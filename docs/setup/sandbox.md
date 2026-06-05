@@ -106,8 +106,8 @@ Open Swagger UI at http://localhost:5286/swagger and use the tenant creation end
 Example request body (using pre-created bucket):
 ```json
 {
-  "tenantName": "test-company",
-  "tenantGroup": "pilot-1",
+  "tenantName": "pilot5",
+  "tenantGroup": "pilot-5",
   "description": "Demo tenant using pre-created bucket",
   "storageType": "S3",
   "s3Config": {

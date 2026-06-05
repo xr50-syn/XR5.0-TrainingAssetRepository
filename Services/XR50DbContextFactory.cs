@@ -94,7 +94,7 @@ namespace XR50TrainingAssetRepo.Services
                 return baseConnectionString;
             }
             var tenantDatabase = _tenantService.GetTenantSchema(tenantName);
-            var tenantConnectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDatabase}", StringComparison.OrdinalIgnoreCase);
+            var tenantConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDatabase);
 
             _logger.LogInformation(" Switching to tenant database: {TenantDatabase} for tenant: {TenantName}", tenantDatabase, tenantName);
 

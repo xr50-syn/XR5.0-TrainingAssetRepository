@@ -135,8 +135,8 @@ namespace XR50TrainingAssetRepo.Controllers
 
         private string? GetUserIdFromAuth()
         {
-            // Log all claims for debugging
-            _logger.LogInformation("Token claims: {Claims}",
+            // Claims can contain PII (email, sub) - keep out of the default Information logs.
+            _logger.LogDebug("Token claims: {Claims}",
                 string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}")));
 
             // Get user ID from JWT claims - prefer preferred_username over sub (UUID)

@@ -93,7 +93,7 @@ namespace XR50TrainingAssetRepo.Services
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
                 // 2. Ensure database exists
-                var adminConnectionString = baseConnectionString.Replace($"Database={baseDatabaseName}", "Database=mysql");
+                var adminConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, "mysql");
                 using (var connection = new MySqlConnection(adminConnectionString))
                 {
                     await connection.OpenAsync();
@@ -102,7 +102,7 @@ namespace XR50TrainingAssetRepo.Services
                 }
 
                 // 3. Apply migrations
-                var tenantConnectionString = baseConnectionString.Replace($"Database={baseDatabaseName}", $"Database={tenantDbName}");
+                var tenantConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
                 var optionsBuilder = new DbContextOptionsBuilder<XR50TrainingContext>();
                 optionsBuilder.UseMySql(tenantConnectionString, ServerVersion.AutoDetect(tenantConnectionString));
 
@@ -143,7 +143,7 @@ namespace XR50TrainingAssetRepo.Services
             {
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
-                var adminConnectionString = baseConnectionString.Replace($"Database={baseDatabaseName}", "Database=mysql");
+                var adminConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, "mysql");
 
                 using var connection = new MySqlConnection(adminConnectionString);
                 await connection.OpenAsync();
@@ -171,7 +171,7 @@ namespace XR50TrainingAssetRepo.Services
                 var tenantDbName = _tenantService.GetTenantSchema(tenantName);
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
-                var tenantConnectionString = baseConnectionString.Replace($"Database={baseDatabaseName}", $"Database={tenantDbName}");
+                var tenantConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
                 using var connection = new MySqlConnection(tenantConnectionString);
                 await connection.OpenAsync();
@@ -205,7 +205,7 @@ namespace XR50TrainingAssetRepo.Services
                 var tenantDbName = _tenantService.GetTenantSchema(tenantName);
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
-                var adminConnectionString = baseConnectionString.Replace($"Database={baseDatabaseName}", "Database=mysql");
+                var adminConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, "mysql");
 
                 using var connection = new MySqlConnection(adminConnectionString);
                 await connection.OpenAsync();
@@ -231,7 +231,7 @@ namespace XR50TrainingAssetRepo.Services
                 var tenantDbName = _tenantService.GetTenantSchema(tenantName);
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
-                var tenantConnectionString = baseConnectionString.Replace($"Database={baseDatabaseName}", $"Database={tenantDbName}");
+                var tenantConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
                 using var connection = new MySqlConnection(tenantConnectionString);
                 await connection.OpenAsync();
@@ -259,7 +259,7 @@ namespace XR50TrainingAssetRepo.Services
                 var tenantDbName = _tenantService.GetTenantSchema(tenantName);
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
-                var tenantConnectionString = baseConnectionString.Replace($"Database={baseDatabaseName}", $"Database={tenantDbName}");
+                var tenantConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
                 var optionsBuilder = new DbContextOptionsBuilder<XR50TrainingContext>();
                 optionsBuilder.UseMySql(tenantConnectionString, ServerVersion.AutoDetect(tenantConnectionString));

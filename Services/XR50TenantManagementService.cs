@@ -8,7 +8,6 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Policy;
 using System.Text;
-using System.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -179,7 +178,7 @@ namespace XR50TrainingAssetRepo.Services
             {
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
-                var tenantConnectionString = baseConnectionString.Replace($"database={baseDatabaseName}", $"database={tenantDatabaseName}", StringComparison.OrdinalIgnoreCase);
+                var tenantConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDatabaseName);
 
                 _logger.LogDebug("Fetching owner user {OwnerName} from tenant database: {TenantDatabase}", ownerName, tenantDatabaseName);
 
@@ -389,28 +388,27 @@ namespace XR50TrainingAssetRepo.Services
             Console.WriteLine($"Response content: {resultAdminContent}");
 
             // Create root dir for the Tenant, owned by Admin
-            string cmd="curl";
-            string dirl=System.Web.HttpUtility.UrlEncode(tenant.TenantDirectory);
-            string Arg= $"-X MKCOL -u {adminUser.UserName}:{adminUser.Password} \"{webdav_base}/{dirl}/\"";
-            // Create root dir for the Tenant
-            Console.WriteLine("Executing command:" + cmd + " " + Arg);
-            var startInfo = new ProcessStartInfo
+            var dirl = System.Web.HttpUtility.UrlEncode(tenant.TenantDirectory);
+            await SendWebDavAsAdminAsync("MKCOL", $"{webdav_base}/{dirl}/", adminUser.UserName, adminUser.Password);
+        }
+
+        /// <summary>
+        /// Issues an admin WebDAV request (MKCOL/DELETE on a tenant directory) via <see cref="HttpClient"/>.
+        /// Replaces a curl shell-out that interpolated the path and plaintext credentials into a process
+        /// argument string and echoed the full command (password included) to stdout - command injection plus
+        /// credential exposure. Credentials now travel in a Basic auth header and are never logged.
+        /// </summary>
+        private async Task SendWebDavAsAdminAsync(string method, string url, string username, string password)
+        {
+            using var request = new HttpRequestMessage(new HttpMethod(method), url);
+            var authBytes = Encoding.ASCII.GetBytes($"{username}:{password}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
+
+            using var response = await _httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
             {
-                FileName = cmd,
-                Arguments = Arg,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            using (var process = Process.Start(startInfo))
-            {
-                string output = process.StandardOutput.ReadToEnd();
-                string error = process.StandardError.ReadToEnd();
-                process.WaitForExit(30000); // 30 second timeout
-                Console.WriteLine("Output: " + output);
-                Console.WriteLine("Error: " + error);
+                _logger.LogWarning("WebDAV {Method} request returned status {StatusCode}", method, response.StatusCode);
             }
-            
         }
 
         public async Task DeleteTenantStorageAsync(string tenantName)
@@ -457,25 +455,8 @@ namespace XR50TrainingAssetRepo.Services
             var result = await _httpClient.SendAsync(request);
             string resultContent = await result.Content.ReadAsStringAsync();
             // Delete root dir for the Tenant
-            string cmd= "curl";
-            string dirl=System.Web.HttpUtility.UrlEncode(tenant.TenantDirectory);
-            string Arg=  $"-X DELETE -u {adminUser.UserName}:{adminUser.Password} \"{webdav_base}/{dirl}/\"";
-            Console.WriteLine("Executing command: " + cmd + " " + Arg);
-            var startInfo = new ProcessStartInfo
-            {                                                                                                                           FileName = cmd,
-                Arguments = Arg,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            using (var process = Process.Start(startInfo))
-            {
-                string output = process.StandardOutput.ReadToEnd();
-                string error = process.StandardError.ReadToEnd();
-                process.WaitForExit(30000); // 30 second timeout
-                Console.WriteLine("Output: " + output);
-                Console.WriteLine("Error: " + error);
-            }
+            var dirl = System.Web.HttpUtility.UrlEncode(tenant.TenantDirectory);
+            await SendWebDavAsAdminAsync("DELETE", $"{webdav_base}/{dirl}/", adminUser.UserName, adminUser.Password);
             request = new HttpRequestMessage(HttpMethod.Delete, $"{uri_user}/{tenant.OwnerName}")
             {
                 Content = messageContent
