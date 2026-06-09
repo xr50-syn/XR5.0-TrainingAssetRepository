@@ -174,7 +174,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
             // own default collection so material data stays inside this tenant.
             if (string.IsNullOrEmpty(aiAssistant.CollectionName))
             {
-                aiAssistant.CollectionName = await GetTenantDefaultCollectionAsync();
+                aiAssistant.CollectionName = "aiassist_" + aiAssistant.id.ToString();
             }
             var collectionName = aiAssistant.CollectionName;
             await context.SaveChangesAsync();
