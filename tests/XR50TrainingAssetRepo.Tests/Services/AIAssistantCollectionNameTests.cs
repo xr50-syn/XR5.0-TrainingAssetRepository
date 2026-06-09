@@ -9,10 +9,10 @@ namespace XR50TrainingAssetRepo.Tests.Services;
 ///
 /// Motivation: a tenant may keep separate document sets (different document types) in distinct
 /// DataLens collections and want an assistant to ingest into / chat against a chosen one rather than
-/// always falling back to the tenant's DefaultAICollection.
+/// the auto-assigned per-material collection (aiassist_{id}).
 ///
 /// These cases use Mode B (no assets): the create path then calls CreateAsync, which honors a
-/// pre-set CollectionName and never resolves the tenant default or calls DataLens — keeping the
+/// pre-set CollectionName and never auto-assigns aiassist_{id} or calls DataLens — keeping the
 /// test free of external dependencies.
 /// </summary>
 public class AIAssistantCollectionNameTests : IClassFixture<WebApplicationFixture>

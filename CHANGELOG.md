@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-05-24
 
+### Changed - AI Assistant materials get their own DataLens collection
+
+#### Summary
+An AI Assistant material now defaults to its **own** per-material DataLens collection (`aiassist_{id}`, derived from the material id) instead of falling back to the tenant's `DefaultAICollection`. This isolates each material's documents so one assistant's answers can never surface another material's documents, and removes the dependency on a per-tenant default for material creation/ingestion. Supplying an explicit `collectionName` still overrides the default (e.g. to let several assistants share a curated collection). The tenant `DefaultAICollection` remains in use for the generic Chat API, the default (material-less) AI assistant endpoint, and asset-level AI status sync. Existing materials with a null/empty `CollectionName` are backfilled to `aiassist_{id}` by the tenant-DB migration.
+
+#### Affected files
+- `Services/Materials/AIAssistantMaterialService.cs` — all three paths (`CreateAsync`, `CreateWithAssetsAsync`, `SubmitForProcessingAsync`) now use `aiassist_{id}`; dropped the unused tenant-default resolver and its tenant-service dependencies
+- `Services/AIAssistantService.cs` — material ask path falls back to `aiassist_{id}` for legacy rows
+- `Models/XR50Tenant.cs`, `Controllers/XR50MaterialsController.cs` — comments clarified
+- Docs/tests: `docs/api/chat-api.md`, `.claude/CLAUDE.md`, `.claude/skills/ai-assistant-probe/SKILL.md`, `tests/functional/README.md`, `tests/functional/helpers/test-data.js`, `tests/functional/suites/09-ai-assistant.test.js`, `tests/XR50TrainingAssetRepo.Tests/Services/AIAssistantCollectionNameTests.cs`, `AIAssistantMaterialUpdateTests.cs`
+
 ### Added - INNOV Chatbot Material Type (second RAG backend)
 
 #### Summary

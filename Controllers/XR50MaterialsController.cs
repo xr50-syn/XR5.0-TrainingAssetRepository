@@ -2626,7 +2626,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 // Honor an explicit target collection. A tenant may keep distinct document sets
                 // (e.g. different document types) in separate DataLens collections and want this
                 // assistant to ingest into / chat against a chosen one. When omitted, the service
-                // falls back to the tenant's DefaultAICollection (see CreateAsync/CreateWithAssetsAsync).
+                // gives the material its own collection (aiassist_{id}; see CreateAsync/CreateWithAssetsAsync).
                 if (TryGetPropertyCaseInsensitive(jsonElement, "collectionName", out var collectionProp) ||
                     TryGetPropertyCaseInsensitive(jsonElement, "collection_name", out collectionProp))
                 {

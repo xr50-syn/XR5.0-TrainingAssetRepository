@@ -14,39 +14,22 @@ namespace XR50TrainingAssetRepo.Services.Materials
     {
         private readonly IXR50TenantDbContextFactory _dbContextFactory;
         private readonly IChatbotApiService _chatbotApiService;
-        private readonly IXR50TenantService _tenantService;
-        private readonly IXR50TenantManagementService _tenantManagementService;
         private readonly ILogger<AIAssistantMaterialService> _logger;
 
         public AIAssistantMaterialService(
             IXR50TenantDbContextFactory dbContextFactory,
             IChatbotApiService chatbotApiService,
-            IXR50TenantService tenantService,
-            IXR50TenantManagementService tenantManagementService,
             ILogger<AIAssistantMaterialService> logger)
         {
             _dbContextFactory = dbContextFactory;
             _chatbotApiService = chatbotApiService;
-            _tenantService = tenantService;
-            _tenantManagementService = tenantManagementService;
             _logger = logger;
         }
 
-        // Resolve the current tenant's per-tenant default DataLens collection. Used as the
-        // fallback for AIAssistantMaterials that don't define their own CollectionName.
-        // Sharing one global collection across tenants would let a chatbot query in tenant A
-        // surface documents another tenant uploaded — see XR50Tenant.DefaultAICollection.
-        private async Task<string> GetTenantDefaultCollectionAsync()
-        {
-            var tenantName = _tenantService.GetCurrentTenant();
-            var tenant = await _tenantManagementService.GetTenantAsync(tenantName);
-            if (string.IsNullOrEmpty(tenant?.DefaultAICollection))
-            {
-                throw new InvalidOperationException(
-                    $"Tenant '{tenantName}' has no DefaultAICollection configured; cannot bind AI Assistant material to a default collection");
-            }
-            return tenant.DefaultAICollection;
-        }
+        // Each AI Assistant material gets its own DataLens collection, named "aiassist_{id}"
+        // from the material's persisted id. A per-material collection keeps one material's
+        // documents from surfacing in another's answers and avoids tenants sharing a collection.
+        private static string CollectionNameFor(int materialId) => "aiassist_" + materialId.ToString();
 
         #region CRUD Operations
 
@@ -74,12 +57,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
             aiAssistant.Updated_at = DateTime.UtcNow;
             aiAssistant.Type = MaterialType.AIAssistant;
 
-            // No explicit collection → bind to the per-tenant default so queries route there.
             // Status stays "notready" until the chatbot finishes its own processing step.
-            if (string.IsNullOrEmpty(aiAssistant.CollectionName))
-            {
-                aiAssistant.CollectionName = await GetTenantDefaultCollectionAsync();
-            }
             if (string.IsNullOrEmpty(aiAssistant.AIAssistantStatus))
             {
                 aiAssistant.AIAssistantStatus = "notready";
@@ -87,6 +65,14 @@ namespace XR50TrainingAssetRepo.Services.Materials
 
             context.Materials.Add(aiAssistant);
             await context.SaveChangesAsync();
+
+            // No explicit collection → give the material its own collection (aiassist_{id}).
+            // Needs the persisted id, so this runs after the first save.
+            if (string.IsNullOrEmpty(aiAssistant.CollectionName))
+            {
+                aiAssistant.CollectionName = CollectionNameFor(aiAssistant.id);
+                await context.SaveChangesAsync();
+            }
 
             _logger.LogInformation("Created AI Assistant material: {Name} with ID: {Id} bound to collection {CollectionName}",
                 aiAssistant.Name, aiAssistant.id, aiAssistant.CollectionName);
@@ -169,12 +155,11 @@ namespace XR50TrainingAssetRepo.Services.Materials
             context.Materials.Add(aiAssistant);
             await context.SaveChangesAsync();
 
-            // Resolve target collection. If the caller pre-set CollectionName (explicit per-material
-            // or named tenant-scoped collection), honour it. Otherwise fall back to the tenant's
-            // own default collection so material data stays inside this tenant.
+            // Resolve target collection. Honour an explicitly supplied CollectionName; otherwise
+            // give the material its own collection (aiassist_{id}) so its documents stay isolated.
             if (string.IsNullOrEmpty(aiAssistant.CollectionName))
             {
-                aiAssistant.CollectionName = "aiassist_" + aiAssistant.id.ToString();
+                aiAssistant.CollectionName = CollectionNameFor(aiAssistant.id);
             }
             var collectionName = aiAssistant.CollectionName;
             await context.SaveChangesAsync();
@@ -372,13 +357,14 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 return aiAssistant;
             }
 
-            // Resolve collection name, fall back to the per-tenant default if not set
+            // Resolve collection name; if somehow unset (e.g. a legacy row), give the material
+            // its own collection (aiassist_{id}) to match the create paths.
             var collectionName = aiAssistant.CollectionName;
             if (string.IsNullOrEmpty(collectionName))
             {
-                collectionName = await GetTenantDefaultCollectionAsync();
+                collectionName = CollectionNameFor(aiAssistantId);
                 aiAssistant.CollectionName = collectionName;
-                _logger.LogInformation("Bound AI Assistant material {AIAssistantId} to tenant default collection {CollectionName}",
+                _logger.LogInformation("Bound AI Assistant material {AIAssistantId} to its own collection {CollectionName}",
                     aiAssistantId, collectionName);
             }
 

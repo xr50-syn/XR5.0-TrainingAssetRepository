@@ -36,15 +36,9 @@ public class AIAssistantMaterialUpdateTests
         await materialService.UpdateAsync(updated);
 
         var chatbotApi = new RecordingChatbotApiService();
-        // The seeded material already has CollectionName set, so the tenant-default
-        // resolver is never invoked; the stubs below just satisfy DI.
-        var tenantService = new StubTenantService("test-tenant");
-        var tenantManagementService = new StubTenantManagementService("test-tenant", "assistant_collection");
         var aiAssistantService = new AIAssistantMaterialService(
             factory,
             chatbotApi,
-            tenantService,
-            tenantManagementService,
             NullLogger<AIAssistantMaterialService>.Instance);
 
         await aiAssistantService.SubmitForProcessingAsync(10);
@@ -106,8 +100,6 @@ public class AIAssistantMaterialUpdateTests
         var aiAssistantMaterialService = new AIAssistantMaterialService(
             factory,
             new RecordingChatbotApiService(),
-            new StubTenantService("test-tenant"),
-            new StubTenantManagementService("test-tenant", "tenant_default"),
             NullLogger<AIAssistantMaterialService>.Instance);
 
         var service = new AIAssistantService(

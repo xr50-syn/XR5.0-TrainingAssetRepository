@@ -161,5 +161,7 @@ The `ai_assistant` material supports multi-asset ingestion, session continuity, 
 controller at `/api/{tenantName}/ai-assistant` (`/{id}/ask`, `/{id}/documents`, `/{id}/health`,
 `/{id}/session/invalidate`, …). Asset ingest status — including the DataLens-reported
 `document_name` — is surfaced per asset in the material detail response
-(`GET /api/{tenantName}/materials/{id}/detail`). It uses the tenant's `DefaultAICollection`
-(per-tenant, to avoid cross-tenant document leakage).
+(`GET /api/{tenantName}/materials/{id}/detail`). Each AI Assistant material gets its own
+DataLens collection (`aiassist_{id}`) unless an explicit `collectionName` is supplied, so one
+material's documents never surface in another's answers. (Supplying an explicit `collectionName`
+lets several assistants share a curated collection when that is intended.)

@@ -6,7 +6,7 @@ const config = require('../config');
  * AI Assistant Material Tests
  *
  * Smoke coverage for the AI Assistant create flow:
- *  - Mode B (empty assets) → material bound to shared default DataLens collection,
+ *  - Mode B (empty assets) → material gets its own aiassist_{id} DataLens collection,
  *    no upload happens, status stays "notready" until something triggers processing.
  *  - Mode A (assets present, multiple accepted payload shapes) → assets persisted to
  *    AIAssistantAssetIds, DataLens collection ensured, submit attempted.
@@ -55,7 +55,7 @@ describe('AI Assistant Material', () => {
     }
   });
 
-  describe('Mode B — empty assets, shared collection fallback', () => {
+  describe('Mode B — empty assets, per-material collection', () => {
     test('creates a material with no assets and returns success', async () => {
       const payload = testData.createAIAssistantMaterialEmpty('empty');
       const response = await apiClient.createMaterial(payload);

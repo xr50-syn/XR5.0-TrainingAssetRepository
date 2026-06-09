@@ -153,11 +153,10 @@ npm run test:verbose
 ### 9. AI Assistant (`09-ai-assistant.test.js`)
 Smoke coverage for the AI Assistant material + DataLens integration. Two modes:
 
-- **Mode B** — payload has no assets. Material is bound to the tenant's
-  `DefaultAICollection` (set at tenant creation; auto-derived as
-  `aiassist_default_{tenantName}` when not supplied). No uploads happen;
-  `aiAssistantStatus` stays `"notready"` until something triggers processing.
-  Tenants never share a collection — that was the cross-tenant data-leak fix.
+- **Mode B** — payload has no assets. The material gets its own collection
+  (`aiassist_{id}`, derived from the material id) unless an explicit `collectionName`
+  is supplied. No uploads happen; `aiAssistantStatus` stays `"notready"` until
+  something triggers processing. Materials never share a collection by default.
 - **Mode A** — payload has assets. Three accepted shapes, all with `id` as number or
   numeric string:
   - `config.assets[].id`  (DataLens-native)
@@ -182,9 +181,9 @@ Mode A tests are skipped with a log message — Mode B and the validation test s
 | `ChatbotApi__BaseUrl` | app env (compose) | Points at DataLens v1.1.0 (`https://datalens.xr50.work`) |
 | `CHATBOT_API_BEARER_TOKEN` | `.env` | Admin token; required to create per-material and per-tenant collections |
 
-The Mode B fallback collection is now per-tenant (`XR50Tenant.DefaultAICollection`),
-set when the tenant is created. There is no longer a global shared default; each
-tenant's collection is created in DataLens on first use.
+Each AI Assistant material gets its own per-material collection (`aiassist_{id}`) by
+default; an explicit `collectionName` overrides it. There is no global shared default,
+and the collection is created in DataLens on first use.
 
 ## Debugging
 

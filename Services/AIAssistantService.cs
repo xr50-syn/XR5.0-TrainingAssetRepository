@@ -110,7 +110,9 @@ namespace XR50TrainingAssetRepo.Services
                 throw new KeyNotFoundException($"AIAssistantMaterial with ID {aiAssistantMaterialId} not found");
             }
 
-            var collectionName = aiAssistantMaterial.CollectionName ?? await GetTenantDefaultCollectionAsync();
+            // Materials always own a collection (aiassist_{id}); fall back to that shape for a
+            // legacy row whose CollectionName was never persisted.
+            var collectionName = aiAssistantMaterial.CollectionName ?? ("aiassist_" + aiAssistantMaterial.id);
 
             // Check for existing valid session
             var existingSession = await _aiAssistantMaterialService.GetActiveSessionAsync(aiAssistantMaterialId);
