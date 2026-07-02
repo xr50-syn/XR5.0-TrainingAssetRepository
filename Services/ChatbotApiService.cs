@@ -252,6 +252,82 @@ namespace XR50TrainingAssetRepo.Services
             }
         }
 
+        public async Task<bool> DeleteDocumentAsync(string collectionName, string documentName)
+        {
+            if (string.IsNullOrWhiteSpace(collectionName) || string.IsNullOrWhiteSpace(documentName))
+            {
+                _logger.LogWarning("DeleteDocumentAsync called with empty collection or document name (collection: {CollectionName}, document: {DocumentName})",
+                    collectionName, documentName);
+                return false;
+            }
+
+            try
+            {
+                var url = $"api/v1/collections/{Uri.EscapeDataString(collectionName)}/documents/{Uri.EscapeDataString(documentName)}";
+                var response = await _httpClient.DeleteAsync(url);
+
+                if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    _logger.LogInformation("Deleted document {DocumentName} from collection {CollectionName} (status: {StatusCode})",
+                        documentName, collectionName, response.StatusCode);
+                    return true;
+                }
+
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("Failed to delete document {DocumentName} from collection {CollectionName}: {StatusCode} - {Error}",
+                    documentName, collectionName, response.StatusCode, errorContent);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error deleting document {DocumentName} from collection {CollectionName}, continuing",
+                    documentName, collectionName);
+                return false;
+            }
+        }
+
+        public async Task<bool> DeleteCollectionAsync(string collectionName, bool force = true)
+        {
+            if (string.IsNullOrWhiteSpace(collectionName))
+            {
+                _logger.LogWarning("DeleteCollectionAsync called with empty collection name");
+                return false;
+            }
+
+            try
+            {
+                var url = $"api/v1/collections/{Uri.EscapeDataString(collectionName)}";
+                if (force)
+                {
+                    url += "?force=true";
+                }
+
+                var response = await _httpClient.DeleteAsync(url);
+
+                if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    _logger.LogInformation("Deleted collection {CollectionName} (status: {StatusCode})",
+                        collectionName, response.StatusCode);
+                    return true;
+                }
+
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("Failed to delete collection {CollectionName}: {StatusCode} - {Error}",
+                    collectionName, response.StatusCode, errorContent);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error deleting collection {CollectionName}, continuing", collectionName);
+                return false;
+            }
+        }
+
+        public string GetDocumentName(string assetUrl, string filetype)
+        {
+            return GetFileNameWithExtension(assetUrl, filetype);
+        }
+
         public async Task<bool> IsAvailableAsync()
         {
             try

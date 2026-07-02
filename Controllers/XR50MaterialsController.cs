@@ -1327,7 +1327,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                     // Attempt cleanup of created asset
                     try
                     {
-                        await _assetService.DeleteAssetAsync(tenantName, createdAsset.Id);
+                        await _assetService.DeleteAssetRecordAsync(tenantName, createdAsset.Id);
                         _logger.LogInformation("Cleaned up asset {AssetId} after material creation failure", createdAsset.Id);
                     }
                     catch (Exception cleanupEx)
@@ -3998,7 +3998,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                         _logger.LogInformation("Replacing existing asset {AssetId} with new file", existingAssetId.Value);
                         try
                         {
-                            await _assetService.DeleteAssetAsync(tenantName, existingAssetId.Value);
+                            await _assetService.DeleteAssetRecordAsync(tenantName, existingAssetId.Value);
                             _logger.LogInformation("Deleted old asset {AssetId}", existingAssetId.Value);
                         }
                         catch (Exception ex)

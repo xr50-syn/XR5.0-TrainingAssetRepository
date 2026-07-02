@@ -232,6 +232,12 @@ public class AIAssistantMaterialUpdateTests
 
         public Task<bool> DocumentExistsAsync(string collectionName, string documentName) => Task.FromResult(false);
 
+        public Task<bool> DeleteDocumentAsync(string collectionName, string documentName) => Task.FromResult(true);
+
+        public Task<bool> DeleteCollectionAsync(string collectionName, bool force = true) => Task.FromResult(true);
+
+        public string GetDocumentName(string assetUrl, string filetype) => System.IO.Path.GetFileName(new Uri(assetUrl).LocalPath);
+
         public Task<bool> IsAvailableAsync() => Task.FromResult(true);
     }
 

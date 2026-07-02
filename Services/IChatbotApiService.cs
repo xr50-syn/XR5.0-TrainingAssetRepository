@@ -41,6 +41,33 @@ namespace XR50TrainingAssetRepo.Services
         Task<bool> DocumentExistsAsync(string collectionName, string documentName);
 
         /// <summary>
+        /// Deletes a single document from a collection. Best-effort: a missing document
+        /// (404) is treated as success; other failures are logged and return false without throwing.
+        /// </summary>
+        /// <param name="collectionName">The DataLens collection name</param>
+        /// <param name="documentName">The document filename to remove</param>
+        /// <returns>True if the document is gone (deleted or already absent)</returns>
+        Task<bool> DeleteDocumentAsync(string collectionName, string documentName);
+
+        /// <summary>
+        /// Deletes an entire collection. Best-effort: a missing collection (404) is treated as
+        /// success; other failures are logged and return false without throwing.
+        /// </summary>
+        /// <param name="collectionName">The collection name to delete</param>
+        /// <param name="force">Passes the DataLens force flag to remove a non-empty collection</param>
+        /// <returns>True if the collection is gone (deleted or already absent)</returns>
+        Task<bool> DeleteCollectionAsync(string collectionName, bool force = true);
+
+        /// <summary>
+        /// Derives the DataLens document name for an asset, matching the name used when the
+        /// document was submitted. Use this when no stored document name is available.
+        /// </summary>
+        /// <param name="assetUrl">The asset URL the document was uploaded from</param>
+        /// <param name="filetype">The file type/extension</param>
+        /// <returns>The document filename as DataLens knows it</returns>
+        string GetDocumentName(string assetUrl, string filetype);
+
+        /// <summary>
         /// Checks if the DataLens API is available.
         /// </summary>
         /// <returns>True if API is reachable</returns>

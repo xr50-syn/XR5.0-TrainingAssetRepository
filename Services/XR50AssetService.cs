@@ -16,7 +16,29 @@ namespace XR50TrainingAssetRepo.Services
         Task<Asset> CreateAssetReference(string tenantName, AssetReferenceData assetRefData);
         Task<Asset> CreateAssetAsync(Asset asset, string tenantName, IFormFile file);
         Task<Asset> UpdateAssetAsync(Asset asset);
-        Task<bool> DeleteAssetAsync(string tenantName, int id);
+
+        /// <summary>
+        /// Deletes an asset with dependency awareness. When the asset is referenced by any
+        /// Training Material and <paramref name="force"/> is false, nothing is deleted and the
+        /// returned result is <see cref="AssetDeletionResult.Blocked"/> with the dependency list.
+        /// When forced (or when there are no dependents), the asset is removed together with its
+        /// single-asset materials, detached from any AI Assistant / Innov chatbot (deleting those
+        /// only when it was their last asset), and its DataLens documents/collections are cleaned up.
+        /// </summary>
+        Task<AssetDeletionResult> DeleteAssetAsync(string tenantName, int id, bool force = false);
+
+        /// <summary>
+        /// Deletes just this asset's storage file and DB row, with no dependency check or cascade.
+        /// Used by internal rollback/replace flows that manage material references themselves.
+        /// </summary>
+        Task<bool> DeleteAssetRecordAsync(string tenantName, int id);
+
+        /// <summary>
+        /// Lists every Training Material that references the asset (single-asset column types plus
+        /// AI Assistant / Innov chatbot JSON arrays), with whether each would be deleted on a forced delete.
+        /// </summary>
+        Task<List<AssetDependencyDto>> GetAssetDependenciesAsync(int assetId);
+
         Task<bool> AssetExistsAsync(int id);
         
         // Asset Search and Filtering
@@ -53,6 +75,8 @@ namespace XR50TrainingAssetRepo.Services
         private readonly IConfiguration _configuration;
         private readonly IXR50TenantDbContextFactory _dbContextFactory;
         private readonly IMaterialServiceBase _materialServiceBase;
+        private readonly IAIAssistantMaterialService _aiAssistantMaterialService;
+        private readonly IInnovChatbotMaterialService _innovChatbotMaterialService;
         private readonly IXR50TenantService _tenantService;
         private readonly IXR50TenantManagementService _tenantManagementService;
         private readonly IStorageService _storageService; // Unified storage interface
@@ -63,6 +87,8 @@ namespace XR50TrainingAssetRepo.Services
             IConfiguration configuration,
             IXR50TenantDbContextFactory dbContextFactory,
             IMaterialServiceBase materialServiceBase,
+            IAIAssistantMaterialService aiAssistantMaterialService,
+            IInnovChatbotMaterialService innovChatbotMaterialService,
             IXR50TenantService tenantService,
             IXR50TenantManagementService tenantManagementService,
             IStorageService storageService,
@@ -72,11 +98,22 @@ namespace XR50TrainingAssetRepo.Services
             _configuration = configuration;
             _dbContextFactory = dbContextFactory;
             _materialServiceBase = materialServiceBase;
+            _aiAssistantMaterialService = aiAssistantMaterialService;
+            _innovChatbotMaterialService = innovChatbotMaterialService;
             _tenantService = tenantService;
             _tenantManagementService = tenantManagementService;
             _storageService = storageService;
             _chatbotApiService = chatbotApiService;
             _logger = logger;
+        }
+
+        // Materials referencing an asset, split by deletion semantics.
+        private sealed class AssetDependencies
+        {
+            public List<Material> SingleAsset { get; } = new();
+            public List<AIAssistantMaterial> AiAssistants { get; } = new();
+            public List<InnovChatbotMaterial> InnovChatbots { get; } = new();
+            public bool Any => SingleAsset.Count > 0 || AiAssistants.Count > 0 || InnovChatbots.Count > 0;
         }
 
         // Resolve the current tenant's per-tenant default DataLens collection. Used as the
@@ -459,7 +496,187 @@ namespace XR50TrainingAssetRepo.Services
             }
         }
 
-        public async Task<bool> DeleteAssetAsync(string tenantName, int id)
+        public async Task<List<AssetDependencyDto>> GetAssetDependenciesAsync(int assetId)
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+            var deps = await ResolveDependenciesAsync(context, assetId);
+            return ToDependencyDtos(deps);
+        }
+
+        public async Task<AssetDeletionResult> DeleteAssetAsync(string tenantName, int id, bool force = false)
+        {
+            var result = new AssetDeletionResult();
+
+            Asset asset;
+            AssetDependencies deps;
+            var documentTargets = new List<(string Collection, string Document)>();
+            var collectionTargets = new List<string>();
+
+            // Resolve everything (asset, dependents, DataLens cleanup targets) up front while we
+            // hold a context and the per-(material,asset) job rows are still present.
+            using (var context = _dbContextFactory.CreateDbContext())
+            {
+                var loaded = await context.Assets.FindAsync(id);
+                if (loaded == null)
+                {
+                    result.NotFound = true;
+                    return result;
+                }
+                asset = loaded;
+
+                deps = await ResolveDependenciesAsync(context, id);
+
+                if (deps.Any && !force)
+                {
+                    // Asset is in use and the caller has not confirmed a forced delete.
+                    result.Blocked = true;
+                    result.Dependencies = ToDependencyDtos(deps);
+                    _logger.LogInformation("Delete of asset {AssetId} blocked: {Count} dependent material(s)",
+                        id, result.Dependencies.Count);
+                    return result;
+                }
+
+                // AI Assistant owners: drop the whole collection if this was the last asset,
+                // otherwise drop just this asset's document from the assistant's collection.
+                foreach (var owner in deps.AiAssistants)
+                {
+                    var job = await context.AIAssistantMaterialAssetJobs
+                        .FirstOrDefaultAsync(j => j.AIAssistantMaterialId == owner.id && j.AssetId == id);
+                    var collection = !string.IsNullOrEmpty(job?.CollectionName) ? job!.CollectionName : owner.CollectionName;
+                    if (string.IsNullOrEmpty(collection))
+                    {
+                        continue;
+                    }
+
+                    if (owner.GetAssetIdsList().Count <= 1)
+                    {
+                        collectionTargets.Add(collection);
+                    }
+                    else
+                    {
+                        var docName = !string.IsNullOrEmpty(job?.DocumentName) ? job!.DocumentName! : SafeDocumentName(asset);
+                        if (!string.IsNullOrEmpty(docName))
+                        {
+                            documentTargets.Add((collection, docName));
+                        }
+                    }
+                }
+
+                // Standalone AI-processed PDF (not owned by any AI Assistant): remove it from the
+                // tenant's default DataLens bucket.
+                if (deps.AiAssistants.Count == 0 && !string.IsNullOrEmpty(asset.AiAvailable) && asset.AiAvailable != "notready")
+                {
+                    try
+                    {
+                        var defaultCollection = await GetTenantDefaultCollectionAsync();
+                        var docName = SafeDocumentName(asset);
+                        if (!string.IsNullOrEmpty(docName))
+                        {
+                            documentTargets.Add((defaultCollection, docName));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Could not resolve tenant default collection for standalone asset {AssetId}; skipping DataLens document cleanup", id);
+                    }
+                }
+            }
+
+            // --- Cascade material deletions (each service manages its own context/transaction) ---
+
+            // Single-asset materials (Image/Video/PDF/Unity/Default) are deleted outright.
+            foreach (var material in deps.SingleAsset)
+            {
+                try
+                {
+                    if (await _materialServiceBase.DeleteAsync(material.id))
+                    {
+                        result.DeletedMaterialIds.Add(material.id);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to delete dependent material {MaterialId} while deleting asset {AssetId}", material.id, id);
+                }
+            }
+
+            // AI Assistant materials: detach the asset; delete the material only when it was its last asset.
+            foreach (var owner in deps.AiAssistants)
+            {
+                try
+                {
+                    if (owner.GetAssetIdsList().Count <= 1)
+                    {
+                        if (await _aiAssistantMaterialService.DeleteAsync(owner.id))
+                        {
+                            result.DeletedMaterialIds.Add(owner.id);
+                        }
+                    }
+                    else
+                    {
+                        await _aiAssistantMaterialService.RemoveAssetAsync(owner.id, id);
+                        // Drop the stale per-(material, asset) job row so the material's aggregate
+                        // status is not computed from a job whose asset no longer belongs to it.
+                        await RemoveAssetJobRowsAsync(owner.id, id);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to update AI Assistant material {MaterialId} while deleting asset {AssetId}", owner.id, id);
+                }
+            }
+
+            // Innov chatbot materials mirror AI Assistant lifecycle (INNOV backend has no DataLens bucket).
+            foreach (var owner in deps.InnovChatbots)
+            {
+                try
+                {
+                    if (owner.GetAssetIdsList().Count <= 1)
+                    {
+                        if (await _innovChatbotMaterialService.DeleteAsync(owner.id))
+                        {
+                            result.DeletedMaterialIds.Add(owner.id);
+                        }
+                    }
+                    else
+                    {
+                        await _innovChatbotMaterialService.RemoveAssetAsync(owner.id, id);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to update Innov chatbot material {MaterialId} while deleting asset {AssetId}", owner.id, id);
+                }
+            }
+
+            // --- DataLens cleanup (best-effort; failures are logged, never thrown) ---
+            foreach (var (collection, document) in documentTargets)
+            {
+                if (await _chatbotApiService.DeleteDocumentAsync(collection, document))
+                {
+                    result.DataLensDocumentsRemoved.Add($"{collection}/{document}");
+                }
+            }
+            foreach (var collection in collectionTargets.Distinct())
+            {
+                if (await _chatbotApiService.DeleteCollectionAsync(collection, force: true))
+                {
+                    result.DataLensCollectionsRemoved.Add(collection);
+                }
+            }
+
+            // --- Finally remove the asset's storage file and DB row ---
+            result.Deleted = await RemoveAssetStorageAndRowAsync(tenantName, id);
+            return result;
+        }
+
+        public Task<bool> DeleteAssetRecordAsync(string tenantName, int id)
+        {
+            return RemoveAssetStorageAndRowAsync(tenantName, id);
+        }
+
+        // Deletes an asset's storage file (best-effort) and its DB row. No dependency handling.
+        private async Task<bool> RemoveAssetStorageAndRowAsync(string tenantName, int id)
         {
             using var context = _dbContextFactory.CreateDbContext();
 
@@ -492,6 +709,81 @@ namespace XR50TrainingAssetRepo.Services
             {
                 _logger.LogError(ex, "Failed to delete asset {AssetId} ({Filename})", id, asset.Filename);
                 throw;
+            }
+        }
+
+        // Resolves every material that references an asset, split by how it is deleted:
+        // single-asset column types (deleted outright) vs. AI Assistant / Innov JSON arrays
+        // (asset detached; material deleted only when it was the last asset).
+        private async Task<AssetDependencies> ResolveDependenciesAsync(XR50TrainingContext context, int assetId)
+        {
+            var deps = new AssetDependencies();
+
+            deps.SingleAsset.AddRange(await _materialServiceBase.GetByAssetIdAsync(assetId));
+
+            deps.AiAssistants.AddRange(
+                (await context.Materials.OfType<AIAssistantMaterial>().ToListAsync())
+                .Where(m => m.GetAssetIdsList().Contains(assetId)));
+
+            deps.InnovChatbots.AddRange(
+                (await context.Materials.OfType<InnovChatbotMaterial>().ToListAsync())
+                .Where(m => m.GetAssetIdsList().Contains(assetId)));
+
+            return deps;
+        }
+
+        private static List<AssetDependencyDto> ToDependencyDtos(AssetDependencies deps)
+        {
+            var list = new List<AssetDependencyDto>();
+
+            foreach (var m in deps.SingleAsset)
+            {
+                list.Add(new AssetDependencyDto { Id = m.id, Name = m.Name, Type = m.Type.ToString(), WillBeDeleted = true });
+            }
+            foreach (var m in deps.AiAssistants)
+            {
+                list.Add(new AssetDependencyDto { Id = m.id, Name = m.Name, Type = m.Type.ToString(), WillBeDeleted = m.GetAssetIdsList().Count <= 1 });
+            }
+            foreach (var m in deps.InnovChatbots)
+            {
+                list.Add(new AssetDependencyDto { Id = m.id, Name = m.Name, Type = m.Type.ToString(), WillBeDeleted = m.GetAssetIdsList().Count <= 1 });
+            }
+
+            return list;
+        }
+
+        // Removes the per-(material, asset) job rows for an asset detached from an AI Assistant.
+        // (When the material itself is deleted, its job rows are removed by DB cascade instead.)
+        private async Task RemoveAssetJobRowsAsync(int aiAssistantMaterialId, int assetId)
+        {
+            using var context = _dbContextFactory.CreateDbContext();
+            var jobs = await context.AIAssistantMaterialAssetJobs
+                .Where(j => j.AIAssistantMaterialId == aiAssistantMaterialId && j.AssetId == assetId)
+                .ToListAsync();
+            if (jobs.Count > 0)
+            {
+                context.AIAssistantMaterialAssetJobs.RemoveRange(jobs);
+                await context.SaveChangesAsync();
+            }
+        }
+
+        // Derives the DataLens document name for an asset, matching what was used at submit time.
+        // Falls back to the stored filename if the URL cannot be parsed.
+        private string? SafeDocumentName(Asset asset)
+        {
+            if (string.IsNullOrEmpty(asset.URL))
+            {
+                return asset.Filename;
+            }
+            try
+            {
+                return _chatbotApiService.GetDocumentName(asset.URL, asset.Filetype ?? "pdf");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Could not derive DataLens document name for asset {AssetId} from URL {Url}; falling back to filename",
+                    asset.Id, asset.URL);
+                return asset.Filename;
             }
         }
 
@@ -1134,6 +1426,50 @@ namespace XR50TrainingAssetRepo.Services
         #endregion
     }
 
+
+    /// <summary>
+    /// A Training Material that references an asset, surfaced to the client so it can show which
+    /// materials a forced delete would affect.
+    /// </summary>
+    public class AssetDependencyDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
+
+        /// <summary>
+        /// True if the material itself is deleted when the asset is deleted (single-asset types, or a
+        /// multi-asset assistant whose last asset this is). False when the asset is merely detached.
+        /// </summary>
+        public bool WillBeDeleted { get; set; }
+    }
+
+    /// <summary>
+    /// Outcome of an asset deletion attempt.
+    /// </summary>
+    public class AssetDeletionResult
+    {
+        /// <summary>The asset did not exist.</summary>
+        public bool NotFound { get; set; }
+
+        /// <summary>The asset row was deleted.</summary>
+        public bool Deleted { get; set; }
+
+        /// <summary>Deletion was refused because the asset is in use and force was not set.</summary>
+        public bool Blocked { get; set; }
+
+        /// <summary>Dependent materials (populated when Blocked).</summary>
+        public List<AssetDependencyDto> Dependencies { get; set; } = new();
+
+        /// <summary>Ids of materials deleted as part of the cascade.</summary>
+        public List<int> DeletedMaterialIds { get; set; } = new();
+
+        /// <summary>DataLens documents removed, formatted as "collection/document".</summary>
+        public List<string> DataLensDocumentsRemoved { get; set; } = new();
+
+        /// <summary>DataLens collections removed.</summary>
+        public List<string> DataLensCollectionsRemoved { get; set; } = new();
+    }
 
     public class AssetStatistics
     {

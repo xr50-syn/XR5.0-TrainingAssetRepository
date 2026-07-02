@@ -152,22 +152,55 @@ namespace XR50TrainingAssetRepo.Controllers
             return NoContent();
         }
 
-        // DELETE: api/{tenantName}/assets/5
+        // DELETE: api/{tenantName}/assets/5[?force=true]
+        // Without force, a delete is refused (409) when the asset is assigned to any training
+        // material, returning the dependency list so the client can confirm. With force=true the
+        // asset is deleted and its dependent materials + DataLens documents/collections are cascaded.
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteAsset(string tenantName, int id)
+        public async Task<IActionResult> DeleteAsset(string tenantName, int id, [FromQuery] bool force = false)
         {
-            _logger.LogInformation("Deleting asset {Id} for tenant: {TenantName}", id, tenantName);
+            _logger.LogInformation("Deleting asset {Id} for tenant: {TenantName} (force: {Force})", id, tenantName, force);
 
-            var deleted = await _assetService.DeleteAssetAsync(tenantName, id);
-
-            if (!deleted)
+            AssetDeletionResult result;
+            try
             {
-                return this.ProblemBadRequest("Asset was not found or is being used by materials.");
+                result = await _assetService.DeleteAssetAsync(tenantName, id, force);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting asset {Id} for tenant: {TenantName}", id, tenantName);
+                return this.ProblemServerError("Error deleting asset.");
             }
 
-            _logger.LogInformation("Deleted asset {Id} for tenant: {TenantName}", id, tenantName);
+            if (result.NotFound)
+            {
+                return this.ProblemNotFound($"Asset with ID {id} not found.");
+            }
 
-            return NoContent();
+            if (result.Blocked)
+            {
+                _logger.LogInformation("Asset {Id} is used by {Count} material(s); force required to delete",
+                    id, result.Dependencies.Count);
+
+                return Conflict(new
+                {
+                    Error = "Asset is in use by training materials",
+                    Message = "This asset is assigned to one or more training materials. Re-send the request with force=true to delete the asset and cascade the changes listed in 'dependencies'.",
+                    Dependencies = result.Dependencies
+                });
+            }
+
+            _logger.LogInformation("Deleted asset {Id} for tenant: {TenantName}. Cascaded {MaterialCount} material(s), {DocCount} document(s), {ColCount} collection(s)",
+                id, tenantName, result.DeletedMaterialIds.Count, result.DataLensDocumentsRemoved.Count, result.DataLensCollectionsRemoved.Count);
+
+            return Ok(new
+            {
+                Status = "success",
+                Message = "Asset deleted",
+                DeletedMaterialIds = result.DeletedMaterialIds,
+                DataLensDocumentsRemoved = result.DataLensDocumentsRemoved,
+                DataLensCollectionsRemoved = result.DataLensCollectionsRemoved
+            });
         }
 
         // GET: api/{tenantName}/assets/search?searchTerm=video&filetype=mp4
