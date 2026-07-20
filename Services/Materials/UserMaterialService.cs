@@ -993,15 +993,24 @@ namespace XR50TrainingAssetRepo.Services.Materials
             int learningPathId,
             int? newlyCompletedMaterialId = null)
         {
-            // Get all materials in this learning path via MaterialRelationship
-            var learningPathMaterialIds = await context.MaterialRelationships
+            // Get all materials in this learning path via MaterialRelationship.
+            // Optional materials count toward the total, but are considered completed by default.
+            var learningPathMaterials = await context.MaterialRelationships
                 .Where(mr =>
                     mr.RelatedEntityType == "LearningPath" &&
                     mr.RelatedEntityId == learningPathId.ToString())
-                .Select(mr => mr.MaterialId)
+                .Select(mr => new { mr.MaterialId, mr.RelationshipType })
                 .ToListAsync();
 
-            var totalMaterials = learningPathMaterialIds.Count;
+            var learningPathMaterialIds = learningPathMaterials
+                .Select(mr => mr.MaterialId)
+                .ToList();
+            var optionalMaterialIds = learningPathMaterials
+                .Where(mr => mr.RelationshipType == "optional")
+                .Select(mr => mr.MaterialId)
+                .ToHashSet();
+
+            var totalMaterials = learningPathMaterials.Count;
 
             if (totalMaterials == 0)
             {
@@ -1009,17 +1018,21 @@ namespace XR50TrainingAssetRepo.Services.Materials
             }
 
             // Get completed materials (those with scores)
-            var completedCount = await context.UserMaterialScores
+            var completedMaterialIds = await context.UserMaterialScores
                 .Where(ums => ums.UserId == userId && learningPathMaterialIds.Contains(ums.MaterialId))
-                .CountAsync();
+                .Select(ums => ums.MaterialId)
+                .ToListAsync();
+            var completedMaterialIdSet = completedMaterialIds.ToHashSet();
+            var completedCount = learningPathMaterials.Count(mr =>
+                optionalMaterialIds.Contains(mr.MaterialId) ||
+                completedMaterialIdSet.Contains(mr.MaterialId));
 
             // Add 1 if we're about to insert a new score
-            if (newlyCompletedMaterialId.HasValue)
+            if (newlyCompletedMaterialId.HasValue &&
+                learningPathMaterialIds.Contains(newlyCompletedMaterialId.Value))
             {
-                var alreadyCounted = await context.UserMaterialScores
-                    .AnyAsync(ums =>
-                        ums.UserId == userId &&
-                        ums.MaterialId == newlyCompletedMaterialId.Value);
+                var alreadyCounted = optionalMaterialIds.Contains(newlyCompletedMaterialId.Value) ||
+                    completedMaterialIdSet.Contains(newlyCompletedMaterialId.Value);
 
                 if (!alreadyCounted)
                 {

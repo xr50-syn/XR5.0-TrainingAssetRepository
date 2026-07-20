@@ -40,6 +40,13 @@ See [docs/README.md](docs/README.md) for complete documentation.
 | [Setup Guides](docs/README.md#setup) | Sandbox, MinIO, Docker |
 | [Architecture](docs/architecture.md) | System design, multi-tenancy |
 
+## Agentic Development
+
+The repository supports vendor-neutral coding agents through
+[AGENTS.md](AGENTS.md). It contains the shared architecture constraints, coding
+conventions, and verification workflow. Agent- or editor-specific configuration
+is optional local tooling and should defer to that tracked guide.
+
 ## Deployment Profiles
 
 | Profile | Storage | Use Case |

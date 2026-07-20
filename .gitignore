@@ -10,8 +10,10 @@
 *.userosscache
 *.sln.docstates
 
-# Claude Code temporary files
+# Agent-generated temporary files
 tmpclaude-*
+tmpcodex-*
+tmpagent-*
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
@@ -378,6 +380,6 @@ app/
 !.env.example
 !.env.*.example
 .codegpt
+# Vendor-specific agent configuration is local. Shared instructions live in AGENTS.md.
 .claude/
 TODO.md
-AGENTS.md
