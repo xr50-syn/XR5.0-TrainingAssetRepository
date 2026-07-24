@@ -7,10 +7,12 @@ using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services;
 using XR50TrainingAssetRepo.Services.Materials;
 using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
+using XR50TrainingAssetRepo.Infrastructure.Auth;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
     [Route("api/{tenantName}/quiz-progress")]
+    [Authorize(Policy = "TenantMember")]
     [ApiController]
     [ApiExplorerSettings(GroupName = "users")]
     public class QuizProgressController : ControllerBase
@@ -33,7 +35,6 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Get all quiz progress in tenant (admins see all users, users see only their own)
         /// </summary>
         [HttpGet("tenant")]
-        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<TenantQuizProgressResponse>> GetTenantQuizProgress(
             string tenantName)
         {
@@ -61,7 +62,6 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Get quiz progress for a specific training program
         /// </summary>
         [HttpGet("program/{programId}")]
-        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<TrainingProgramQuizProgressResponse>> GetTrainingProgramQuizProgress(
             string tenantName,
             int programId)
@@ -95,7 +95,6 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Get quiz progress for a specific learning path
         /// </summary>
         [HttpGet("learning-path/{learningPathId}")]
-        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<LearningPathQuizProgressResponse>> GetLearningPathQuizProgress(
             string tenantName,
             int learningPathId)
@@ -129,7 +128,6 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Get quiz progress for a specific material
         /// </summary>
         [HttpGet("material/{materialId}")]
-        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<MaterialQuizProgressResponse>> GetMaterialQuizProgress(
             string tenantName,
             int materialId)
@@ -165,13 +163,7 @@ namespace XR50TrainingAssetRepo.Controllers
         private async Task<(string? userId, bool isAdmin)> GetUserContextAsync()
         {
             // Extract user ID from JWT claims (same pattern as UsersProgressController)
-            var userId = User.FindFirst("preferred_username")?.Value
-                ?? User.FindFirst(ClaimTypes.Name)?.Value
-                ?? User.FindFirst("name")?.Value
-                ?? User.FindFirst(ClaimTypes.Email)?.Value
-                ?? User.FindFirst("email")?.Value
-                ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                ?? User.FindFirst("sub")?.Value;
+            var userId = User.GetUserId();
 
             _logger.LogDebug("Extracted userId from claims: {UserId}", userId);
 

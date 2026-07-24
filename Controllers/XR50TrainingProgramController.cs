@@ -13,10 +13,12 @@ using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services;
 using XR50TrainingAssetRepo.Services.Materials;
 using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
+using XR50TrainingAssetRepo.Infrastructure.Auth;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
     [Route("api/{tenantName}/[controller]")]
+    [Authorize(Policy = "TenantMember")]
     [ApiController]
     public class programsController : ControllerBase
     {
@@ -47,6 +49,7 @@ namespace XR50TrainingAssetRepo.Controllers
         }
 
         [HttpPost]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<CompleteTrainingProgramResponse>> PostTrainingProgram(
             string tenantName)
         {
@@ -159,7 +162,6 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Requires authentication - user ID is extracted from JWT token claims
         /// </summary>
         [HttpPost("{programId}/submit")]
-        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<BulkMaterialCompleteResponse>> BulkSubmitMaterials(
             string tenantName,
             int programId,
@@ -168,13 +170,7 @@ namespace XR50TrainingAssetRepo.Controllers
             try
             {
                 // Extract user ID from JWT token claims
-                var userId = User.FindFirst("preferred_username")?.Value
-                    ?? User.FindFirst(ClaimTypes.Name)?.Value
-                    ?? User.FindFirst("name")?.Value
-                    ?? User.FindFirst(ClaimTypes.Email)?.Value
-                    ?? User.FindFirst("email")?.Value
-                    ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                    ?? User.FindFirst("sub")?.Value;
+                var userId = User.GetUserId();
 
                 // Authorization disabled - use default user if not authenticated
                 if (string.IsNullOrEmpty(userId))
@@ -206,6 +202,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
         // PUT: api/{tenantName}/programs/5
         [HttpPut("{id}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<CompleteTrainingProgramResponse>> PutTrainingProgram(
             string tenantName,
             string id)
@@ -448,6 +445,7 @@ namespace XR50TrainingAssetRepo.Controllers
             }
         }
         [HttpDelete("{id}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> DeleteTrainingProgram(string tenantName, int id)
         {
             _logger.LogInformation("Deleting training program {Id} for tenant: {TenantName}", id, tenantName);
@@ -489,6 +487,7 @@ namespace XR50TrainingAssetRepo.Controllers
         }
 
         [HttpPost("{trainingProgramId}/assign-material/{materialId}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<object>> AssignMaterialToTrainingProgram(
             string tenantName,
             int trainingProgramId,
@@ -527,6 +526,7 @@ namespace XR50TrainingAssetRepo.Controllers
             }
         }
         [HttpDelete("{trainingProgramId}/remove-material/{materialId}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> RemoveMaterialFromTrainingProgram(
             string tenantName,
             int trainingProgramId,
@@ -550,6 +550,7 @@ namespace XR50TrainingAssetRepo.Controllers
         }
 
         [HttpPost("detail")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<CompleteTrainingProgramResponse>> CreateCompleteTrainingProgram(
             string tenantName, 
             [FromBody] CompleteTrainingProgramRequest request)

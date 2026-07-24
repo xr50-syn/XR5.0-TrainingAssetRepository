@@ -7,10 +7,12 @@ using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services;
 using XR50TrainingAssetRepo.Services.Materials;
 using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
+using XR50TrainingAssetRepo.Infrastructure.Auth;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
     [Route("api/{tenantName}/program-progress")]
+    [Authorize(Policy = "TenantMember")]
     [ApiController]
     [ApiExplorerSettings(GroupName = "users")]
     public class ProgramProgressController : ControllerBase
@@ -34,7 +36,6 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Admins see all users' progress, regular users see only their own.
         /// </summary>
         [HttpGet("program/{programId}")]
-        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<ProgramProgressResponse>> GetProgramProgress(
             string tenantName,
             int programId)
@@ -70,13 +71,7 @@ namespace XR50TrainingAssetRepo.Controllers
         private async Task<(string? userId, bool isAdmin)> GetUserContextAsync()
         {
             // Extract user ID from JWT claims
-            var userId = User.FindFirst("preferred_username")?.Value
-                ?? User.FindFirst(ClaimTypes.Name)?.Value
-                ?? User.FindFirst("name")?.Value
-                ?? User.FindFirst(ClaimTypes.Email)?.Value
-                ?? User.FindFirst("email")?.Value
-                ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                ?? User.FindFirst("sub")?.Value;
+            var userId = User.GetUserId();
 
             _logger.LogDebug("Extracted userId from claims: {UserId}", userId);
 

@@ -9,6 +9,7 @@ using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Services;
 using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
+using Microsoft.AspNetCore.Authorization;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
@@ -23,6 +24,7 @@ namespace XR50TrainingAssetRepo.Controllers
         }
 
     [Route("api/{tenantName}/[controller]")]
+    [Authorize(Policy = "TenantMember")]
     [ApiController]
     public class AssetsController : ControllerBase
     {
@@ -71,6 +73,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
         // POST: api/{tenantName}/assets
         [HttpPost]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<CreateAssetResponse>> PostAsset(string tenantName, [FromForm] FileUploadFormData fileUpload)
         {
             Asset asset = new Asset();
@@ -123,6 +126,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
         // PUT: api/{tenantName}/assets/5
         [HttpPut("{id}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> PutAsset(string tenantName, int id, Asset asset)
         {
             if (id != asset.Id)
@@ -157,6 +161,7 @@ namespace XR50TrainingAssetRepo.Controllers
         // material, returning the dependency list so the client can confirm. With force=true the
         // asset is deleted and its dependent materials + DataLens documents/collections are cascaded.
         [HttpDelete("{id}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> DeleteAsset(string tenantName, int id, [FromQuery] bool force = false)
         {
             _logger.LogInformation("Deleting asset {Id} for tenant: {TenantName} (force: {Force})", id, tenantName, force);
@@ -295,6 +300,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
         // POST: api/{tenantName}/assets/upload
         [HttpPost("upload")]
+        [Authorize(Policy = "TenantAdmin")]
         [ApiExplorerSettings(IgnoreApi = true)]
         public Task<ActionResult<CreateAssetResponse>> UploadAsset(
             string tenantName,
@@ -308,6 +314,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
         // POST: api/{tenantName}/assets/{id}/upload
         [HttpPost("{id}/upload")]
+        [Authorize(Policy = "TenantAdmin")]
         [ApiExplorerSettings(IgnoreApi = true)]
         public async Task<ActionResult<CreateAssetResponse>> UploadAssetToExisting(
             string tenantName,
@@ -437,6 +444,7 @@ namespace XR50TrainingAssetRepo.Controllers
 */
 
         [HttpPost("{assetId}/share")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<Share>> CreateShare(string tenantName, string assetId)
         {
             _logger.LogInformation("Creating share for asset {AssetId} in tenant {TenantName}", assetId, tenantName);
@@ -544,6 +552,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Delete a share
         
         [HttpDelete("shares/{shareId}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> DeleteShare(string tenantName, string shareId)
         {
             _logger.LogInformation("Deleting share {ShareId} for tenant {TenantName}", shareId, tenantName);
@@ -599,6 +608,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Submit an asset for AI processing via Chatbot API
         /// </summary>
         [HttpPost("{id}/submit")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<object>> SubmitAssetForAiProcessing(string tenantName, int id)
         {
             _logger.LogInformation("Submitting asset {AssetId} for AI processing in tenant {TenantName}", id, tenantName);
@@ -685,6 +695,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Manually trigger AI status sync for all processing assets
         /// </summary>
         [HttpPost("ai-sync")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<object>> SyncAiStatuses(string tenantName)
         {
             _logger.LogInformation("Manually syncing AI statuses for tenant {TenantName}", tenantName);

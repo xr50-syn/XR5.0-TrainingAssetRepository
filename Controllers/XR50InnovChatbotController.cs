@@ -2,10 +2,12 @@ using Microsoft.AspNetCore.Mvc;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services.Materials;
 using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
+using Microsoft.AspNetCore.Authorization;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
     [Route("api/{tenantName}/innov-chatbot")]
+    [Authorize(Policy = "TenantMember")]
     [ApiController]
     [ApiExplorerSettings(GroupName = "innov-chatbot")]
     public class InnovChatbotController : ControllerBase
@@ -84,6 +86,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Uploads a document directly to an INNOV chatbot material's pilot.
         /// </summary>
         [HttpPost("{innovChatbotId}/documents")]
+        [Authorize(Policy = "TenantAdmin")]
         [Consumes("multipart/form-data")]
         public async Task<ActionResult<InnovDocumentUploadResponse>> UploadDocument(
             string tenantName,
@@ -127,6 +130,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Submits the material's associated assets for ingestion into the pilot.
         /// </summary>
         [HttpPost("{innovChatbotId}/submit")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<object>> Submit(string tenantName, int innovChatbotId)
         {
             _logger.LogInformation("Submitting INNOV chatbot material {InnovChatbotId} for processing in tenant {TenantName}",

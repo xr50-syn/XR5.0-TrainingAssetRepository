@@ -30,6 +30,9 @@ public class WebApplicationFixture : WebApplicationFactory<Program>
                 ["BaseDatabaseName"] = "test_db",
                 ["IAM:Issuer"] = "test-issuer",
                 ["IAM:Audience"] = "test-audience",
+                // Disable the Development anonymous bypass so hermetic tests exercise the real
+                // authorization pipeline; requests authenticate through TestAuthHandler instead.
+                ["IAM:AllowAnonymousInDevelopment"] = "false",
                 ["Storage:Type"] = "InMemory"
             });
         });
@@ -80,6 +83,15 @@ public class WebApplicationFixture : WebApplicationFactory<Program>
                 services.Remove(storageDescriptor);
             }
             services.AddScoped<IStorageService, MockStorageService>();
+
+            // Authenticate through the header-driven test scheme instead of JWT Bearer.
+            // Default principal is a systemadmin, so pre-existing tests pass every policy.
+            services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = TestAuthHandler.SchemeName;
+                options.DefaultChallengeScheme = TestAuthHandler.SchemeName;
+            }).AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, TestAuthHandler>(
+                TestAuthHandler.SchemeName, _ => { });
         });
 
         builder.UseEnvironment("Development");

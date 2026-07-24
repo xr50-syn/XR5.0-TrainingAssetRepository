@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,6 +13,7 @@ using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 namespace XR50TrainingAssetRepo.Controllers
 {
     [Route("api/{tenantName}/[controller]")]
+    [Authorize(Policy = "TenantMember")]
     [ApiController]
     public class UsersController : ControllerBase
     {
@@ -73,6 +75,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
         // FIXED: Create user in both MySQL and OwnCloud
         [HttpPost]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<User>> PostUser(string tenantName, User user)
         {
             _logger.LogInformation("Creating user {UserName} for tenant: {TenantName}", user.UserName, tenantName);
@@ -144,6 +147,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
         // FIXED: Update user in both MySQL and OwnCloud
         [HttpPut("{userName}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> PutUser(string tenantName, string userName, User user)
         {
             _logger.LogInformation("Updating user {UserName} for tenant: {TenantName}", userName, tenantName);
@@ -220,6 +224,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
         // FIXED: Delete user from both MySQL and OwnCloud
         [HttpDelete("{userName}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> DeleteUser(string tenantName, string userName)
         {
             _logger.LogInformation("Deleting user {UserName} for tenant: {TenantName}", userName, tenantName);

@@ -124,6 +124,32 @@ module.exports = async function globalSetup() {
     }
   }
 
+  // Acquire a system-admin token for tenant creation (tenant management is SystemAdmin-gated)
+  let authHeaders = {};
+  if (!NO_AUTH) {
+    const SYSADMIN_USER = process.env.SYSADMIN_USER || 'sysadmin';
+    const SYSADMIN_PASSWORD = process.env.SYSADMIN_PASSWORD || 'sysadmin123';
+    const KEYCLOAK_CLIENT_ID = process.env.KEYCLOAK_CLIENT || 'xr50-training-app';
+
+    try {
+      const tokenResponse = await axios.post(
+        `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`,
+        new URLSearchParams({
+          grant_type: 'password',
+          client_id: KEYCLOAK_CLIENT_ID,
+          username: SYSADMIN_USER,
+          password: SYSADMIN_PASSWORD
+        }),
+        { timeout: 10000 }
+      );
+      authHeaders = { Authorization: `Bearer ${tokenResponse.data.access_token}` };
+      console.log(`Authenticated as ${SYSADMIN_USER} for tenant setup`);
+    } catch (error) {
+      console.warn(`Could not authenticate as ${SYSADMIN_USER}: ${error.message}`);
+      console.warn('  Tenant creation will likely fail unless the API allows anonymous access.\n');
+    }
+  }
+
   // Create test tenant (unless using existing)
   if (!EXISTING_TENANT) {
     console.log(`\nCreating test tenant: ${testTenant}...`);
@@ -151,7 +177,7 @@ module.exports = async function globalSetup() {
       const response = await axios.post(TENANT_API_URL, tenantData, {
         timeout: 30000,
         validateStatus: () => true,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', ...authHeaders }
       });
 
       if (response.status === 200 || response.status === 201) {

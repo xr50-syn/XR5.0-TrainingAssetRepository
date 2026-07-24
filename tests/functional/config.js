@@ -61,9 +61,17 @@ const config = {
   TEST_USER: process.env.TEST_USER || 'testuser',
   TEST_PASSWORD: process.env.TEST_PASSWORD || 'testuser123',
 
-  // Admin credentials for tenant operations
-  ADMIN_USER: process.env.ADMIN_USER || 'admin',
-  ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || 'admin123',
+  // Admin credentials for tenant-scoped suites. Defaults to the system admin because the
+  // suites operate on a per-run tenant (test-<timestamp>): tenant binding rejects tokens
+  // whose tenantName claim does not match the route, and only systemadmin is exempt.
+  // Override with ADMIN_USER/ADMIN_PASSWORD to exercise tenant-level roles against
+  // EXISTING_TENANT=test_company (realm users: admin/admin123, tenantadmin/tenantadmin123).
+  ADMIN_USER: process.env.ADMIN_USER || 'sysadmin',
+  ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || 'sysadmin123',
+
+  // System admin credentials for tenant create/delete in global setup/teardown
+  SYSADMIN_USER: process.env.SYSADMIN_USER || 'sysadmin',
+  SYSADMIN_PASSWORD: process.env.SYSADMIN_PASSWORD || 'sysadmin123',
 
   // S3 Configuration for test tenant
   S3_BUCKET: process.env.S3_BUCKET || 'xr50-test-verification',

@@ -40,15 +40,21 @@
   "groups": [
     {
       "name": "users",
-      "realmRoles": ["user"]
+      "realmRoles": [
+        "user"
+      ]
     },
     {
       "name": "admins",
-      "realmRoles": ["admin"]
+      "realmRoles": [
+        "admin"
+      ]
     },
     {
       "name": "tenant-admins",
-      "realmRoles": ["tenantadmin"]
+      "realmRoles": [
+        "tenantadmin"
+      ]
     }
   ],
   "users": [
@@ -60,7 +66,9 @@
       "firstName": "Test",
       "lastName": "User",
       "attributes": {
-        "tenantName": ["test_company"]
+        "tenantName": [
+          "test_company"
+        ]
       },
       "credentials": [
         {
@@ -69,8 +77,12 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["user"],
-      "groups": ["users"]
+      "realmRoles": [
+        "user"
+      ],
+      "groups": [
+        "users"
+      ]
     },
     {
       "username": "admin",
@@ -80,7 +92,9 @@
       "firstName": "Admin",
       "lastName": "User",
       "attributes": {
-        "tenantName": ["test_company"]
+        "tenantName": [
+          "test_company"
+        ]
       },
       "credentials": [
         {
@@ -89,8 +103,14 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["admin", "user"],
-      "groups": ["admins", "users"]
+      "realmRoles": [
+        "admin",
+        "user"
+      ],
+      "groups": [
+        "admins",
+        "users"
+      ]
     },
     {
       "username": "tenantadmin",
@@ -100,7 +120,9 @@
       "firstName": "Tenant",
       "lastName": "Admin",
       "attributes": {
-        "tenantName": ["test_company"]
+        "tenantName": [
+          "test_company"
+        ]
       },
       "credentials": [
         {
@@ -109,8 +131,37 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["tenantadmin", "user"],
-      "groups": ["tenant-admins", "users"]
+      "realmRoles": [
+        "tenantadmin",
+        "user"
+      ],
+      "groups": [
+        "tenant-admins",
+        "users"
+      ]
+    },
+    {
+      "username": "sysadmin",
+      "enabled": true,
+      "email": "sysadmin@xr50.local",
+      "emailVerified": true,
+      "firstName": "System",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "sysadmin123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "systemadmin",
+        "user"
+      ],
+      "groups": [
+        "admins",
+        "users"
+      ]
     }
   ],
   "clients": [

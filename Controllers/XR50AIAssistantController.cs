@@ -4,10 +4,12 @@ using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services;
 using XR50TrainingAssetRepo.Services.Materials;
 using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
+using Microsoft.AspNetCore.Authorization;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
     [Route("api/{tenantName}/ai-assistant")]
+    [Authorize(Policy = "TenantMember")]
     [ApiController]
     [ApiExplorerSettings(GroupName = "ai-assistant")]
     public class AIAssistantController : ControllerBase
@@ -97,6 +99,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// <param name="file">The document file to upload (PDF, DOC, DOCX, TXT)</param>
         /// <returns>Upload response with job ID for tracking</returns>
         [HttpPost("documents")]
+        [Authorize(Policy = "TenantAdmin")]
         [Consumes("multipart/form-data")]
         public async Task<ActionResult<AIAssistantDocumentUploadResponse>> UploadDocument(
             string tenantName,
@@ -235,6 +238,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// <param name="file">The document file to upload</param>
         /// <returns>Upload response with job ID for tracking</returns>
         [HttpPost("{aiAssistantId}/documents")]
+        [Authorize(Policy = "TenantAdmin")]
         [Consumes("multipart/form-data")]
         public async Task<ActionResult<object>> UploadDocumentToMaterial(
             string tenantName,

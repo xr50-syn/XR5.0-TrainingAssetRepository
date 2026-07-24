@@ -3,6 +3,7 @@ using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services;
 using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
+using Microsoft.AspNetCore.Authorization;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
@@ -29,6 +30,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Get all tenants
         
         [HttpGet]
+        [Authorize(Policy = "SystemAdmin")]
         public async Task<ActionResult<TenantResponse[]>> GetTenants()
         {
             try
@@ -51,6 +53,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Create a new tenant with pre-provisioned infrastructure
         
         [HttpPost]
+        [Authorize(Policy = "SystemAdmin")]
         public async Task<ActionResult<TenantResponse>> CreateTenant([FromBody] CreateTenantRequest request)
         {
             try
@@ -176,6 +179,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Get a specific tenant by name
         
         [HttpGet("{tenantName}")]
+        [Authorize(Policy = "TenantMember")]
         public async Task<ActionResult<TenantResponse>> GetTenant(string tenantName)
         {
             try
@@ -203,6 +207,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Delete a tenant (soft delete - marks as inactive)
         
         [HttpDelete("{tenantName}")]
+        [Authorize(Policy = "SystemAdmin")]
         public async Task<ActionResult> DeleteTenant(string tenantName)
         {
             try
@@ -230,6 +235,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Validate tenant storage configuration
         
         [HttpGet("{tenantName}/validate-storage")]
+        [Authorize(Policy = "TenantMember")]
         public async Task<ActionResult<object>> ValidateTenantStorage(string tenantName)
         {
             try
@@ -294,6 +300,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Get storage statistics for a tenant
         
         [HttpGet("{tenantName}/storage-stats")]
+        [Authorize(Policy = "TenantMember")]
         public async Task<ActionResult<object>> GetTenantStorageStats(string tenantName)
         {
             try

@@ -25,6 +25,8 @@ using Amazon;
 using Amazon.S3;
 using Amazon.S3.Model;
 using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
+using XR50TrainingAssetRepo.Infrastructure.Auth;
+using Microsoft.AspNetCore.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -141,48 +143,33 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 // Configure Authorization Policies
+// Provider-agnostic RBAC: claim names and role values come from the IAM section (IamOptions)
+// so a future production IAM server can be swapped in via configuration.
+builder.Services.Configure<IamOptions>(builder.Configuration.GetSection(IamOptions.SectionName));
+builder.Services.AddSingleton<IAuthorizationHandler, TenantMemberHandler>();
+builder.Services.AddSingleton<IAuthorizationHandler, TenantAdminHandler>();
+builder.Services.AddSingleton<IAuthorizationHandler, SystemAdminHandler>();
+builder.Services.AddSingleton<IAuthorizationHandler, AuthenticatedUserHandler>();
+
 builder.Services.AddAuthorization(options =>
 {
-    // Policy for regular tenant users - requires tenantName claim
-    options.AddPolicy("TenantUser", policy =>
-        policy.RequireClaim("tenantName"));
+    // Token tenant must match the {tenantName} route segment (system admins exempt)
+    options.AddPolicy("TenantMember", policy =>
+        policy.AddRequirements(new TenantMemberRequirement()));
 
-    // Policy for tenant administrators
+    // Tenant match plus a tenant-administration role (system admins exempt)
     options.AddPolicy("TenantAdmin", policy =>
-        policy.RequireClaim("role", "admin", "tenantadmin"));
+        policy.AddRequirements(new TenantAdminRequirement()));
 
-    // Policy for system administrators (can manage all tenants)
+    // System-wide administration (tenant provisioning, cross-tenant operations)
     options.AddPolicy("SystemAdmin", policy =>
-        policy.RequireClaim("role", "systemadmin", "superadmin"));
+        policy.AddRequirements(new SystemAdminRequirement()));
 
-    // Policy for authenticated user - allows development bypass when configured
-    options.AddPolicy("RequireAuthenticatedUser", policy =>
-    {
-        policy.RequireAssertion(context =>
-        {
-            // Check if user is authenticated
-            if (context.User.Identity?.IsAuthenticated == true)
-            {
-                return true;
-            }
-
-            // In development mode, allow bypass if configured
-            var httpContext = context.Resource as HttpContext;
-            if (httpContext != null)
-            {
-                var env = httpContext.RequestServices.GetService<IWebHostEnvironment>();
-                var config = httpContext.RequestServices.GetService<IConfiguration>();
-
-                if (env?.IsDevelopment() == true)
-                {
-                    var allowAnonymous = config?.GetValue<bool>("IAM:AllowAnonymousInDevelopment", false) ?? false;
-                    return allowAnonymous;
-                }
-            }
-
-            return false;
-        });
-    });
+    // Everything not explicitly annotated still requires a valid token
+    // (the Development-only anonymous bypass is evaluated inside the handler).
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .AddRequirements(new AuthenticatedUserRequirement())
+        .Build();
 });
 
 builder.Services.AddXR50MultitenancyWithDynamicDb(builder.Configuration);
@@ -474,9 +461,10 @@ app.UseStatusCodePages(async statusCodeContext =>
 app.UseCors();
 app.UseHttpsRedirection();
 app.UseRouting();
-app.UseAuthentication();
-app.UseAuthorization();
 
+// Swagger must be served BEFORE the auth middleware: since .NET 8 the authorization
+// FallbackPolicy also applies to non-endpoint requests, so registering these after
+// UseAuthorization gets every /swagger request challenged with a 401. Development-only.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -502,10 +490,14 @@ if (app.Environment.IsDevelopment())
       });
 }
 
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapControllers();
 
-// Simple health endpoint for Docker health checks
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));
+// Simple health endpoint for Docker health checks (must stay reachable without a token)
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
+    .AllowAnonymous();
 
 app.Run();
 

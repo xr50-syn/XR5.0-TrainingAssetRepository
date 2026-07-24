@@ -14,6 +14,7 @@ using XR50TrainingAssetRepo.Services;
 using XR50TrainingAssetRepo.Services.Materials;
 using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 using MaterialType = XR50TrainingAssetRepo.Models.Type;
+using XR50TrainingAssetRepo.Infrastructure.Auth;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
@@ -46,6 +47,7 @@ namespace XR50TrainingAssetRepo.Controllers
         public IFormFile? file { get; set; }
     }
     [Route("api/{tenantName}/[controller]")]
+    [Authorize(Policy = "TenantMember")]
     [ApiController]
     public class materialsController : ControllerBase
     {
@@ -143,7 +145,6 @@ namespace XR50TrainingAssetRepo.Controllers
         /// In development mode with AllowAnonymousInDevelopment=true, uses DevelopmentUserId fallback
         /// </summary>
         [HttpPost("{materialId}/submit")]
-        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<SubmitQuizAnswersResponse>> SubmitAnswers(
             string tenantName,
             int materialId,
@@ -158,13 +159,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 // Extract user ID from JWT token claims
                 // For Keycloak: prefer "preferred_username" over "sub" (which is a UUID)
                 // Fallback order: preferred_username -> name -> email -> sub (UUID)
-                var userId = User.FindFirst("preferred_username")?.Value
-                    ?? User.FindFirst(ClaimTypes.Name)?.Value
-                    ?? User.FindFirst("name")?.Value
-                    ?? User.FindFirst(ClaimTypes.Email)?.Value
-                    ?? User.FindFirst("email")?.Value
-                    ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                    ?? User.FindFirst("sub")?.Value;
+                var userId = User.GetUserId();
 
                 // Authorization disabled - use default user if not authenticated
                 if (string.IsNullOrEmpty(userId))
@@ -200,7 +195,6 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Requires authentication - user ID is extracted from JWT token claims
         /// </summary>
         [HttpPost("{materialId}/complete")]
-        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<MarkMaterialCompleteResponse>> MarkComplete(
             string tenantName,
             int materialId,
@@ -209,13 +203,7 @@ namespace XR50TrainingAssetRepo.Controllers
             try
             {
                 // Extract user ID from JWT token claims (same logic as SubmitAnswers)
-                var userId = User.FindFirst("preferred_username")?.Value
-                    ?? User.FindFirst(ClaimTypes.Name)?.Value
-                    ?? User.FindFirst("name")?.Value
-                    ?? User.FindFirst(ClaimTypes.Email)?.Value
-                    ?? User.FindFirst("email")?.Value
-                    ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                    ?? User.FindFirst("sub")?.Value;
+                var userId = User.GetUserId();
 
                 // Authorization disabled - use default user if not authenticated
                 if (string.IsNullOrEmpty(userId))
@@ -1025,6 +1013,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         [Obsolete("This endpoint is deprecated. Use POST /api/{tenantName}/materials instead.")]
         [HttpPost("advanced")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<CreateMaterialResponse>> PostMaterialAdvanced(string tenantName)
         {
             try
@@ -1136,6 +1125,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         [Obsolete("This endpoint is deprecated. Use POST /api/{tenantName}/materials instead, which supports optional file uploads via multipart/form-data.")]
         [HttpPost("detail-with-asset")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<CreateMaterialResponse>> PostMaterialDetailedWithAsset(
             string tenantName, [FromForm] FileUploadFormDataWithMaterial materialaAssetData)  // Optional file upload
         {
@@ -1586,6 +1576,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         /// - For multipart/form-data: Send 'material' field with JSON, optional 'file', optional 'assetData'
         /// </remarks>
         [HttpPost]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<CreateMaterialResponse>> PostMaterialDetailed(string tenantName)
         {
             try
@@ -1734,6 +1725,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         /// <param name="materialData">The material data as JSON</param>
         /// <returns>The created material</returns>
         [HttpPost("json")]
+        [Authorize(Policy = "TenantAdmin")]
         [Consumes("application/json")]
         public async Task<ActionResult<CreateMaterialResponse>> PostMaterialJson(
             string tenantName,
@@ -3813,6 +3805,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         // JSON-based PUT endpoint that accepts the same format as GET responses
         // Supports updating material properties and managing relationships via 'related' array
         [HttpPut("{id}")]
+        [Authorize(Policy = "TenantAdmin")]
         // PUT: api/{tenantName}/materials/{id} - Update material
         // Accepts both JSON (application/json) and multipart/form-data for updates with optional file uploads
         // Form-data parameters: material (JSON string, required), file (binary, optional), assetData (JSON string, optional)
@@ -4135,6 +4128,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         // DELETE: api/{tenantName}/materials/5
         [HttpDelete("{id}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> DeleteMaterial(string tenantName, int id)
         {
             _logger.LogInformation("Deleting material {Id} for tenant: {TenantName}", id, tenantName);
@@ -4389,6 +4383,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         // POST: api/{tenantName}/materials/videos/5/timestamps
         [HttpPost("videos/{videoId}/timestamps")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<VideoMaterial>> AddTimestampToVideo(string tenantName, int videoId, VideoTimestamp timestamp)
         {
             _logger.LogInformation("Adding timestamp '{Title}' to video {VideoId} for tenant: {TenantName}",
@@ -4411,6 +4406,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         }
         // DELETE: api/{tenantName}/materials/videos/5/timestamps/3
         [HttpDelete("videos/{videoId}/timestamps/{timestampId}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> RemoveTimestampFromVideo(string tenantName, int videoId, int timestampId)
         {
             _logger.LogInformation("Removing timestamp {TimestampId} from video {VideoId} for tenant: {TenantName}",
@@ -4453,6 +4449,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         // POST: api/{tenantName}/materials/checklists/5/entries
         [HttpPost("checklists/{checklistId}/entries")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<ChecklistMaterial>> AddEntryToChecklist(string tenantName, int checklistId, ChecklistEntry entry)
         {
             _logger.LogInformation("Adding entry '{Text}' to checklist {ChecklistId} for tenant: {TenantName}",
@@ -4476,6 +4473,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         // DELETE: api/{tenantName}/materials/checklists/5/entries/3
         [HttpDelete("checklists/{checklistId}/entries/{entryId}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> RemoveEntryFromChecklist(string tenantName, int checklistId, int entryId)
         {
             _logger.LogInformation("Removing entry {EntryId} from checklist {ChecklistId} for tenant: {TenantName}",
@@ -4518,6 +4516,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         // POST: api/{tenantName}/materials/workflows/5/steps
         [HttpPost("workflows/{workflowId}/steps")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<WorkflowMaterial>> AddStepToWorkflow(string tenantName, int workflowId, WorkflowStep step)
         {
             _logger.LogInformation("Adding step '{Title}' to workflow {WorkflowId} for tenant: {TenantName}",
@@ -4541,6 +4540,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         // DELETE: api/{tenantName}/materials/workflows/5/steps/3
         [HttpDelete("workflows/{workflowId}/steps/{stepId}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> RemoveStepFromWorkflow(string tenantName, int workflowId, int stepId)
         {
             _logger.LogInformation("Removing step {StepId} from workflow {WorkflowId} for tenant: {TenantName}",
@@ -4596,6 +4596,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         // POST: api/{tenantName}/materials/5/assign-asset/asset123
         [HttpPost("{materialId}/assign-asset/{assetId}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> AssignAssetToMaterial(string tenantName, int materialId, int assetId)
         {
             _logger.LogInformation("Assigning asset {AssetId} to material {MaterialId} for tenant: {TenantName}",
@@ -4616,6 +4617,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         // DELETE: api/{tenantName}/materials/5/remove-asset
         [HttpDelete("{materialId}/remove-asset")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> RemoveAssetFromMaterial(string tenantName, int materialId)
         {
             _logger.LogInformation("Removing asset from material {MaterialId} for tenant: {TenantName}",
@@ -4651,6 +4653,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         // POST: api/{tenantName}/materials/5/assign-learningpath/3
         [HttpPost("{materialId}/assign-learningpath/{learningPathId}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<object>> AssignMaterialToLearningPath(
             string tenantName, int materialId, int learningPathId, [FromQuery] string relationshipType = "contains", [FromQuery] int? displayOrder = null)
         {
@@ -4673,6 +4676,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         // DELETE: api/{tenantName}/materials/5/remove-learningpath/3
         [HttpDelete("{materialId}/remove-learningpath/{learningPathId}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> RemoveMaterialFromLearningPath(string tenantName, int materialId, int learningPathId)
         {
             _logger.LogInformation("Removing material {MaterialId} from learning path {LearningPathId} for tenant: {TenantName}",
@@ -4693,6 +4697,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         // POST: api/{tenantName}/materials/5/assign-material/8
         [HttpPost("{parentMaterialId}/assign-material/{childMaterialId}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<object>> AssignMaterialToMaterial(
             string tenantName, int parentMaterialId, int childMaterialId,
             [FromQuery] string relationshipType = "contains",
@@ -4733,6 +4738,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         // DELETE: api/{tenantName}/materials/5/remove-material/8
         [HttpDelete("{parentMaterialId}/remove-material/{childMaterialId}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> RemoveMaterialFromMaterial(
             string tenantName, int parentMaterialId, int childMaterialId)
         {
@@ -5461,6 +5467,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         // POST: api/{tenantName}/materials/subcomponent/{subcomponentType}/{subcomponentId}/assign-material/{materialId}
         [HttpPost("subcomponent/{subcomponentType}/{subcomponentId}/assign-material/{materialId}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<object>> AssignMaterialToSubcomponent(
             string tenantName,
             string subcomponentType,
@@ -5504,6 +5511,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         // DELETE: api/{tenantName}/materials/subcomponent/{subcomponentType}/{subcomponentId}/remove-material/{materialId}
         [HttpDelete("subcomponent/{subcomponentType}/{subcomponentId}/remove-material/{materialId}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> RemoveMaterialFromSubcomponent(
             string tenantName,
             string subcomponentType,
@@ -5551,6 +5559,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         // PUT: api/{tenantName}/materials/subcomponent/{subcomponentType}/{subcomponentId}/reorder-materials
         [HttpPut("subcomponent/{subcomponentType}/{subcomponentId}/reorder-materials")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> ReorderSubcomponentMaterials(
             string tenantName,
             string subcomponentType,
@@ -5778,6 +5787,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         /// Submit an AI assistant material for AI processing
         /// </summary>
         [HttpPost("{id}/ai-assistant/submit")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<object>> SubmitAIAssistantForProcessing(string tenantName, int id)
         {
             _logger.LogInformation("Submitting AI assistant material {Id} for AI processing in tenant {TenantName}", id, tenantName);
@@ -5844,6 +5854,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         /// Add an asset to an AI assistant material
         /// </summary>
         [HttpPost("{id}/ai-assistant/assets/{assetId}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<object>> AddAssetToAIAssistant(string tenantName, int id, int assetId)
         {
             _logger.LogInformation("Adding asset {AssetId} to AI assistant material {Id} in tenant {TenantName}", assetId, id, tenantName);
@@ -5874,6 +5885,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
         /// Remove an asset from an AI assistant material
         /// </summary>
         [HttpDelete("{id}/ai-assistant/assets/{assetId}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<object>> RemoveAssetFromAIAssistant(string tenantName, int id, int assetId)
         {
             _logger.LogInformation("Removing asset {AssetId} from AI assistant material {Id} in tenant {TenantName}", assetId, id, tenantName);

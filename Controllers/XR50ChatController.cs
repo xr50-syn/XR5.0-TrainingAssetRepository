@@ -3,10 +3,12 @@ using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services;
 using XR50TrainingAssetRepo.Services.Materials;
 using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
+using Microsoft.AspNetCore.Authorization;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
     [Route("api/{tenantName}/[controller]")]
+    [Authorize(Policy = "TenantMember")]
     [ApiController]
     [ApiExplorerSettings(GroupName = "chat")]
     public class ChatController : ControllerBase

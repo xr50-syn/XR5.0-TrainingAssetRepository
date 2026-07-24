@@ -4,10 +4,12 @@ using Microsoft.AspNetCore.Mvc;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services.Materials;
 using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
+using XR50TrainingAssetRepo.Infrastructure.Auth;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
     [Route("api/{tenantName}/[controller]")]
+    [Authorize(Policy = "TenantMember")]
     [ApiController]
     public class UsersProgressController : ControllerBase
     {
@@ -27,7 +29,6 @@ namespace XR50TrainingAssetRepo.Controllers
         /// GET /api/{tenantName}/users/{userId}/progress
         /// </summary>
         [HttpGet("~/api/{tenantName}/users/{userId}/progress")]
-        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<UserProgressResponse>> GetUserProgressByUserId(
             string tenantName,
             string userId)
@@ -59,7 +60,6 @@ namespace XR50TrainingAssetRepo.Controllers
         /// GET /api/{tenantName}/users/progress
         /// </summary>
         [HttpGet("~/api/{tenantName}/users/progress")]
-        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<List<UserProgressResponse>>> GetAllUsersProgress(
             string tenantName)
         {
@@ -80,7 +80,6 @@ namespace XR50TrainingAssetRepo.Controllers
         /// GET /api/{tenantName}/users/{userId}/materials/{materialId}
         /// </summary>
         [HttpGet("~/api/{tenantName}/users/{userId}/materials/{materialId}")]
-        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<UserMaterialDetailResponse>> GetUserMaterialDetail(
             string tenantName,
             string userId,
@@ -109,7 +108,6 @@ namespace XR50TrainingAssetRepo.Controllers
         /// GET /api/{tenantName}/users/{userId}/programs/{programId}/materials
         /// </summary>
         [HttpGet("~/api/{tenantName}/users/{userId}/programs/{programId}/materials")]
-        [Authorize(Policy = "RequireAuthenticatedUser")]
         public async Task<ActionResult<UserProgramMaterialsResponse>> GetUserProgramMaterials(
             string tenantName,
             string userId,
@@ -140,13 +138,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}")));
 
             // Get user ID from JWT claims - prefer preferred_username over sub (UUID)
-            var userId = User.FindFirst("preferred_username")?.Value
-                ?? User.FindFirst(ClaimTypes.Name)?.Value
-                ?? User.FindFirst("name")?.Value
-                ?? User.FindFirst(ClaimTypes.Email)?.Value
-                ?? User.FindFirst("email")?.Value
-                ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                ?? User.FindFirst("sub")?.Value;
+            var userId = User.GetUserId();
 
             // Authorization disabled - return default admin user if not authenticated
             if (string.IsNullOrEmpty(userId))

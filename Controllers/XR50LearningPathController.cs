@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -21,6 +22,7 @@ namespace XR50TrainingAssetRepo.Controllers
     /// </summary>
     [Obsolete("Learning paths are now accessed only through training program endpoints. Use /api/{tenantName}/programs/{id}/detail to retrieve learning paths as part of training programs.")]
     [Route("api/{tenantName}/[controller]")]
+    [Authorize(Policy = "TenantMember")]
     [ApiController]
     public class LearningPathsController : ControllerBase
     {
@@ -71,6 +73,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
         // POST: api/{tenantName}/learningpaths
         [HttpPost]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<LearningPath>> PostLearningPath(string tenantName, LearningPath learningPath)
         {
             _logger.LogInformation("Creating learning path {Name} for tenant: {TenantName}",
@@ -88,6 +91,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
         // PUT: api/{tenantName}/learningpaths/5
         [HttpPut("{id}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> PutLearningPath(string tenantName, int id, LearningPath learningPath)
         {
             if (id != learningPath.id)
@@ -119,6 +123,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
         // DELETE: api/{tenantName}/learningpaths/5
         [HttpDelete("{id}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> DeleteLearningPath(string tenantName, int id)
         {
             _logger.LogInformation("Deleting learning path {Id} for tenant: {TenantName}", id, tenantName);
@@ -152,6 +157,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
         // POST: api/{tenantName}/learningpaths/{learningPathId}/assign/{trainingProgramId}
         [HttpPost("{learningPathId}/assign/{trainingProgramId}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> AssignLearningPathToTrainingProgram(string tenantName, int learningPathId, int trainingProgramId)
         {
             _logger.LogInformation("Assigning learning path {LearningPathId} to training program {TrainingProgramId} for tenant: {TenantName}",
@@ -172,6 +178,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
         // DELETE: api/{tenantName}/learningpaths/{learningPathId}/unassign/{trainingProgramId}
         [HttpDelete("{learningPathId}/unassign/{trainingProgramId}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> RemoveLearningPathFromTrainingProgram(string tenantName, int learningPathId, int trainingProgramId)
         {
             _logger.LogInformation("Removing learning path {LearningPathId} from training program {TrainingProgramId} for tenant: {TenantName}",
@@ -216,6 +223,7 @@ namespace XR50TrainingAssetRepo.Controllers
         }
 
         [HttpPost("{learningPathId}/assign-material/{materialId}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<object>> AssignMaterialToLearningPath(
             string tenantName,
             int learningPathId,
@@ -254,6 +262,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Remove a material from this learning path
         
         [HttpDelete("{learningPathId}/remove-material/{materialId}")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> RemoveMaterialFromLearningPath(
             string tenantName,
             int learningPathId,
@@ -279,6 +288,7 @@ namespace XR50TrainingAssetRepo.Controllers
         /// Reorder materials within this learning path
         
         [HttpPut("{learningPathId}/reorder-materials")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<IActionResult> ReorderLearningPathMaterials(
             string tenantName,
             int learningPathId,
@@ -340,6 +350,7 @@ namespace XR50TrainingAssetRepo.Controllers
           }*/
 
         [HttpPost("detail")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<CreateLearningPathWithMaterialsResponse>> CreateCompleteLearningPath(
             string tenantName, 
             [FromBody] CreateLearningPathWithMaterialsRequest request)
@@ -409,6 +420,7 @@ namespace XR50TrainingAssetRepo.Controllers
             return Ok(results);
         }
         [HttpPost("{learningPathId}/assign-materials")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<object>> AssignMultipleMaterialsToLearningPath(
             string tenantName,
             int learningPathId,

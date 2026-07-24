@@ -3,10 +3,12 @@ using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Services;
 using XR50TrainingAssetRepo.Infrastructure;
 using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
+using Microsoft.AspNetCore.Authorization;
 
 namespace XR50TrainingAssetRepo.Controllers
 {
     [Route("api/troubleshooting")]
+    [Authorize(Policy = "SystemAdmin")]
     [ApiController]
     public class TenantTroubleshootingController : ControllerBase
     {

@@ -43,6 +43,26 @@ module.exports = async function globalTeardown() {
   const API_BASE_URL = process.env.API_URL || 'http://localhost:5286';
   const TENANT_API_URL = `${API_BASE_URL}/xr50/trainingAssetRepository/tenants`;
 
+  // Tenant deletion is SystemAdmin-gated; acquire a token unless running in NO_AUTH mode
+  let authHeaders = {};
+  if (!config.NO_AUTH) {
+    try {
+      const tokenResponse = await axios.post(
+        config.KEYCLOAK_TOKEN_URL,
+        new URLSearchParams({
+          grant_type: 'password',
+          client_id: config.KEYCLOAK_CLIENT_ID,
+          username: config.SYSADMIN_USER,
+          password: config.SYSADMIN_PASSWORD
+        }),
+        { timeout: 10000 }
+      );
+      authHeaders = { Authorization: `Bearer ${tokenResponse.data.access_token}` };
+    } catch (error) {
+      console.warn(`Could not authenticate as ${config.SYSADMIN_USER}: ${error.message}`);
+    }
+  }
+
   let cleanedCount = 0;
   let failedCount = 0;
 
@@ -53,7 +73,8 @@ module.exports = async function globalTeardown() {
     try {
       const response = await axios.delete(`${TENANT_API_URL}/${state.testTenant}`, {
         timeout: 30000,
-        validateStatus: () => true
+        validateStatus: () => true,
+        headers: authHeaders
       });
 
       if (response.status === 200 || response.status === 204) {
