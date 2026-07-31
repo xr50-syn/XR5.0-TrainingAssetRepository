@@ -2,6 +2,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 using XR50TrainingAssetRepo.Models;
 
 namespace XR50TrainingAssetRepo.Models
@@ -55,6 +56,15 @@ namespace XR50TrainingAssetRepo.Models
 
         public string Filename  { get; set; }
         public string? URL { get; set; }
+
+        /// <summary>
+        /// SHA-256 hash of an uploaded file. Null for reference-only assets and legacy rows that
+        /// predate content hashing. This is internal persistence metadata rather than API input.
+        /// </summary>
+        [MaxLength(64)]
+        [JsonIgnore]
+        public string? ContentHash { get; set; }
+
 	    [Key]
         public int Id { get; set; }
 

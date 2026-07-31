@@ -495,6 +495,33 @@ namespace XR50TrainingAssetRepo.Controllers
         }
 
         /// <summary>
+        /// Add SHA-256 content hash deduplication metadata to an existing tenant database.
+        /// </summary>
+        [HttpPost("migrate-asset-content-hash/{tenantName}")]
+        public async Task<ActionResult> MigrateAssetContentHash(string tenantName)
+        {
+            try
+            {
+                var success = await _tableCreator.MigrateAssetContentHashAsync(tenantName);
+                if (success)
+                {
+                    return Ok(new
+                    {
+                        Message = $"Asset content hash schema migrated successfully for tenant {tenantName}",
+                        Details = "Added nullable ContentHash and a tenant-local unique index"
+                    });
+                }
+
+                return this.ProblemBadRequest($"Failed to migrate asset content hash schema for tenant '{tenantName}'.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating asset content hash schema for tenant {TenantName}", tenantName);
+                return this.ProblemServerError($"Error migrating asset content hash schema for tenant '{tenantName}'.");
+            }
+        }
+
+        /// <summary>
         /// Create the AIAssistantMaterialAssetJobs table on an existing tenant DB.
         /// Per-(material, asset) DataLens ingest state used by the new submit/sync flow.
         /// </summary>

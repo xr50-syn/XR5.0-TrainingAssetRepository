@@ -189,12 +189,22 @@ Base URL: /api/{tenantName}/
   - `POST /workflow` - Create complete workflows
 
 #### **5. Asset Management** (`/api/{tenant}/assets/`)
-- `POST /upload` - Upload file assets
+- `POST /` - Upload file assets
 - `GET /{id}/download` - Download asset files
 - `GET /{id}/file-info` - Get file metadata
 - `POST /{id}/share` - Create sharing links (OwnCloud only)
 - `GET /shares` - List tenant shares
 - `DELETE /shares/{id}` - Revoke shares
+
+Uploaded files are deduplicated within each tenant by their SHA-256 content hash. The first
+`POST /api/{tenant}/assets` returns `201 Created`; a later byte-identical upload returns the
+existing asset with `200 OK` and `reused: true`. Filenames and other multipart metadata do not
+affect identity. Reference-only assets are not content-hashed.
+
+Before serving uploads with this schema on an existing tenant, a system administrator must run
+`POST /api/troubleshooting/migrate-asset-content-hash/{tenantName}` (or the normal idempotent
+`create-tables` workflow). Existing asset rows retain a null hash and are not backfilled, avoiding
+an automatic download of every object in tenant storage.
 
 #### **6. User Management** (`/api/{tenant}/users/`)
 - `GET /` - List tenant users

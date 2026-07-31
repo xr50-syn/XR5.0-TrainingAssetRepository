@@ -39,6 +39,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string? Filetype { get; set; }
         public string? Src { get; set; }
         public string? URL { get; set; }
+        public bool Reused { get; set; }
         public DateTime? Created_at { get; set; }
     }
 

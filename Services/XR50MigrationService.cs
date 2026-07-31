@@ -62,6 +62,7 @@ namespace XR50TrainingAssetRepo.Services
                 // Apply column-level and side-table migrations that layer on top of the CREATE TABLE
                 // script. Fresh tenants are a no-op; kept here so provisioning and lab-purge paths
                 // converge on the same post-create schema state.
+                await _tableCreator.MigrateAssetContentHashAsync(tenant.TenantName);
                 await _tableCreator.MigrateAIAssistantCollectionColumnsAsync(tenant.TenantName);
                 await _tableCreator.MigrateAIAssistantMaterialAssetJobsTableAsync(tenant.TenantName);
                 await _tableCreator.MigrateInnovChatbotColumnsAsync(tenant.TenantName);

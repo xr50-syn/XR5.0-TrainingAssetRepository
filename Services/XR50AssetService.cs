@@ -5,6 +5,7 @@ using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Services;
 using XR50TrainingAssetRepo.Services.Materials;
 using System.Diagnostics;
+using System.Security.Cryptography;
 
 namespace XR50TrainingAssetRepo.Services
 {
@@ -15,6 +16,7 @@ namespace XR50TrainingAssetRepo.Services
         Task<Asset?> GetAssetAsync(int id);
         Task<Asset> CreateAssetReference(string tenantName, AssetReferenceData assetRefData);
         Task<Asset> CreateAssetAsync(Asset asset, string tenantName, IFormFile file);
+        Task<AssetCreationResult> CreateAssetWithResultAsync(Asset asset, string tenantName, IFormFile file);
         Task<Asset> UpdateAssetAsync(Asset asset);
 
         /// <summary>
@@ -351,6 +353,12 @@ namespace XR50TrainingAssetRepo.Services
 
         public async Task<Asset> CreateAssetAsync(Asset asset, string tenantName, IFormFile file)
         {
+            var result = await CreateAssetWithResultAsync(asset, tenantName, file);
+            return result.Asset;
+        }
+
+        public async Task<AssetCreationResult> CreateAssetWithResultAsync(Asset asset, string tenantName, IFormFile file)
+        {
             using var context = _dbContextFactory.CreateDbContext();
             using var transaction = await context.Database.BeginTransactionAsync();
 
@@ -361,6 +369,19 @@ namespace XR50TrainingAssetRepo.Services
                 // Detect file type from binary stream (magic bytes)
                 using var stream = file.OpenReadStream();
                 var (detectedFiletype, detectedType) = await DetectFileTypeFromStream(stream);
+                asset.ContentHash = await ComputeContentHashAsync(stream);
+
+                var existingAsset = await context.Assets
+                    .AsNoTracking()
+                    .SingleOrDefaultAsync(existing => existing.ContentHash == asset.ContentHash);
+                if (existingAsset != null)
+                {
+                    await transaction.RollbackAsync();
+                    _logger.LogInformation(
+                        "Reusing asset {AssetId} for duplicate upload {Filename} in tenant {TenantName}",
+                        existingAsset.Id, asset.Filename, tenantName);
+                    return new AssetCreationResult(existingAsset, false);
+                }
 
                 // If binary detection failed (unknown), try to infer from file extension
                 if (detectedFiletype == "unknown")
@@ -435,29 +456,83 @@ namespace XR50TrainingAssetRepo.Services
                 await transaction.CommitAsync();
                 uploadedFilePath = null; // Success - don't cleanup
 
-                return asset;
+                return new AssetCreationResult(asset, true);
+            }
+            catch (DbUpdateException ex) when (!string.IsNullOrEmpty(asset.ContentHash))
+            {
+                await transaction.RollbackAsync();
+
+                // A concurrent request may have inserted the same hash after our initial lookup.
+                // Resolve that race through the tenant-local unique index and return its winner.
+                using var duplicateContext = _dbContextFactory.CreateDbContext();
+                var existingAsset = await duplicateContext.Assets
+                    .AsNoTracking()
+                    .SingleOrDefaultAsync(existing => existing.ContentHash == asset.ContentHash);
+
+                if (existingAsset == null)
+                {
+                    await CleanupUploadedFileAsync(tenantName, uploadedFilePath);
+                    _logger.LogError(ex,
+                        "Failed to persist asset {Filename} for tenant {TenantName}",
+                        asset.Filename, tenantName);
+                    throw;
+                }
+
+                // Identical filenames address the same storage object. In that case deleting the
+                // losing upload would also delete the winning request's object.
+                if (!string.Equals(uploadedFilePath, existingAsset.Filename, StringComparison.Ordinal))
+                {
+                    await CleanupUploadedFileAsync(tenantName, uploadedFilePath);
+                }
+
+                _logger.LogInformation(
+                    "Reusing concurrently created asset {AssetId} for duplicate upload {Filename} in tenant {TenantName}",
+                    existingAsset.Id, asset.Filename, tenantName);
+                return new AssetCreationResult(existingAsset, false);
             }
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
 
                 // Compensating action: cleanup orphaned storage file
-                if (uploadedFilePath != null)
-                {
-                    try
-                    {
-                        await _storageService.DeleteFileAsync(tenantName, uploadedFilePath);
-                        _logger.LogInformation("Cleaned up orphaned file {Filename} after failed asset creation", uploadedFilePath);
-                    }
-                    catch (Exception cleanupEx)
-                    {
-                        _logger.LogWarning(cleanupEx, "Failed to cleanup orphaned file {Filename} after failed asset creation", uploadedFilePath);
-                    }
-                }
+                await CleanupUploadedFileAsync(tenantName, uploadedFilePath);
 
                 _logger.LogError(ex, "Failed to create asset {Filename} for tenant {TenantName} - Transaction rolled back",
                     asset.Filename, tenantName);
                 throw;
+            }
+        }
+
+        private static async Task<string> ComputeContentHashAsync(Stream stream)
+        {
+            var originalPosition = stream.Position;
+            try
+            {
+                stream.Seek(0, SeekOrigin.Begin);
+                var hash = await SHA256.HashDataAsync(stream);
+                return Convert.ToHexString(hash).ToLowerInvariant();
+            }
+            finally
+            {
+                stream.Seek(originalPosition, SeekOrigin.Begin);
+            }
+        }
+
+        private async Task CleanupUploadedFileAsync(string tenantName, string? uploadedFilePath)
+        {
+            if (uploadedFilePath == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await _storageService.DeleteFileAsync(tenantName, uploadedFilePath);
+                _logger.LogInformation("Cleaned up orphaned file {Filename} after failed asset creation", uploadedFilePath);
+            }
+            catch (Exception cleanupEx)
+            {
+                _logger.LogWarning(cleanupEx, "Failed to cleanup orphaned file {Filename} after failed asset creation", uploadedFilePath);
             }
         }
         public async Task<Asset> UpdateAssetAsync(Asset asset)
@@ -473,6 +548,10 @@ namespace XR50TrainingAssetRepo.Services
                 {
                     throw new KeyNotFoundException($"Asset {asset.Id} not found");
                 }
+
+                // ContentHash is internal and ignored by JSON model binding. Preserve it across
+                // metadata-only PUT requests so updating a description cannot disable deduplication.
+                asset.ContentHash = existing.ContentHash;
 
                 // Delete old asset
                 context.Assets.Remove(existing);
@@ -1426,6 +1505,9 @@ namespace XR50TrainingAssetRepo.Services
         #endregion
     }
 
+
+    /// <summary>Result of resolving an upload to either a new or existing asset.</summary>
+    public sealed record AssetCreationResult(Asset Asset, bool Created);
 
     /// <summary>
     /// A Training Material that references an asset, surfaced to the client so it can show which

@@ -102,22 +102,31 @@ namespace XR50TrainingAssetRepo.Controllers
             _logger.LogInformation("Creating asset {Filename} for tenant: {TenantName}",
                 asset.Filename, tenantName);
 
-            var createdAsset = await _assetService.CreateAssetAsync(asset, tenantName, fileUpload.File);
+            var creationResult = await _assetService.CreateAssetWithResultAsync(asset, tenantName, fileUpload.File);
+            var createdAsset = creationResult.Asset;
 
-            _logger.LogInformation("Created asset {Filename} with ID {Id} for tenant: {TenantName}",
-                createdAsset.Filename, createdAsset.Id, tenantName);
+            _logger.LogInformation("Asset upload resolved to {Filename} with ID {Id} for tenant: {TenantName}; created: {Created}",
+                createdAsset.Filename, createdAsset.Id, tenantName, creationResult.Created);
 
             var response = new CreateAssetResponse
             {
                 Status = "success",
-                Message = $"Asset '{createdAsset.Filename}' created successfully",
+                Message = creationResult.Created
+                    ? $"Asset '{createdAsset.Filename}' created successfully"
+                    : $"Identical file already exists as asset '{createdAsset.Filename}'",
                 Id = createdAsset.Id,
                 Filename = createdAsset.Filename,
                 Description = createdAsset.Description,
                 Filetype = createdAsset.Filetype,
                 Src = createdAsset.Src,
-                URL = createdAsset.URL
+                URL = createdAsset.URL,
+                Reused = !creationResult.Created
             };
+
+            if (!creationResult.Created)
+            {
+                return Ok(response);
+            }
 
             return CreatedAtAction(nameof(GetAsset),
                 new { tenantName, id = createdAsset.Id },

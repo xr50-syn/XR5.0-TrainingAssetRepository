@@ -16,6 +16,7 @@ namespace XR50TrainingAssetRepo.Services
         Task<List<string>> GetExistingTablesAsync(string tenantName);
         Task<bool> DropAllTablesAsync(string tenantName);
         Task<bool> MigrateAssetTypeColumnAsync(string tenantName);
+        Task<bool> MigrateAssetContentHashAsync(string tenantName);
         Task<bool> MigrateAnnotationsColumnsAsync(string tenantName);
         Task<bool> MigrateSubcomponentMaterialRelationshipsTableAsync(string tenantName);
         Task<bool> MigrateProgramAssignmentRanksAsync(string tenantName);
@@ -52,6 +53,13 @@ namespace XR50TrainingAssetRepo.Services
             var tablesCreated = await CreateTablesInDatabaseAsync(tenantDbName);
             if (!tablesCreated)
             {
+                return false;
+            }
+
+            var contentHashMigrated = await MigrateAssetContentHashAsync(tenantName);
+            if (!contentHashMigrated)
+            {
+                _logger.LogWarning("Tables created for tenant {TenantName} but asset content hash migration failed", tenantName);
                 return false;
             }
 
@@ -302,9 +310,11 @@ namespace XR50TrainingAssetRepo.Services
                     `Filetype` varchar(100) DEFAULT NULL,
                     `Type` int NOT NULL DEFAULT 0 COMMENT 'AssetType enum: 0=Image, 1=PDF, 2=Video, 3=Unity',
                     `Filename` varchar(255) NOT NULL,
+                    `ContentHash` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT 'SHA-256 hash of uploaded file contents',
                     `AiAvailable` varchar(20) DEFAULT 'notready' COMMENT 'AI processing status: ready, process, notready',
                     `JobId` varchar(255) DEFAULT NULL COMMENT 'Chatbot API job ID for AI processing',
                     PRIMARY KEY (`Id`),
+                    UNIQUE KEY `ux_assets_content_hash` (`ContentHash`),
                     INDEX `idx_ai_available` (`AiAvailable`)
                 )",
 
@@ -1772,6 +1782,72 @@ namespace XR50TrainingAssetRepo.Services
         }
 
         /// <summary>
+        /// Adds nullable SHA-256 persistence metadata to existing tenant asset tables. MySQL
+        /// permits multiple null values in a unique index, so legacy and reference-only assets
+        /// remain valid while newly hashed uploads are constrained to one row per tenant.
+        /// </summary>
+        public async Task<bool> MigrateAssetContentHashAsync(string tenantName)
+        {
+            try
+            {
+                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
+                var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
+
+                using var connection = new MySqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                const string columnCheckSql = @"
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = @dbName
+                    AND TABLE_NAME = 'Assets'
+                    AND COLUMN_NAME = 'ContentHash'";
+
+                using (var columnCheck = new MySqlCommand(columnCheckSql, connection))
+                {
+                    columnCheck.Parameters.AddWithValue("@dbName", tenantDbName);
+                    var columnExists = Convert.ToInt32(await columnCheck.ExecuteScalarAsync()) > 0;
+                    if (!columnExists)
+                    {
+                        using var addColumn = new MySqlCommand(@"
+                            ALTER TABLE `Assets`
+                            ADD COLUMN `ContentHash` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL
+                            COMMENT 'SHA-256 hash of uploaded file contents'
+                            AFTER `Filename`", connection);
+                        await addColumn.ExecuteNonQueryAsync();
+                    }
+                }
+
+                const string indexCheckSql = @"
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                    WHERE TABLE_SCHEMA = @dbName
+                    AND TABLE_NAME = 'Assets'
+                    AND INDEX_NAME = 'ux_assets_content_hash'";
+
+                using (var indexCheck = new MySqlCommand(indexCheckSql, connection))
+                {
+                    indexCheck.Parameters.AddWithValue("@dbName", tenantDbName);
+                    var indexExists = Convert.ToInt32(await indexCheck.ExecuteScalarAsync()) > 0;
+                    if (!indexExists)
+                    {
+                        using var addIndex = new MySqlCommand(
+                            "CREATE UNIQUE INDEX `ux_assets_content_hash` ON `Assets` (`ContentHash`)",
+                            connection);
+                        await addIndex.ExecuteNonQueryAsync();
+                    }
+                }
+
+                _logger.LogInformation("Asset content hash schema is ready for tenant {TenantName}", tenantName);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating asset content hash schema for tenant {TenantName}", tenantName);
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Migrates existing tenant databases to add INNOV chatbot material columns to the
         /// Materials table. Idempotent: each column is added only if missing.
         /// </summary>
@@ -1952,6 +2028,8 @@ CREATE TABLE IF NOT EXISTS `Assets` (
     `Filetype` varchar(100) DEFAULT NULL,
     `Type` int NOT NULL DEFAULT 0 COMMENT 'AssetType enum: 0=Image, 1=PDF, 2=Video, 3=Unity',
     `Filename` varchar(255) NOT NULL,
+    `ContentHash` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+    UNIQUE KEY `ux_assets_content_hash` (`ContentHash`),
     PRIMARY KEY (`Id`)
 )
 

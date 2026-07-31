@@ -115,6 +115,11 @@ namespace XR50TrainingAssetRepo.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             // Configure primary keys with custom column names
+            modelBuilder.Entity<Asset>()
+                .HasIndex(a => a.ContentHash)
+                .IsUnique()
+                .HasDatabaseName("ux_assets_content_hash");
+
             modelBuilder.Entity<TrainingProgram>()
                 .Property(tp => tp.id)
                 .HasColumnName("id");
