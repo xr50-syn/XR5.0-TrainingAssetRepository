@@ -115,7 +115,9 @@ namespace XR50TrainingAssetRepo.Services
 
         // In OwnCloudStorageServiceImplementation.cs
 
-        public async Task<string> UploadFileAsync(string tenantName, string fileName, IFormFile file)
+        // downloadFileName is accepted for interface parity; WebDAV serves files under their stored
+        // path, so there is no equivalent of Content-Disposition to apply here.
+        public async Task<string> UploadFileAsync(string tenantName, string fileName, IFormFile file, string? downloadFileName = null)
         {
             try
             {
@@ -542,7 +544,7 @@ namespace XR50TrainingAssetRepo.Services
                     new KeyValuePair<string, string>("shareType", "1"), // Group share
                     new KeyValuePair<string, string>("shareWith", tenant.TenantGroup ?? ""),
                     new KeyValuePair<string, string>("permissions", "1"), // Read permission
-                    new KeyValuePair<string, string>("path", $"{tenant.TenantDirectory}/{asset.Filename}")
+                    new KeyValuePair<string, string>("path", $"{tenant.TenantDirectory}/{asset.ResolvedStorageKey}")
                 };
 
                 var messageContent = new FormUrlEncodedContent(values);
@@ -564,7 +566,7 @@ namespace XR50TrainingAssetRepo.Services
                     var content = await result.Content.ReadAsStringAsync();
                     var baseUrl = _configuration.GetValue<string>("TenantSettings:BaseAPI") ?? "http://owncloud:8080";
                     var dirl = System.Web.HttpUtility.UrlEncode(tenant.TenantDirectory);
-                    var shareUrl = $"{baseUrl}/remote.php/webdav/{dirl}/{asset.Filename}";
+                    var shareUrl = $"{baseUrl}/remote.php/webdav/{dirl}/{asset.ResolvedStorageKey}";
                     return shareUrl;
                 }
                 else

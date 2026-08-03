@@ -14,8 +14,13 @@ namespace XR50TrainingAssetRepo.Services
         /// <param name="assetUrl">The URL where the asset can be accessed</param>
         /// <param name="filetype">The file type/extension (e.g., "pdf", "docx")</param>
         /// <param name="collectionName">The DataLens collection name</param>
+        /// <param name="documentName">
+        /// The name to file the document under. Callers pass the asset's filename: storage keys are
+        /// content-addressed and not human-readable, so the document name has to come from the asset
+        /// rather than from its URL.
+        /// </param>
         /// <returns>The job ID from the API</returns>
-        Task<string> SubmitDocumentAsync(int assetId, string assetUrl, string filetype, string collectionName);
+        Task<string> SubmitDocumentAsync(int assetId, string assetUrl, string filetype, string collectionName, string documentName);
 
         /// <summary>
         /// Gets the status of a submitted job within a collection.
@@ -59,13 +64,14 @@ namespace XR50TrainingAssetRepo.Services
         Task<bool> DeleteCollectionAsync(string collectionName, bool force = true);
 
         /// <summary>
-        /// Derives the DataLens document name for an asset, matching the name used when the
-        /// document was submitted. Use this when no stored document name is available.
+        /// Normalises an asset's filename into the document name DataLens knows it by, matching what
+        /// <see cref="SubmitDocumentAsync"/> files it under. Use this when no stored document name
+        /// is available.
         /// </summary>
-        /// <param name="assetUrl">The asset URL the document was uploaded from</param>
+        /// <param name="filename">The asset's filename</param>
         /// <param name="filetype">The file type/extension</param>
         /// <returns>The document filename as DataLens knows it</returns>
-        string GetDocumentName(string assetUrl, string filetype);
+        string GetDocumentName(string filename, string filetype);
 
         /// <summary>
         /// Checks if the DataLens API is available.

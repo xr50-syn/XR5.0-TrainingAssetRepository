@@ -212,7 +212,7 @@ public class AIAssistantMaterialUpdateTests
     {
         public List<int> SubmittedAssetIds { get; } = new();
 
-        public Task<string> SubmitDocumentAsync(int assetId, string assetUrl, string filetype, string collectionName)
+        public Task<string> SubmitDocumentAsync(int assetId, string assetUrl, string filetype, string collectionName, string documentName)
         {
             SubmittedAssetIds.Add(assetId);
             return Task.FromResult($"job-new-{assetId}");
@@ -236,7 +236,7 @@ public class AIAssistantMaterialUpdateTests
 
         public Task<bool> DeleteCollectionAsync(string collectionName, bool force = true) => Task.FromResult(true);
 
-        public string GetDocumentName(string assetUrl, string filetype) => System.IO.Path.GetFileName(new Uri(assetUrl).LocalPath);
+        public string GetDocumentName(string filename, string filetype) => filename;
 
         public Task<bool> IsAvailableAsync() => Task.FromResult(true);
     }

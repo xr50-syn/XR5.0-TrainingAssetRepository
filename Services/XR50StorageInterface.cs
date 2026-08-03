@@ -13,7 +13,10 @@ namespace XR50TrainingAssetRepo.Services
         Task<bool> TenantStorageExistsAsync(string tenantName);
 
         // File Operations
-        Task<string> UploadFileAsync(string tenantName, string fileName, IFormFile file);
+        // fileName is the storage key within the tenant, which for hashed uploads is content-addressed
+        // rather than human-readable. downloadFileName carries the name the file should be served
+        // under, so backends that support it can preserve a friendly name for clients.
+        Task<string> UploadFileAsync(string tenantName, string fileName, IFormFile file, string? downloadFileName = null);
         Task<Stream> DownloadFileAsync(string tenantName, string fileName);
         Task<string> GetDownloadUrlAsync(string tenantName, string fileName, TimeSpan? expiration = null);
         Task<bool> DeleteFileAsync(string tenantName, string fileName);

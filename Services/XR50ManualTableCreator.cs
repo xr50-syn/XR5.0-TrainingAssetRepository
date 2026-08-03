@@ -311,6 +311,7 @@ namespace XR50TrainingAssetRepo.Services
                     `Type` int NOT NULL DEFAULT 0 COMMENT 'AssetType enum: 0=Image, 1=PDF, 2=Video, 3=Unity',
                     `Filename` varchar(255) NOT NULL,
                     `ContentHash` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT 'SHA-256 hash of uploaded file contents',
+                    `StorageKey` varchar(512) DEFAULT NULL COMMENT 'Path of the stored file within the tenant, recorded at upload time',
                     `AiAvailable` varchar(20) DEFAULT 'notready' COMMENT 'AI processing status: ready, process, notready',
                     `JobId` varchar(255) DEFAULT NULL COMMENT 'Chatbot API job ID for AI processing',
                     PRIMARY KEY (`Id`),
@@ -1782,9 +1783,10 @@ namespace XR50TrainingAssetRepo.Services
         }
 
         /// <summary>
-        /// Adds nullable SHA-256 persistence metadata to existing tenant asset tables. MySQL
-        /// permits multiple null values in a unique index, so legacy and reference-only assets
-        /// remain valid while newly hashed uploads are constrained to one row per tenant.
+        /// Adds the content-addressing columns to existing tenant asset tables: the SHA-256 hash and
+        /// the StorageKey it populates. MySQL permits multiple null values in a unique index, so
+        /// legacy and reference-only assets remain valid while newly hashed uploads are constrained
+        /// to one row per tenant. Idempotent: each column and index is added only if missing.
         /// </summary>
         public async Task<bool> MigrateAssetContentHashAsync(string tenantName)
         {
@@ -1814,6 +1816,27 @@ namespace XR50TrainingAssetRepo.Services
                             ADD COLUMN `ContentHash` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL
                             COMMENT 'SHA-256 hash of uploaded file contents'
                             AFTER `Filename`", connection);
+                        await addColumn.ExecuteNonQueryAsync();
+                    }
+                }
+
+                const string storageKeyCheckSql = @"
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = @dbName
+                    AND TABLE_NAME = 'Assets'
+                    AND COLUMN_NAME = 'StorageKey'";
+
+                using (var storageKeyCheck = new MySqlCommand(storageKeyCheckSql, connection))
+                {
+                    storageKeyCheck.Parameters.AddWithValue("@dbName", tenantDbName);
+                    var storageKeyExists = Convert.ToInt32(await storageKeyCheck.ExecuteScalarAsync()) > 0;
+                    if (!storageKeyExists)
+                    {
+                        using var addColumn = new MySqlCommand(@"
+                            ALTER TABLE `Assets`
+                            ADD COLUMN `StorageKey` varchar(512) DEFAULT NULL
+                            COMMENT 'Path of the stored file within the tenant, recorded at upload time'
+                            AFTER `ContentHash`", connection);
                         await addColumn.ExecuteNonQueryAsync();
                     }
                 }

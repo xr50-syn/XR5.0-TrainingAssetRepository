@@ -31,6 +31,11 @@ Start with `README.md` and `docs/README.md`. Architecture details are in
 - Wrap multi-step persistence changes in a transaction and roll back on failure.
 - Reset seekable upload streams after inspecting magic bytes.
 - Check material hierarchies for cycles before adding relationships.
+- Address stored files by `Asset.ResolvedStorageKey`, never by `Asset.Filename`.
+  Filenames are display metadata, are not unique, and can change; keys are
+  content-addressed and fixed. Any new path that writes file content must hash
+  it and record a key, or the file becomes unreachable to deduplication and
+  collides with same-named assets. See `docs/architecture.md` "Object Layout".
 
 ## Material model
 

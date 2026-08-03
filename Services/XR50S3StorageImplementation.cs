@@ -170,7 +170,7 @@ namespace XR50TrainingAssetRepo.Services
                 return false;
             }
         }
-        public async Task<string> UploadFileAsync(string tenantName, string fileName, IFormFile file)
+        public async Task<string> UploadFileAsync(string tenantName, string fileName, IFormFile file, string? downloadFileName = null)
         {
             try
             {
@@ -199,7 +199,15 @@ namespace XR50TrainingAssetRepo.Services
                     InputStream = uploadStream,
                     ContentType = file.ContentType ?? "application/octet-stream"
                 };
-                  
+
+                // Content-addressed keys are not human-readable, so carry the original filename in
+                // Content-Disposition to keep downloads landing under a name the user recognises.
+                if (!string.IsNullOrEmpty(downloadFileName))
+                {
+                    request.Headers.ContentDisposition = $"inline; filename=\"{SanitizeFileName(downloadFileName)}\"";
+                }
+
+
                 var response = await _s3Client.PutObjectAsync(request);
 
                 // Return public HTTP URL if PublicEndpoint is configured, otherwise S3 protocol URL

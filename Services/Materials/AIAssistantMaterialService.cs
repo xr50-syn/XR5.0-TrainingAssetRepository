@@ -404,7 +404,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 try
                 {
                     var jobId = await _chatbotApiService.SubmitDocumentAsync(
-                        asset.Id, asset.URL, asset.Filetype ?? "pdf", collectionName);
+                        asset.Id, asset.URL, asset.Filetype ?? "pdf", collectionName, asset.Filename);
 
                     if (existingJob == null)
                     {

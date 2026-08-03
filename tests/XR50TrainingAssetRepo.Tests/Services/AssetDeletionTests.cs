@@ -49,6 +49,55 @@ public class AssetDeletionTests : IClassFixture<AssetDeletionTests.RecordingChat
         AiAvailable = aiAvailable
     };
 
+    /// <summary>
+    /// An asset in its post-content-addressing shape: a friendly filename, and a storage key (and so
+    /// a URL) built from the content hash. The two differ, which is what makes it possible to tell
+    /// which one a DataLens document name was derived from.
+    /// </summary>
+    private static Asset NewHashedAsset(int id, string filename, string hash) => new()
+    {
+        Id = id,
+        Filename = filename,
+        Filetype = "pdf",
+        ContentHash = hash,
+        StorageKey = hash,
+        URL = $"http://localhost/files/{TenantName}/{hash}",
+        Type = AssetType.PDF,
+        AiAvailable = "ready"
+    };
+
+    [Fact]
+    public async Task Delete_DataLensDocumentIsNamedAfterTheFilenameNotTheStorageKey()
+    {
+        const string hash = "b1946ac92492d2347c6235b4d2611184b1946ac92492d2347c6235b4d2611184";
+
+        Seed(ctx =>
+        {
+            ctx.Assets.Add(NewHashedAsset(1007, "quarterly-report.pdf", hash));
+            ctx.Assets.Add(NewAsset(1008));
+
+            var ai = new AIAssistantMaterial
+            {
+                id = 2006,
+                Name = "AI Assistant 2006",
+                CollectionName = "aiassist_2006",
+                AIAssistantStatus = "ready"
+            };
+            ai.SetAssetIdsList(new List<int> { 1007, 1008 });
+            ctx.Materials.Add(ai);
+            // Deliberately no job row: cleanup has to derive the document name itself, which is the
+            // path that used to resolve it from the URL and therefore from the content hash.
+        });
+
+        var response = await _client.DeleteAsync($"/api/{TenantName}/assets/1007?force=true");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        _factory.Chatbot.DeletedDocuments.Should().Contain(("aiassist_2006", "quarterly-report.pdf"),
+            "documents are filed under the asset's filename, so cleanup must look for that name");
+        _factory.Chatbot.DeletedDocuments.Should().NotContain(d => d.Document.Contains(hash),
+            "the content hash is a storage detail and must never leak into DataLens naming");
+    }
+
     [Fact]
     public async Task Delete_UnreferencedAsset_SucceedsAndRemovesRow()
     {
@@ -216,7 +265,7 @@ public class AssetDeletionTests : IClassFixture<AssetDeletionTests.RecordingChat
             DeletedCollections.Clear();
         }
 
-        public Task<string> SubmitDocumentAsync(int assetId, string assetUrl, string filetype, string collectionName)
+        public Task<string> SubmitDocumentAsync(int assetId, string assetUrl, string filetype, string collectionName, string documentName)
             => Task.FromResult($"job-{assetId}");
 
         public Task<ChatbotJobStatus> GetJobStatusAsync(string jobId, string collectionName)
@@ -238,8 +287,7 @@ public class AssetDeletionTests : IClassFixture<AssetDeletionTests.RecordingChat
             return Task.FromResult(true);
         }
 
-        public string GetDocumentName(string assetUrl, string filetype)
-            => System.IO.Path.GetFileName(new Uri(assetUrl).LocalPath);
+        public string GetDocumentName(string filename, string filetype) => filename;
 
         public Task<bool> IsAvailableAsync() => Task.FromResult(true);
     }

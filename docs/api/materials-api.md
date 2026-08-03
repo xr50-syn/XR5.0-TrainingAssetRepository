@@ -480,6 +480,17 @@ formats.
 `innov_chatbot` requires per-tenant INNOV configuration (`InnovChatbotBaseUrl`,
 `InnovChatbotApiToken`, `InnovChatbotDefaultPilot`) — see [Chat API](chat-api.md).
 
+### Document naming
+
+Assets submitted for ingestion are filed under the asset's **filename**, not its storage key. Keys
+are content hashes (see [Object Layout](../architecture.md#object-layout)) and would otherwise
+surface to users as hash-named documents. Cleanup on asset deletion resolves the same way, so a
+document can always be addressed by the name it was submitted under.
+
+Filenames are not unique — a tenant may hold several assets named `report.pdf`. Where a backend
+requires document names to be unique within a collection, resolving that collision is the backend's
+concern; this service does not rename or disambiguate what it submits.
+
 ---
 
 ## Related Materials

@@ -201,6 +201,11 @@ Uploaded files are deduplicated within each tenant by their SHA-256 content hash
 existing asset with `200 OK` and `reused: true`. Filenames and other multipart metadata do not
 affect identity. Reference-only assets are not content-hashed.
 
+`POST /api/{tenant}/assets/{id}/upload` attaches a file to an existing reference-only asset. It
+hashes what it stores like any other upload, so the content participates in deduplication. Because
+it targets one specific asset there is no duplicate to silently reuse: content another asset already
+holds is refused with `409 Conflict` naming that asset.
+
 Before serving uploads with this schema on an existing tenant, a system administrator must run
 `POST /api/troubleshooting/migrate-asset-content-hash/{tenantName}` (or the normal idempotent
 `create-tables` workflow). Existing asset rows retain a null hash and are not backfilled, avoiding
@@ -345,8 +350,10 @@ public interface IStorageService
     Task<bool> DeleteTenantStorageAsync(string tenantName);
     Task<bool> TenantStorageExistsAsync(string tenantName);
 
-    // File Operations
-    Task<string> UploadFileAsync(string tenantName, string fileName, IFormFile file);
+    // File Operations. fileName is the storage key (see Object Layout below), not the
+    // asset's display filename; downloadFileName carries the name to serve the file under.
+    Task<string> UploadFileAsync(string tenantName, string fileName, IFormFile file,
+                                 string? downloadFileName = null);
     Task<Stream> DownloadFileAsync(string tenantName, string fileName);
     Task<string> GetDownloadUrlAsync(string tenantName, string fileName, TimeSpan? expiration = null);
     Task<bool> DeleteFileAsync(string tenantName, string fileName);
@@ -361,6 +368,36 @@ public interface IStorageService
     string GetStorageType();
 }
 ```
+
+### Object Layout
+
+An asset's file is addressed by `Asset.StorageKey`, recorded once when the file is stored and never
+recomputed. Uploads set it to the content hash, so the object path is content-addressed rather than
+named after the file:
+
+```
+{tenant}/{sha256}          <- what the backend stores
+report.pdf                 <- Asset.Filename, what users see
+```
+
+Two properties follow, and both are load-bearing:
+
+- **One row owns one object.** The unique index on `ContentHash` admits a single row per hash per
+  tenant, so no two assets can share a key. A same-named upload cannot overwrite another asset's
+  content, and deleting an asset cannot remove a file another asset still points at. The dependency
+  guard in `DeleteAssetAsync` protects the row being deleted; this is what protects the file.
+- **The key is immutable.** It does not depend on `Filename`, and `UpdateAssetAsync` preserves it
+  alongside `ContentHash`. Renaming an asset changes only its display name, never where its bytes
+  live, so a rename cannot orphan a file.
+
+Storage keys are opaque, so the original filename travels with the upload as `downloadFileName`. S3
+applies it as `Content-Disposition`, keeping downloads named `report.pdf`. WebDAV serves files under
+their stored path, so OwnCloud shows the key itself.
+
+Rows written before storage keys were recorded, and reference-only assets, have no key and fall back
+to addressing by filename, which is where their files were placed. Those rows remain vulnerable to
+filename collisions with each other; re-uploading moves a row onto a content-addressed key. There is
+no backfill, for the same reason the hash is not backfilled.
 
 ### Implementation Details
 

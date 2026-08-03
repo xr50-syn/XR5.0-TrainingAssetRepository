@@ -43,7 +43,7 @@ namespace XR50TrainingAssetRepo.Services
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
         }
 
-        public async Task<string> SubmitDocumentAsync(int assetId, string assetUrl, string filetype, string collectionName)
+        public async Task<string> SubmitDocumentAsync(int assetId, string assetUrl, string filetype, string collectionName, string documentName)
         {
             try
             {
@@ -55,7 +55,10 @@ namespace XR50TrainingAssetRepo.Services
                 var fileBytes = await downloadClient.GetByteArrayAsync(assetUrl);
 
                 var contentType = GetContentTypeFromFiletype(filetype);
-                var fileName = GetFileNameWithExtension(assetUrl, filetype);
+
+                // The document is named from the asset, not from the URL it is fetched over: storage
+                // keys are content hashes, so a URL-derived name would file it under the hash.
+                var fileName = EnsureExtension(documentName, filetype);
 
                 // Check if document already exists to decide POST vs PUT
                 var documentExists = await DocumentExistsAsync(collectionName, fileName);
@@ -323,9 +326,9 @@ namespace XR50TrainingAssetRepo.Services
             }
         }
 
-        public string GetDocumentName(string assetUrl, string filetype)
+        public string GetDocumentName(string filename, string filetype)
         {
-            return GetFileNameWithExtension(assetUrl, filetype);
+            return EnsureExtension(filename, filetype);
         }
 
         public async Task<bool> IsAvailableAsync()
@@ -364,10 +367,12 @@ namespace XR50TrainingAssetRepo.Services
             };
         }
 
-        private static string GetFileNameWithExtension(string url, string filetype)
+        /// <summary>
+        /// Normalises a filename so it carries the extension DataLens expects for its filetype.
+        /// </summary>
+        private static string EnsureExtension(string filename, string filetype)
         {
-            var uri = new Uri(url);
-            var fileName = Path.GetFileName(uri.LocalPath);
+            var fileName = Path.GetFileName(filename);
 
             if (string.IsNullOrEmpty(fileName))
             {

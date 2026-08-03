@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2026-08-03
+
+### Fixed - Assets sharing a filename could destroy each other's files
+
+#### Summary
+Storage objects were keyed on the client-supplied filename, so two assets uploaded under one name shared a single object. Two consequences, both silent: the second upload **overwrote the first asset's content**, and deleting either asset removed the file the other still pointed at, leaving a material that looked healthy but resolved to a missing file. The dependency guard on `DELETE /assets/{id}` never fired, because the asset being deleted genuinely had no dependents — the guard protects the row, and the exposure was at the storage layer beneath it. Reported by partners as "deleting a duplicate asset left the material behind".
+
+Files are now addressed by `Asset.StorageKey`, recorded when the file is stored and set to its content hash. The unique index on `ContentHash` admits one row per hash per tenant, so one row owns exactly one object and neither failure mode is reachable. The key never depends on `Filename` and is preserved by `UpdateAssetAsync`, so renaming an asset cannot orphan its file. Storage keys are opaque, so the original filename travels with the upload and S3 applies it as `Content-Disposition`; downloads are still named `report.pdf`.
+
+Existing rows keep a null key and fall back to addressing by filename, where their files already are. They remain vulnerable to filename collisions with each other until re-uploaded; there is no backfill, for the same reason the content hash is not backfilled.
+
+#### Affected files
+- `Models/Asset.cs` — `StorageKey` (persisted) and `ResolvedStorageKey` (fallback accessor)
+- `Services/XR50AssetService.cs` — key recorded on both upload paths, preserved across updates, and used for every storage operation
+- `Services/XR50StorageInterface.cs`, `XR50S3StorageImplementation.cs`, `XR50OwncloudStorageImplementation.cs` — `UploadFileAsync` takes `downloadFileName`; S3 sets `Content-Disposition`; OwnCloud share paths use the key
+- `Services/XR50ManualTableCreator.cs` — `StorageKey` column in the Assets schema and in the idempotent migration
+- Tests: `AssetStorageKeyTests.cs` (new), `Fixtures/WebApplicationFixture.cs`
+
+### Fixed - Attaching a file to an existing asset bypassed deduplication
+
+#### Summary
+`POST /api/{tenant}/assets/{id}/upload` writes file content but never hashed it, so the row kept a null hash. That content was invisible to deduplication — re-uploading the same bytes created a second asset and a second copy of the file — and it landed on a filename-keyed storage path where it could collide with another asset. It now hashes what it stores like any other upload. Because it targets one specific asset there is no duplicate to silently reuse, so content another asset already holds is refused with `409 Conflict` naming that asset.
+
+#### Affected files
+- `Services/XR50AssetService.cs` — hashing and duplicate detection in `UploadAssetToExistingAsync`; new `DuplicateAssetContentException`
+- `Controllers/XR50AssetController.cs` — maps it to `409`
+- Tests: `AssetFileAttachmentTests.cs` (new)
+
+### Changed - DataLens documents are named after the asset, not its storage key
+
+#### Summary
+Document names were derived from the asset URL, which became the content hash once storage went content-addressed, surfacing hash-named documents to users. DataLens does not derive names itself — the name is sent as the multipart filename — so submission now passes the asset's filename explicitly, and deletion cleanup resolves the same way. Filenames are not unique; where a backend requires uniqueness within a collection, resolving that collision is the backend's concern and this service does not rename what it submits.
+
+#### Affected files
+- `Services/IChatbotApiService.cs`, `ChatbotApiService.cs` — `SubmitDocumentAsync` takes `documentName`; `GetDocumentName` normalises a filename rather than parsing a URL
+- `Services/XR50AssetService.cs` (`SafeDocumentName`), `Services/Materials/AIAssistantMaterialService.cs`, `Services/Chatbot/DataLensChatbotProvider.cs` — callers pass the filename
+- Tests: `AssetDeletionTests.cs`, `AIAssistantMaterialUpdateTests.cs`
+
 ## [Unreleased] - 2026-05-24
 
 ### Changed - AI Assistant materials get their own DataLens collection

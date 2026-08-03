@@ -361,6 +361,10 @@ namespace XR50TrainingAssetRepo.Controllers
             {
                 return this.ProblemNotFound(ex.Message);
             }
+            catch (DuplicateAssetContentException ex)
+            {
+                return this.ProblemConflict(ex.Message);
+            }
             catch (InvalidOperationException ex)
             {
                 return this.ProblemBadRequest(ex.Message);

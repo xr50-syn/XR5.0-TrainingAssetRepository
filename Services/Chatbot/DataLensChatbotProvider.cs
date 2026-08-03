@@ -40,7 +40,8 @@ namespace XR50TrainingAssetRepo.Services.Chatbot
                 assetId: 0,
                 assetUrl: request.SourceUrl,
                 filetype: request.Filetype ?? "pdf",
-                collectionName: request.Grouping);
+                collectionName: request.Grouping,
+                documentName: request.FileName);
 
             return new ChatbotIngestResult
             {

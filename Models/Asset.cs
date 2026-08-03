@@ -65,6 +65,28 @@ namespace XR50TrainingAssetRepo.Models
         [JsonIgnore]
         public string? ContentHash { get; set; }
 
+        /// <summary>
+        /// Where this asset's bytes live inside the tenant's storage, relative to the tenant root.
+        /// Recorded once when the file is stored and never recomputed, so it is unaffected by any
+        /// later change to <see cref="Filename"/> - renaming an asset cannot orphan its file.
+        ///
+        /// Uploads set this to the content hash, which the unique index on <see cref="ContentHash"/>
+        /// keeps unique per tenant. That is what makes one row own exactly one object, so a
+        /// same-named upload cannot overwrite another asset and deleting one asset cannot remove a
+        /// file another still points at. Null for reference-only assets, which store no file.
+        /// </summary>
+        [MaxLength(512)]
+        [JsonIgnore]
+        public string? StorageKey { get; set; }
+
+        /// <summary>
+        /// The storage key to actually address this asset by. Falls back to the filename for rows
+        /// written before storage keys were recorded, which is where their files were placed.
+        /// </summary>
+        [NotMapped]
+        [JsonIgnore]
+        public string ResolvedStorageKey => !string.IsNullOrEmpty(StorageKey) ? StorageKey : Filename;
+
 	    [Key]
         public int Id { get; set; }
 

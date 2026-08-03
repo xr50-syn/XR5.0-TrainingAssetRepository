@@ -404,10 +404,14 @@ namespace XR50TrainingAssetRepo.Services
                 _logger.LogInformation("Detected file type from binary stream for asset {Filename}: Type={Type}, Filetype={Filetype}",
                     asset.Filename, asset.Type, asset.Filetype);
 
-                // Upload file to storage
+                // Store under the content hash so this row owns the only reference to the object and
+                // a same-named upload cannot overwrite another asset. Recording the key rather than
+                // deriving it keeps the file addressable even if the asset is renamed later.
+                asset.StorageKey = asset.ContentHash;
+
                 stream.Seek(0, SeekOrigin.Begin); // Reset stream position after detection
-                var uploadUrl = await _storageService.UploadFileAsync(tenantName, asset.Filename, file);
-                uploadedFilePath = asset.Filename; // Mark for potential cleanup
+                var uploadUrl = await _storageService.UploadFileAsync(tenantName, asset.ResolvedStorageKey, file, asset.Filename);
+                uploadedFilePath = asset.ResolvedStorageKey; // Mark for potential cleanup
 
                 // Update asset with storage URL
                 asset.URL = uploadUrl;
@@ -478,9 +482,10 @@ namespace XR50TrainingAssetRepo.Services
                     throw;
                 }
 
-                // Identical filenames address the same storage object. In that case deleting the
-                // losing upload would also delete the winning request's object.
-                if (!string.Equals(uploadedFilePath, existingAsset.Filename, StringComparison.Ordinal))
+                // The race winner has the same content, so under content addressing it resolves to
+                // the same storage key: the loser's upload wrote the winner's object, byte for byte.
+                // Cleaning it up would delete the file the winner now depends on.
+                if (!string.Equals(uploadedFilePath, existingAsset.ResolvedStorageKey, StringComparison.Ordinal))
                 {
                     await CleanupUploadedFileAsync(tenantName, uploadedFilePath);
                 }
@@ -549,9 +554,11 @@ namespace XR50TrainingAssetRepo.Services
                     throw new KeyNotFoundException($"Asset {asset.Id} not found");
                 }
 
-                // ContentHash is internal and ignored by JSON model binding. Preserve it across
-                // metadata-only PUT requests so updating a description cannot disable deduplication.
+                // ContentHash and StorageKey are internal and ignored by JSON model binding. Preserve
+                // them across metadata PUT requests so updating a description cannot disable
+                // deduplication, and renaming an asset cannot move it off the file it already owns.
                 asset.ContentHash = existing.ContentHash;
+                asset.StorageKey = existing.StorageKey;
 
                 // Delete old asset
                 context.Assets.Remove(existing);
@@ -767,8 +774,10 @@ namespace XR50TrainingAssetRepo.Services
 
             try
             {
-                // Delete file from storage
-                var storageDeleted = await _storageService.DeleteFileAsync(tenantName, asset.Filename);
+                // Delete file from storage. The key is content-addressed, and the unique index on
+                // ContentHash means no other row shares it, so this cannot remove a file another
+                // asset still points at.
+                var storageDeleted = await _storageService.DeleteFileAsync(tenantName, asset.ResolvedStorageKey);
                 if (!storageDeleted)
                 {
                     _logger.LogWarning("Failed to delete file {Filename} from storage, but continuing with database deletion",
@@ -847,21 +856,23 @@ namespace XR50TrainingAssetRepo.Services
         }
 
         // Derives the DataLens document name for an asset, matching what was used at submit time.
-        // Falls back to the stored filename if the URL cannot be parsed.
+        // Submission files documents under the asset's filename, so cleanup resolves the same way -
+        // deriving from the URL would look for the content hash instead. Job rows carry the name
+        // actually used and take precedence over this wherever one exists.
         private string? SafeDocumentName(Asset asset)
         {
-            if (string.IsNullOrEmpty(asset.URL))
+            if (string.IsNullOrEmpty(asset.Filename))
             {
-                return asset.Filename;
+                return null;
             }
             try
             {
-                return _chatbotApiService.GetDocumentName(asset.URL, asset.Filetype ?? "pdf");
+                return _chatbotApiService.GetDocumentName(asset.Filename, asset.Filetype ?? "pdf");
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Could not derive DataLens document name for asset {AssetId} from URL {Url}; falling back to filename",
-                    asset.Id, asset.URL);
+                _logger.LogDebug(ex, "Could not derive DataLens document name for asset {AssetId} from filename {Filename}; using it verbatim",
+                    asset.Id, asset.Filename);
                 return asset.Filename;
             }
         }
@@ -926,7 +937,7 @@ namespace XR50TrainingAssetRepo.Services
 
             try
             {
-                var downloadUrl = await _storageService.GetDownloadUrlAsync(tenantName, asset.Filename);
+                var downloadUrl = await _storageService.GetDownloadUrlAsync(tenantName, asset.ResolvedStorageKey);
 
                 _logger.LogInformation("Generated download URL for asset {AssetId} ({Filename}) from {StorageType}",
                     assetId, asset.Filename, _storageService.GetStorageType());
@@ -990,6 +1001,21 @@ namespace XR50TrainingAssetRepo.Services
                 using var stream = file.OpenReadStream();
                 var (detectedFiletype, detectedType) = await DetectFileTypeFromStream(stream);
 
+                // Attaching a file is a content-producing operation just like creating an asset, so
+                // it has to hash too. Without this the row keeps a null hash, stays invisible to
+                // deduplication, and lands on a filename-keyed storage path.
+                existing.ContentHash = await ComputeContentHashAsync(stream);
+
+                var duplicateAsset = await context.Assets
+                    .AsNoTracking()
+                    .SingleOrDefaultAsync(other => other.ContentHash == existing.ContentHash && other.Id != assetId);
+                if (duplicateAsset != null)
+                {
+                    throw new DuplicateAssetContentException(
+                        $"This file is already stored as asset {duplicateAsset.Id} ('{duplicateAsset.Filename}'). " +
+                        "Attach that asset instead of uploading another copy.");
+                }
+
                 if (detectedFiletype == "unknown")
                 {
                     var extensionFiletype = GetFiletypeFromFilename(resolvedFilename);
@@ -1000,9 +1026,11 @@ namespace XR50TrainingAssetRepo.Services
                     detectedType = extensionType;
                 }
 
+                existing.StorageKey = existing.ContentHash;
+
                 stream.Seek(0, SeekOrigin.Begin);
-                var uploadUrl = await _storageService.UploadFileAsync(tenantName, resolvedFilename, file);
-                uploadedFilePath = resolvedFilename; // Mark for potential cleanup
+                var uploadUrl = await _storageService.UploadFileAsync(tenantName, existing.ResolvedStorageKey, file, resolvedFilename);
+                uploadedFilePath = existing.ResolvedStorageKey; // Mark for potential cleanup
 
                 existing.Filename = resolvedFilename;
                 existing.Description = description ?? existing.Description;
@@ -1074,7 +1102,7 @@ namespace XR50TrainingAssetRepo.Services
 
             try
             {
-                var size = await _storageService.GetFileSizeAsync(tenantName, asset.Filename);
+                var size = await _storageService.GetFileSizeAsync(tenantName, asset.ResolvedStorageKey);
 
                 _logger.LogInformation("Retrieved file size for asset {AssetId} ({Filename}): {Size} bytes",
                     assetId, asset.Filename, size);
@@ -1098,7 +1126,7 @@ namespace XR50TrainingAssetRepo.Services
 
             try
             {
-                var exists = await _storageService.FileExistsAsync(tenantName, asset.Filename);
+                var exists = await _storageService.FileExistsAsync(tenantName, asset.ResolvedStorageKey);
 
                 _logger.LogInformation("File existence check for asset {AssetId} ({Filename}): {Exists}",
                     assetId, asset.Filename, exists);
@@ -1345,7 +1373,8 @@ namespace XR50TrainingAssetRepo.Services
                 // yet, so this submit would 502 on a cold gateway. Ensure it exists first.
                 await _chatbotApiService.EnsureCollectionExistsAsync(collectionName);
 
-                var jobId = await _chatbotApiService.SubmitDocumentAsync(assetId, asset.URL, asset.Filetype ?? "pdf", collectionName);
+                var jobId = await _chatbotApiService.SubmitDocumentAsync(
+                    assetId, asset.URL, asset.Filetype ?? "pdf", collectionName, asset.Filename);
                 asset.JobId = jobId;
                 asset.AiAvailable = "process";
 
@@ -1508,6 +1537,16 @@ namespace XR50TrainingAssetRepo.Services
 
     /// <summary>Result of resolving an upload to either a new or existing asset.</summary>
     public sealed record AssetCreationResult(Asset Asset, bool Created);
+
+    /// <summary>
+    /// Raised when a file would attach content that another asset already stores. Uploading to a new
+    /// asset deduplicates instead, but attaching targets one specific asset, so there is no correct
+    /// row to return and the caller has to pick the existing asset explicitly.
+    /// </summary>
+    public class DuplicateAssetContentException : InvalidOperationException
+    {
+        public DuplicateAssetContentException(string message) : base(message) { }
+    }
 
     /// <summary>
     /// A Training Material that references an asset, surfaced to the client so it can show which

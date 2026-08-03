@@ -135,6 +135,18 @@ public class MockStorageService : IStorageService
 {
     private readonly Dictionary<string, byte[]> _files = new();
     private readonly Dictionary<string, string> _shares = new();
+    private readonly Dictionary<string, string?> _downloadNames = new();
+
+    /// <summary>Storage keys currently holding a file, as "{tenant}/{key}".</summary>
+    public IReadOnlyCollection<string> StoredKeys => _files.Keys.ToList();
+
+    /// <summary>Bytes stored under a tenant-relative key, or null when nothing is stored there.</summary>
+    public byte[]? ReadStored(string tenantName, string key) =>
+        _files.TryGetValue($"{tenantName}/{key}", out var data) ? data : null;
+
+    /// <summary>The download name an upload asked the backend to serve a key under.</summary>
+    public string? DownloadNameFor(string tenantName, string key) =>
+        _downloadNames.TryGetValue($"{tenantName}/{key}", out var name) ? name : null;
 
     public Task<bool> CreateTenantStorageAsync(string tenantName, XR50Tenant tenant) => Task.FromResult(true);
 
@@ -142,11 +154,12 @@ public class MockStorageService : IStorageService
 
     public Task<bool> TenantStorageExistsAsync(string tenantName) => Task.FromResult(true);
 
-    public async Task<string> UploadFileAsync(string tenantName, string fileName, IFormFile file)
+    public async Task<string> UploadFileAsync(string tenantName, string fileName, IFormFile file, string? downloadFileName = null)
     {
         using var ms = new MemoryStream();
         await file.CopyToAsync(ms);
         _files[$"{tenantName}/{fileName}"] = ms.ToArray();
+        _downloadNames[$"{tenantName}/{fileName}"] = downloadFileName;
         return $"http://localhost/files/{tenantName}/{fileName}";
     }
 
@@ -189,7 +202,7 @@ public class MockStorageService : IStorageService
     public Task<string> CreateShareAsync(string tenantName, XR50Tenant tenant, Asset asset)
     {
         var shareId = Guid.NewGuid().ToString();
-        _shares[shareId] = $"{tenantName}/{asset.Filename}";
+        _shares[shareId] = $"{tenantName}/{asset.ResolvedStorageKey}";
         return Task.FromResult(shareId);
     }
 
