@@ -18,6 +18,9 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string? InnovChatbotDefaultPilot { get; set; }
         public bool InnovChatbotConfigured { get; set; }
 
+        // XR5.0 Hub tenant id this tenant is reachable under (not a secret; null = no Hub access)
+        public Guid? HubTenantId { get; set; }
+
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
 
@@ -44,6 +47,7 @@ namespace XR50TrainingAssetRepo.Models.DTOs
                 InnovChatbotBaseUrl = tenant.InnovChatbotBaseUrl,
                 InnovChatbotDefaultPilot = tenant.InnovChatbotDefaultPilot,
                 InnovChatbotConfigured = !string.IsNullOrEmpty(tenant.InnovChatbotApiToken),
+                HubTenantId = tenant.HubTenantId,
                 CreatedAt = tenant.CreatedAt,
                 UpdatedAt = tenant.UpdatedAt
             };
@@ -110,6 +114,11 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string? InnovChatbotBaseUrl { get; set; }
         public string? InnovChatbotApiToken { get; set; }
         public string? InnovChatbotDefaultPilot { get; set; }
+
+        // Optional. XR5.0 Hub tenant id (session token "tenantId" claim) this tenant should be
+        // reachable under. Must be unique across tenants; can also be set later via
+        // PUT tenants/{tenantName}/hub-tenant.
+        public Guid? HubTenantId { get; set; }
 
         // Storage-specific configuration
         public S3ConfigurationRequest? S3Config { get; set; }
@@ -198,6 +207,12 @@ namespace XR50TrainingAssetRepo.Models.DTOs
         public string? Endpoint { get; set; }
     }
     
+    /// <summary>Body of PUT tenants/{tenantName}/hub-tenant; null clears the mapping.</summary>
+    public class SetHubTenantRequest
+    {
+        public Guid? HubTenantId { get; set; }
+    }
+
     public class UserRequest
     {
         [Required]

@@ -28,6 +28,7 @@ namespace XR50TrainingAssetRepo.Controllers
         private readonly IUserMaterialService _userMaterialService;
         private readonly IConfiguration _configuration;
         private readonly IWebHostEnvironment _environment;
+        private readonly IamOptions _iamOptions;
         private readonly ILogger<programsController> _logger;
 
         public programsController(
@@ -37,8 +38,10 @@ namespace XR50TrainingAssetRepo.Controllers
             IUserMaterialService userMaterialService,
             IConfiguration configuration,
             IWebHostEnvironment environment,
+            Microsoft.Extensions.Options.IOptions<IamOptions> iamOptions,
             ILogger<programsController> logger)
         {
+            _iamOptions = iamOptions.Value;
             _trainingProgramService = trainingProgramService;
             _materialServiceBase = materialServiceBase;
             _materialRelationshipService = materialRelationshipService;
@@ -169,14 +172,12 @@ namespace XR50TrainingAssetRepo.Controllers
         {
             try
             {
-                // Extract user ID from JWT token claims
-                var userId = User.GetUserId();
-
-                // Authorization disabled - use default user if not authenticated
+                // The development user only applies under the Development anonymous bypass.
+                var userId = User.GetEffectiveUserId(_iamOptions, _environment);
                 if (string.IsNullOrEmpty(userId))
                 {
-                    userId = _configuration.GetValue<string>("IAM:DevelopmentUserId") ?? "demoadmin";
-                    _logger.LogInformation("No auth token - using default user: {UserId}", userId);
+                    _logger.LogWarning("Bulk material submission without a resolvable user identity rejected");
+                    return Unauthorized();
                 }
 
                 _logger.LogInformation(

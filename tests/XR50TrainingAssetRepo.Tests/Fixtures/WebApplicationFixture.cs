@@ -39,50 +39,7 @@ public class WebApplicationFixture : WebApplicationFactory<Program>
 
         builder.ConfigureTestServices(services =>
         {
-            // Remove existing DbContext registration
-            var descriptor = services.SingleOrDefault(
-                d => d.ServiceType == typeof(DbContextOptions<XR50TrainingContext>));
-            if (descriptor != null)
-            {
-                services.Remove(descriptor);
-            }
-
-            // Remove the DbContext itself
-            var dbContextDescriptor = services.SingleOrDefault(
-                d => d.ServiceType == typeof(XR50TrainingContext));
-            if (dbContextDescriptor != null)
-            {
-                services.Remove(dbContextDescriptor);
-            }
-
-            // Remove the DbContextFactory
-            var factoryDescriptor = services.SingleOrDefault(
-                d => d.ServiceType == typeof(IXR50TenantDbContextFactory));
-            if (factoryDescriptor != null)
-            {
-                services.Remove(factoryDescriptor);
-            }
-
-            // Add in-memory database with a consistent name for all requests in this fixture.
-            // InMemory has no real transactions; production services call BeginTransactionAsync,
-            // so we silence the warning rather than fail every transactional test path.
-            services.AddDbContext<XR50TrainingContext>(options =>
-            {
-                options.UseInMemoryDatabase(dbName)
-                       .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning));
-            });
-
-            // Register test DbContext factory that returns the in-memory context
-            services.AddScoped<IXR50TenantDbContextFactory, TestDbContextFactory>();
-
-            // Replace storage service with mock
-            var storageDescriptor = services.SingleOrDefault(
-                d => d.ServiceType == typeof(IStorageService));
-            if (storageDescriptor != null)
-            {
-                services.Remove(storageDescriptor);
-            }
-            services.AddScoped<IStorageService, MockStorageService>();
+            ConfigureHermeticServices(services, dbName);
 
             // Authenticate through the header-driven test scheme instead of JWT Bearer.
             // Default principal is a systemadmin, so pre-existing tests pass every policy.
@@ -95,6 +52,58 @@ public class WebApplicationFixture : WebApplicationFactory<Program>
         });
 
         builder.UseEnvironment("Development");
+    }
+
+    /// <summary>
+    /// Hermetic service substitutions shared by every test fixture: in-memory EF database and
+    /// mock storage. Authentication is NOT touched here so fixtures can pick their own scheme.
+    /// </summary>
+    internal static void ConfigureHermeticServices(IServiceCollection services, string dbName)
+    {
+        // Remove existing DbContext registration
+        var descriptor = services.SingleOrDefault(
+            d => d.ServiceType == typeof(DbContextOptions<XR50TrainingContext>));
+        if (descriptor != null)
+        {
+            services.Remove(descriptor);
+        }
+
+        // Remove the DbContext itself
+        var dbContextDescriptor = services.SingleOrDefault(
+            d => d.ServiceType == typeof(XR50TrainingContext));
+        if (dbContextDescriptor != null)
+        {
+            services.Remove(dbContextDescriptor);
+        }
+
+        // Remove the DbContextFactory
+        var factoryDescriptor = services.SingleOrDefault(
+            d => d.ServiceType == typeof(IXR50TenantDbContextFactory));
+        if (factoryDescriptor != null)
+        {
+            services.Remove(factoryDescriptor);
+        }
+
+        // Add in-memory database with a consistent name for all requests in this fixture.
+        // InMemory has no real transactions; production services call BeginTransactionAsync,
+        // so we silence the warning rather than fail every transactional test path.
+        services.AddDbContext<XR50TrainingContext>(options =>
+        {
+            options.UseInMemoryDatabase(dbName)
+                   .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning));
+        });
+
+        // Register test DbContext factory that returns the in-memory context
+        services.AddScoped<IXR50TenantDbContextFactory, TestDbContextFactory>();
+
+        // Replace storage service with mock
+        var storageDescriptor = services.SingleOrDefault(
+            d => d.ServiceType == typeof(IStorageService));
+        if (storageDescriptor != null)
+        {
+            services.Remove(storageDescriptor);
+        }
+        services.AddScoped<IStorageService, MockStorageService>();
     }
 
     /// <summary>

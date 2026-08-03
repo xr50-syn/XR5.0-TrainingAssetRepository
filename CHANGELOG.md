@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-03
 
+### Added - XR5.0 Hub session token authentication (partner IAM integration)
+
+#### Summary
+Implements the External Service Provider role of the partner spec *XR5.0 Hub Session Token — External Service Integration*. Requests carrying an `HL-Hub-Session-Token` header are authenticated by submitting the opaque token to the Hub decrypt API (shared secret in the `hl-hub-external-service-secret` header); only `valid: true` authenticates, and Hub outages surface as `503` rather than silently rejecting tokens. Decrypt results are cached in-memory (SHA-256-hashed keys, TTL capped at 60 s and at the token's own expiry), which bounds session-revocation latency to the cache TTL. The token is treated as a bearer credential throughout: never logged, never echoed, never in URLs.
+
+The Hub authenticates identity; authorization stays grounded in local data. The token's `tenantId` GUID resolves to a tenant through the new `XR50TenantRegistry.HubTenantId` column (unique-indexed, added by an idempotent in-place migration; settable at tenant creation or via the new `PUT Tenants/{tenantName}/hub-tenant` SystemAdmin endpoint), and is emitted as the `tenantName` claim so the existing tenant-route policies work unchanged. Roles derive from the tenant DB by e-mail join: `TenantAdmins` membership ⇒ `tenantadmin`, `Users.admin` ⇒ `systemadmin`. The spec's fixed development token short-circuits the decrypt call only when the environment is Development **and** a token value is configured.
+
+**The production auth surface is now Hub-only**: the Keycloak/JWT bearer scheme is registered only in Development. Also removed the ungated `demoadmin` fallbacks in quiz/bulk submissions — an unresolvable user identity is now rejected with `401` unless the Development anonymous bypass (`IAM:AllowAnonymousInDevelopment`) is active, evaluated by the shared `GetEffectiveUserId` helper.
+
+#### Affected files
+- `Infrastructure/Auth/XR50HubOptions.cs`, `HubSessionTokenModels.cs`, `HubSessionTokenAuthenticationHandler.cs`, `HubIdentityEnricher.cs` (new), `ClaimsPrincipalExtensions.cs` (`GetEffectiveUserId`)
+- `Services/HubSessionTokenService.cs` (new decrypt client), `XR50TenantManagementService.cs`, `XR50MigrationService.cs` (registry column + migration + lookup)
+- `Program.cs` — policy-scheme selector (`XR50AuthSelector`), Hub scheme registration, Development-only JWT, startup config guard
+- `Controllers/XR50TenantController.cs`, `Models/DTOs/XR50TenantDtos.cs`, `Models/XR50Tenant.cs` — `HubTenantId` plumbing and endpoint
+- `Controllers/XR50MaterialsController.cs`, `XR50TrainingProgramController.cs`, `UsersProgressController.cs` — demoadmin fallback removal
+- Config: `appsettings.json`, `docker-compose.yaml`, `.env*.example` (`XR50HUB_*`)
+- Docs: `docs/guides/authentication.md`
+- Tests: `Fixtures/HubAuthWebApplicationFixture.cs`, `Integration/HubAuthenticationTests.cs`, `Services/HubSessionTokenServiceTests.cs` (new); `Fixtures/WebApplicationFixture.cs` (shared hermetic setup)
+
 ### Fixed - Assets sharing a filename could destroy each other's files
 
 #### Summary

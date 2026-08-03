@@ -131,24 +131,5 @@ namespace XR50TrainingAssetRepo.Controllers
             }
         }
 
-        private string? GetUserIdFromAuth()
-        {
-            // Claims can contain PII (email, sub) - keep out of the default Information logs.
-            _logger.LogDebug("Token claims: {Claims}",
-                string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}")));
-
-            // Get user ID from JWT claims - prefer preferred_username over sub (UUID)
-            var userId = User.GetUserId();
-
-            // Authorization disabled - return default admin user if not authenticated
-            if (string.IsNullOrEmpty(userId))
-            {
-                userId = "demoadmin";
-                _logger.LogInformation("No auth token - using default admin user");
-            }
-
-            _logger.LogInformation("Extracted userId: {UserId}", userId);
-            return userId;
-        }
     }
 }

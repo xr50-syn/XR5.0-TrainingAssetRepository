@@ -229,7 +229,9 @@ public class InnovChatbotMaterialTests
 
         public Task<IEnumerable<XR50Tenant>> GetAllTenantsAsync() => Task.FromResult<IEnumerable<XR50Tenant>>(new[] { _tenant });
         public Task<XR50Tenant> GetTenantAsync(string tenantName) => Task.FromResult(_tenant);
+        public Task<XR50Tenant?> GetTenantByHubTenantIdAsync(Guid hubTenantId) => Task.FromResult<XR50Tenant?>(null);
         public Task<XR50Tenant> CreateTenantAsync(XR50Tenant tenant) => Task.FromResult(tenant);
+        public Task<XR50Tenant> UpdateTenantAsync(string tenantName, XR50Tenant tenant) => Task.FromResult(tenant);
         public Task<User> GetOwnerUserAsync(string ownerName, string tenantName) => Task.FromResult<User>(null!);
         public Task DeleteTenantAsync(string tenantName) => Task.CompletedTask;
         public Task DeleteTenantCompletelyAsync(string tenantName) => Task.CompletedTask;

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Certificate;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -63,9 +64,33 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 
-// Configure JWT Authentication
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+// Authentication: XR5.0 Hub session tokens (HL-Hub-Session-Token header) are accepted in every
+// environment; the Keycloak/JWT bearer scheme is a Development-only stand-in, so the production
+// auth surface is Hub-only. The selector routes by header presence.
+var authenticationBuilder = builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultScheme = "XR50AuthSelector";
+    })
+    .AddPolicyScheme("XR50AuthSelector", "Hub session token or Development JWT", options =>
+    {
+        options.ForwardDefaultSelector = context =>
+        {
+            if (context.Request.Headers.ContainsKey(HubSessionTokenDefaults.HeaderName))
+            {
+                return HubSessionTokenDefaults.SchemeName;
+            }
+
+            return builder.Environment.IsDevelopment()
+                ? JwtBearerDefaults.AuthenticationScheme
+                : HubSessionTokenDefaults.SchemeName;
+        };
+    })
+    .AddScheme<AuthenticationSchemeOptions, HubSessionTokenAuthenticationHandler>(
+        HubSessionTokenDefaults.SchemeName, _ => { });
+
+if (builder.Environment.IsDevelopment())
+{
+    authenticationBuilder.AddJwtBearer(options =>
     {
         var configuration = builder.Configuration;
 
@@ -141,11 +166,19 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             }
         };
     });
+}
 
 // Configure Authorization Policies
 // Provider-agnostic RBAC: claim names and role values come from the IAM section (IamOptions)
 // so a future production IAM server can be swapped in via configuration.
 builder.Services.Configure<IamOptions>(builder.Configuration.GetSection(IamOptions.SectionName));
+builder.Services.Configure<XR50HubOptions>(builder.Configuration.GetSection(XR50HubOptions.SectionName));
+
+// Hub session token support: decrypt client (typed HttpClient), local identity enrichment
+// (registry tenant mapping + tenant-DB roles), and the decrypt-result cache.
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient<IHubSessionTokenService, HubSessionTokenService>();
+builder.Services.AddScoped<IHubIdentityEnricher, HubIdentityEnricher>();
 builder.Services.AddSingleton<IAuthorizationHandler, TenantMemberHandler>();
 builder.Services.AddSingleton<IAuthorizationHandler, TenantAdminHandler>();
 builder.Services.AddSingleton<IAuthorizationHandler, SystemAdminHandler>();
@@ -373,6 +406,17 @@ builder.Services.AddSwaggerGen(c =>
         Scheme = "Bearer"
     });
 
+    // XR5.0 Hub session token (opaque, validated via the Hub decrypt API). Paste the raw
+    // token value; Swagger sends it in the HL-Hub-Session-Token header, which routes the
+    // request to the XR50Hub authentication scheme instead of JWT bearer.
+    c.AddSecurityDefinition("HubSessionToken", new OpenApiSecurityScheme
+    {
+        Description = "XR5.0 Hub session token. Paste the raw token value (no prefix); it is sent as the HL-Hub-Session-Token header.",
+        Name = HubSessionTokenDefaults.HeaderName,
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey
+    });
+
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -393,6 +437,17 @@ builder.Services.AddSwaggerGen(c =>
                 {
                     Type = ReferenceType.SecurityScheme,
                     Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        },
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "HubSessionToken"
                 }
             },
             Array.Empty<string>()
@@ -440,6 +495,23 @@ builder.Services.AddCors(options =>
     });
 });
 var app = builder.Build();
+
+// Outside Development the Hub integration is the only auth path; a missing secret or a
+// non-TLS decrypt endpoint means every request will fail closed, so say why at startup.
+if (!app.Environment.IsDevelopment())
+{
+    var hubOptions = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<XR50HubOptions>>().Value;
+    var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+    if (string.IsNullOrEmpty(hubOptions.SharedSecret))
+    {
+        startupLogger.LogError("XR50Hub:SharedSecret is not configured; Hub session token authentication will reject all requests");
+    }
+
+    if (!hubOptions.BaseUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+    {
+        startupLogger.LogError("XR50Hub:BaseUrl is not HTTPS; the Hub session token is a bearer credential and must only travel over TLS");
+    }
+}
 
 // Configure the HTTP request pipeline.
 app.UseExceptionHandler();

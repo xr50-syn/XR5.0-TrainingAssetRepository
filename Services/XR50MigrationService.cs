@@ -167,11 +167,38 @@ namespace XR50TrainingAssetRepo.Services
                     `InnovChatbotBaseUrl` varchar(500) NULL,
                     `InnovChatbotApiToken` varchar(1000) NULL,
                     `InnovChatbotDefaultPilot` varchar(255) NULL,
+                    `HubTenantId` char(36) NULL,
                     `DatabaseName` varchar(100) NOT NULL,
                     `CreatedAt` datetime NOT NULL,
-                    `IsActive` boolean NOT NULL DEFAULT 1
+                    `IsActive` boolean NOT NULL DEFAULT 1,
+                    UNIQUE KEY `ux_registry_hub_tenant` (`HubTenantId`)
                 )", connection);
             await createRegistryTableCommand.ExecuteNonQueryAsync();
+
+            // CREATE TABLE IF NOT EXISTS does not evolve existing deployments; add the Hub
+            // tenant mapping column in place (same idempotent style as XR50ManualTableCreator).
+            var hubColumnCheck = new MySqlCommand(@"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'XR50TenantRegistry'
+                AND COLUMN_NAME = 'HubTenantId'", connection);
+            if (Convert.ToInt32(await hubColumnCheck.ExecuteScalarAsync()) == 0)
+            {
+                _logger.LogInformation("Adding HubTenantId column to XR50TenantRegistry");
+                var addHubColumn = new MySqlCommand(
+                    "ALTER TABLE `XR50TenantRegistry` ADD COLUMN `HubTenantId` char(36) NULL", connection);
+                await addHubColumn.ExecuteNonQueryAsync();
+            }
+
+            var hubIndexCheck = new MySqlCommand(@"SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'XR50TenantRegistry'
+                AND INDEX_NAME = 'ux_registry_hub_tenant'", connection);
+            if (Convert.ToInt32(await hubIndexCheck.ExecuteScalarAsync()) == 0)
+            {
+                var addHubIndex = new MySqlCommand(
+                    "ALTER TABLE `XR50TenantRegistry` ADD UNIQUE INDEX `ux_registry_hub_tenant` (`HubTenantId`)", connection);
+                await addHubIndex.ExecuteNonQueryAsync();
+            }
 
             // FIXED: INSERT with S3 fields
             var insertCommand = new MySqlCommand(@"
@@ -179,12 +206,12 @@ namespace XR50TrainingAssetRepo.Services
                     (`TenantName`, `TenantGroup`, `Description`, `StorageType`, `TenantDirectory`,
                     `S3BucketName`, `S3BucketRegion`, `S3BucketArn`, `StorageEndpoint`,
                     `OwnerName`, `DefaultAICollection`, `InnovChatbotBaseUrl`, `InnovChatbotApiToken`,
-                    `InnovChatbotDefaultPilot`, `DatabaseName`, `CreatedAt`, `IsActive`)
+                    `InnovChatbotDefaultPilot`, `HubTenantId`, `DatabaseName`, `CreatedAt`, `IsActive`)
                 VALUES
                     (@tenantName, @tenantGroup, @description, @storageType, @tenantDirectory,
                     @s3BucketName, @s3BucketRegion, @s3BucketArn, @storageEndpoint,
                     @ownerName, @defaultAICollection, @innovChatbotBaseUrl, @innovChatbotApiToken,
-                    @innovChatbotDefaultPilot, @databaseName, @createdAt, 1)
+                    @innovChatbotDefaultPilot, @hubTenantId, @databaseName, @createdAt, 1)
                 ON DUPLICATE KEY UPDATE
                     `TenantGroup` = @tenantGroup,
                     `Description` = @description,
@@ -199,6 +226,7 @@ namespace XR50TrainingAssetRepo.Services
                     `InnovChatbotBaseUrl` = @innovChatbotBaseUrl,
                     `InnovChatbotApiToken` = @innovChatbotApiToken,
                     `InnovChatbotDefaultPilot` = @innovChatbotDefaultPilot,
+                    `HubTenantId` = @hubTenantId,
                     `DatabaseName` = @databaseName", connection);
 
             // FIXED: Parameters with S3 fields
@@ -229,6 +257,7 @@ namespace XR50TrainingAssetRepo.Services
             insertCommand.Parameters.AddWithValue("@innovChatbotBaseUrl", tenant.InnovChatbotBaseUrl ?? (object)DBNull.Value);
             insertCommand.Parameters.AddWithValue("@innovChatbotApiToken", tenant.InnovChatbotApiToken ?? (object)DBNull.Value);
             insertCommand.Parameters.AddWithValue("@innovChatbotDefaultPilot", tenant.InnovChatbotDefaultPilot ?? (object)DBNull.Value);
+            insertCommand.Parameters.AddWithValue("@hubTenantId", tenant.HubTenantId?.ToString("D") ?? (object)DBNull.Value);
 
             insertCommand.Parameters.AddWithValue("@databaseName", tenantDbName);
             insertCommand.Parameters.AddWithValue("@createdAt", DateTime.UtcNow);

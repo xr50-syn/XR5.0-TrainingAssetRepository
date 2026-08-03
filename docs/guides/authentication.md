@@ -1,6 +1,86 @@
-# Keycloak Authentication Setup
+# Authentication
 
-This document describes how to set up and test authentication with Keycloak for the XR50 Training API.
+The XR50 Training API accepts two authentication schemes, selected per request:
+
+| Scheme | Header | Environments |
+|--------|--------|--------------|
+| XR5.0 Hub session token | `HL-Hub-Session-Token` | all (the only scheme outside Development) |
+| Keycloak JWT bearer | `Authorization: Bearer` | Development only |
+
+## XR5.0 Hub Session Token (production)
+
+Every request from the XR5.0 Hub to this service carries an encrypted, opaque session token in
+the `HL-Hub-Session-Token` header (spec: *XR5.0 Hub Session Token — External Service
+Integration*). The token is a **bearer credential**: accept it only over TLS, never log it, and
+never place it in a URL.
+
+### Validation flow
+
+1. `HubSessionTokenAuthenticationHandler` reads the header and calls the Hub decrypt API
+   (`POST {XR50Hub:BaseUrl}/api/v1/session-token/decrypt`) through `HubSessionTokenService`,
+   authenticating with the shared secret (`hl-hub-external-service-secret` header, from
+   `XR50Hub:SharedSecret`).
+2. Only a response with `valid: true` authenticates. `valid: false`
+   (`MALFORMED | EXPIRED | SESSION_INACTIVE`), a rejected secret, or a missing token all fail
+   closed with `401`. If the Hub is unreachable the request fails with `503`.
+3. Decrypt results are cached in-memory for `XR50Hub:CacheSeconds` (default 60 s), keyed by a
+   SHA-256 hash of the token and never beyond the token's `expiresAt`. This bounds revocation
+   latency: a session revoked on the Hub stays usable here for at most `CacheSeconds`.
+
+### Claim mapping
+
+| Hub claim | Emitted claim | Consumed by |
+|-----------|---------------|-------------|
+| `userId` | `sub` / NameIdentifier | audit, fallback user id |
+| `user.email` | `email`; also `preferred_username` when no local user matches | `GetUserId()` |
+| matched local `UserName` | `preferred_username` | progress records, `GetUserId()` |
+| `tenantId` → registry lookup | `tenantName` | tenant-route authorization |
+| local DB roles | `role` (`tenantadmin` / `systemadmin`) | policy handlers |
+| `sessionId`, `applicationId`, `user.skillLevel` | same-named claims | available to controllers |
+
+The Hub authenticates the user; **authorization stays grounded in our own registry**
+(`HubIdentityEnricher`):
+
+- **Tenant**: the token's `tenantId` GUID is resolved against `XR50TenantRegistry.HubTenantId`.
+  Set the mapping per tenant with `PUT xr50/trainingAssetRepository/Tenants/{tenantName}/hub-tenant`
+  (SystemAdmin) or at tenant creation (`hubTenantId` field). An unmapped `tenantId` still
+  authenticates but carries no `tenantName`, so tenant-scoped endpoints return `403`.
+- **User/roles**: the Hub identity is joined to the tenant DB's `Users` by e-mail
+  (case-insensitive). `TenantAdmins` membership grants `tenantadmin`; `Users.admin` grants
+  `systemadmin`. Known limitation: e-mail is the join key (the Hub `userId` GUID is not stored
+  locally); if several users share an e-mail the first by `UserName` wins.
+
+### Configuration
+
+```jsonc
+"XR50Hub": {
+  "BaseUrl": "https://platform.xr50.eu",   // decrypt API host, HTTPS required outside Development
+  "SharedSecret": "",                      // provided by the Hub operator out of band, env-only
+  "DevelopmentToken": "",                  // fixed dev token, honored ONLY in Development
+  "CacheSeconds": 60,
+  "TimeoutSeconds": 5
+}
+```
+
+Docker: `XR50HUB_BASE_URL`, `XR50HUB_SHARED_SECRET`, `XR50HUB_DEV_TOKEN` in `.env`
+(see `.env.example`). Secrets are never committed.
+
+### Development token
+
+For local development the Hub operator provides a fixed token value. Set it as
+`XR50Hub:DevelopmentToken` (or `XR50HUB_DEV_TOKEN`); requests presenting exactly that value are
+authenticated as the spec's fixed identity (user `Dev Tester`, `dev-test@holo-light.com`, tenant
+id `976092b0-0ca8-404d-99b8-30a8c755719c`) without calling the decrypt API, then flow through the
+normal tenant-mapping and role lookup. The short-circuit is double-gated — Development
+environment **and** a configured token — so it cannot activate in production. Map the dev tenant
+id to a local tenant via the hub-tenant endpoint to give the dev identity a tenant scope.
+
+---
+
+# Keycloak Authentication Setup (Development only)
+
+Keycloak is the Development stand-in IdP for the JWT bearer scheme; it is not registered outside
+Development. This section describes how to set it up and test with it.
 
 ## Quick Start
 

@@ -67,6 +67,7 @@ namespace XR50TrainingAssetRepo.Controllers
         private readonly IUserMaterialService _userMaterialService;
         private readonly IConfiguration _configuration;
         private readonly IWebHostEnvironment _environment;
+        private readonly IamOptions _iamOptions;
         private readonly ILogger<materialsController> _logger;
 
         public materialsController(
@@ -86,8 +87,10 @@ namespace XR50TrainingAssetRepo.Controllers
             IUserMaterialService userMaterialService,
             IConfiguration configuration,
             IWebHostEnvironment environment,
+            Microsoft.Extensions.Options.IOptions<IamOptions> iamOptions,
             ILogger<materialsController> logger)
         {
+            _iamOptions = iamOptions.Value;
             _materialServiceBase = materialServiceBase;
             _videoMaterialService = videoMaterialService;
             _checklistMaterialService = checklistMaterialService;
@@ -156,16 +159,13 @@ namespace XR50TrainingAssetRepo.Controllers
                 _logger.LogDebug("Token claims: {Claims}",
                     string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}")));
 
-                // Extract user ID from JWT token claims
-                // For Keycloak: prefer "preferred_username" over "sub" (which is a UUID)
-                // Fallback order: preferred_username -> name -> email -> sub (UUID)
-                var userId = User.GetUserId();
-
-                // Authorization disabled - use default user if not authenticated
+                // Fallback order: preferred_username -> name -> email -> sub (UUID); the
+                // development user only applies under the Development anonymous bypass.
+                var userId = User.GetEffectiveUserId(_iamOptions, _environment);
                 if (string.IsNullOrEmpty(userId))
                 {
-                    userId = _configuration.GetValue<string>("IAM:DevelopmentUserId") ?? "demoadmin";
-                    _logger.LogInformation("No auth token - using default user: {UserId}", userId);
+                    _logger.LogWarning("Quiz submission without a resolvable user identity rejected");
+                    return Unauthorized();
                 }
 
                 _logger.LogInformation(

@@ -24,7 +24,9 @@ namespace XR50TrainingAssetRepo.Services
     {
         Task<IEnumerable<XR50Tenant>> GetAllTenantsAsync();
         Task<XR50Tenant> GetTenantAsync(string tenantName);
+        Task<XR50Tenant?> GetTenantByHubTenantIdAsync(Guid hubTenantId);
         Task<XR50Tenant> CreateTenantAsync(XR50Tenant tenant);
+        Task<XR50Tenant> UpdateTenantAsync(string tenantName, XR50Tenant tenant);
         Task<User> GetOwnerUserAsync(string ownerName, string tenantName);
         Task DeleteTenantAsync(string tenantName);
         Task DeleteTenantCompletelyAsync(string tenantName); // New method for complete deletion
@@ -74,20 +76,23 @@ namespace XR50TrainingAssetRepo.Services
                     `InnovChatbotBaseUrl` varchar(500) NULL,
                     `InnovChatbotApiToken` varchar(1000) NULL,
                     `InnovChatbotDefaultPilot` varchar(255) NULL,
+                    `HubTenantId` char(36) NULL,
                     `DatabaseName` varchar(100) NOT NULL,
                     `CreatedAt` datetime NOT NULL,
-                    `IsActive` boolean NOT NULL DEFAULT 1
+                    `IsActive` boolean NOT NULL DEFAULT 1,
+                    UNIQUE KEY `ux_registry_hub_tenant` (`HubTenantId`)
                 )";
 
             using var createCommand = new MySqlCommand(createTableSql, connection);
             await createCommand.ExecuteNonQueryAsync();
+            await EnsureHubTenantIdColumnAsync(connection);
 
             // FIXED: SELECT with S3 fields
             var sql = @"
                 SELECT TenantName, TenantGroup, Description, StorageType, TenantDirectory,
                     S3BucketName, S3BucketRegion, S3BucketArn, StorageEndpoint,
                     OwnerName, DefaultAICollection, InnovChatbotBaseUrl, InnovChatbotApiToken,
-                    InnovChatbotDefaultPilot, DatabaseName, CreatedAt, IsActive
+                    InnovChatbotDefaultPilot, HubTenantId, DatabaseName, CreatedAt, IsActive
                 FROM XR50TenantRegistry
                 WHERE IsActive = 1
                 ORDER BY CreatedAt DESC";
@@ -115,6 +120,7 @@ namespace XR50TrainingAssetRepo.Services
                     InnovChatbotBaseUrl = reader["InnovChatbotBaseUrl"]?.ToString(),
                     InnovChatbotApiToken = reader["InnovChatbotApiToken"]?.ToString(),
                     InnovChatbotDefaultPilot = reader["InnovChatbotDefaultPilot"]?.ToString(),
+                    HubTenantId = Guid.TryParse(reader["HubTenantId"]?.ToString(), out var parsedHubTenantId) ? parsedHubTenantId : (Guid?)null,
                     TenantSchema = reader["DatabaseName"]?.ToString(),
                     CreatedAt = reader["CreatedAt"] != DBNull.Value ? Convert.ToDateTime(reader["CreatedAt"]) : DateTime.UtcNow
                 });
@@ -130,13 +136,14 @@ namespace XR50TrainingAssetRepo.Services
             var connectionString = _configuration.GetConnectionString("DefaultConnection");
             using var connection = new MySqlConnection(connectionString);
             await connection.OpenAsync();
-            
+            await EnsureHubTenantIdColumnAsync(connection);
+
             // FIXED: SELECT with S3 fields
             var sql = @"
                 SELECT TenantName, TenantGroup, Description, StorageType, TenantDirectory,
                     S3BucketName, S3BucketRegion, S3BucketArn, StorageEndpoint,
                     OwnerName, DefaultAICollection, InnovChatbotBaseUrl, InnovChatbotApiToken,
-                    InnovChatbotDefaultPilot, DatabaseName, CreatedAt, IsActive
+                    InnovChatbotDefaultPilot, HubTenantId, DatabaseName, CreatedAt, IsActive
                 FROM XR50TenantRegistry
                 WHERE TenantName = @tenantName AND IsActive = 1";
 
@@ -164,12 +171,107 @@ namespace XR50TrainingAssetRepo.Services
                     InnovChatbotBaseUrl = reader["InnovChatbotBaseUrl"]?.ToString(),
                     InnovChatbotApiToken = reader["InnovChatbotApiToken"]?.ToString(),
                     InnovChatbotDefaultPilot = reader["InnovChatbotDefaultPilot"]?.ToString(),
+                    HubTenantId = Guid.TryParse(reader["HubTenantId"]?.ToString(), out var parsedHubTenantId) ? parsedHubTenantId : (Guid?)null,
                     TenantSchema = reader["DatabaseName"]?.ToString(),
                     CreatedAt = reader["CreatedAt"] != DBNull.Value ? Convert.ToDateTime(reader["CreatedAt"]) : DateTime.UtcNow
                 };
             }
 
             throw new ArgumentException($"Tenant '{tenantName}' not found");
+        }
+
+        public async Task<XR50Tenant?> GetTenantByHubTenantIdAsync(Guid hubTenantId)
+        {
+            var connectionString = _configuration.GetConnectionString("DefaultConnection");
+            using var connection = new MySqlConnection(connectionString);
+            await connection.OpenAsync();
+            await EnsureHubTenantIdColumnAsync(connection);
+
+            var sql = @"
+                SELECT TenantName, TenantGroup, Description, StorageType, TenantDirectory,
+                    S3BucketName, S3BucketRegion, S3BucketArn, StorageEndpoint,
+                    OwnerName, DefaultAICollection, InnovChatbotBaseUrl, InnovChatbotApiToken,
+                    InnovChatbotDefaultPilot, HubTenantId, DatabaseName, CreatedAt, IsActive
+                FROM XR50TenantRegistry
+                WHERE HubTenantId = @hubTenantId AND IsActive = 1";
+
+            using var command = new MySqlCommand(sql, connection);
+            command.Parameters.AddWithValue("@hubTenantId", hubTenantId.ToString("D"));
+
+            using var reader = await command.ExecuteReaderAsync();
+
+            if (await reader.ReadAsync())
+            {
+                return new XR50Tenant
+                {
+                    TenantName = reader["TenantName"]?.ToString() ?? "",
+                    TenantGroup = reader["TenantGroup"]?.ToString(),
+                    Description = reader["Description"]?.ToString(),
+                    StorageType = reader["StorageType"]?.ToString() ?? "OwnCloud",
+                    TenantDirectory = reader["TenantDirectory"]?.ToString(),
+                    S3BucketName = reader["S3BucketName"]?.ToString(),
+                    S3BucketRegion = reader["S3BucketRegion"]?.ToString(),
+                    S3BucketArn = reader["S3BucketArn"]?.ToString(),
+                    StorageEndpoint = reader["StorageEndpoint"]?.ToString(),
+                    OwnerName = reader["OwnerName"]?.ToString(),
+                    DefaultAICollection = reader["DefaultAICollection"]?.ToString(),
+                    InnovChatbotBaseUrl = reader["InnovChatbotBaseUrl"]?.ToString(),
+                    InnovChatbotApiToken = reader["InnovChatbotApiToken"]?.ToString(),
+                    InnovChatbotDefaultPilot = reader["InnovChatbotDefaultPilot"]?.ToString(),
+                    HubTenantId = hubTenantId,
+                    TenantSchema = reader["DatabaseName"]?.ToString(),
+                    CreatedAt = reader["CreatedAt"] != DBNull.Value ? Convert.ToDateTime(reader["CreatedAt"]) : DateTime.UtcNow
+                };
+            }
+
+            return null;
+        }
+
+        // The registry evolves through idempotent in-place migrations (see XR50ManualTableCreator
+        // for the tenant-DB equivalent): CREATE TABLE IF NOT EXISTS does not add new columns to
+        // existing deployments, so the column and its unique index are added here on first touch.
+        private static bool _hubTenantIdColumnEnsured;
+
+        private async Task EnsureHubTenantIdColumnAsync(MySqlConnection connection)
+        {
+            if (_hubTenantIdColumnEnsured)
+            {
+                return;
+            }
+
+            var columnCheckSql = @"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'XR50TenantRegistry'
+                AND COLUMN_NAME = 'HubTenantId'";
+
+            using (var checkCommand = new MySqlCommand(columnCheckSql, connection))
+            {
+                if (Convert.ToInt32(await checkCommand.ExecuteScalarAsync()) == 0)
+                {
+                    _logger.LogInformation("Adding HubTenantId column to XR50TenantRegistry");
+                    using var alterCommand = new MySqlCommand(
+                        "ALTER TABLE `XR50TenantRegistry` ADD COLUMN `HubTenantId` char(36) NULL", connection);
+                    await alterCommand.ExecuteNonQueryAsync();
+                }
+            }
+
+            var indexCheckSql = @"SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'XR50TenantRegistry'
+                AND INDEX_NAME = 'ux_registry_hub_tenant'";
+
+            using (var checkCommand = new MySqlCommand(indexCheckSql, connection))
+            {
+                if (Convert.ToInt32(await checkCommand.ExecuteScalarAsync()) == 0)
+                {
+                    _logger.LogInformation("Adding unique index on XR50TenantRegistry.HubTenantId");
+                    using var indexCommand = new MySqlCommand(
+                        "ALTER TABLE `XR50TenantRegistry` ADD UNIQUE INDEX `ux_registry_hub_tenant` (`HubTenantId`)", connection);
+                    await indexCommand.ExecuteNonQueryAsync();
+                }
+            }
+
+            _hubTenantIdColumnEnsured = true;
         }
 
         public async Task<User> GetOwnerUserAsync(string ownerName, string tenantDatabaseName)
@@ -241,6 +343,7 @@ namespace XR50TrainingAssetRepo.Services
             var connectionString = _configuration.GetConnectionString("DefaultConnection");
             using var connection = new MySqlConnection(connectionString);
             await connection.OpenAsync();
+            await EnsureHubTenantIdColumnAsync(connection);
 
             // FIXED: UPDATE with S3 fields
             var sql = @"
@@ -257,7 +360,8 @@ namespace XR50TrainingAssetRepo.Services
                     DefaultAICollection = @defaultAICollection,
                     InnovChatbotBaseUrl = @innovChatbotBaseUrl,
                     InnovChatbotApiToken = @innovChatbotApiToken,
-                    InnovChatbotDefaultPilot = @innovChatbotDefaultPilot
+                    InnovChatbotDefaultPilot = @innovChatbotDefaultPilot,
+                    HubTenantId = @hubTenantId
                 WHERE TenantName = @tenantName AND IsActive = 1";
 
             using var command = new MySqlCommand(sql, connection);
@@ -275,6 +379,7 @@ namespace XR50TrainingAssetRepo.Services
             command.Parameters.AddWithValue("@innovChatbotBaseUrl", tenant.InnovChatbotBaseUrl ?? (object)DBNull.Value);
             command.Parameters.AddWithValue("@innovChatbotApiToken", tenant.InnovChatbotApiToken ?? (object)DBNull.Value);
             command.Parameters.AddWithValue("@innovChatbotDefaultPilot", tenant.InnovChatbotDefaultPilot ?? (object)DBNull.Value);
+            command.Parameters.AddWithValue("@hubTenantId", tenant.HubTenantId?.ToString("D") ?? (object)DBNull.Value);
 
             await command.ExecuteNonQueryAsync();
 

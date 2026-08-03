@@ -111,6 +111,13 @@ services:
       IAM__AllowAnonymousInDevelopment: ${IAM_ALLOW_ANONYMOUS:-false}
       IAM__SkipCertificateValidation: ${IAM_SKIP_CERT_VALIDATION:-false}
 
+      # XR5.0 Hub session token integration (partner IAM). The shared secret and the
+      # development token arrive from the Hub operator out of band; never commit them.
+      # XR50HUB_DEV_TOKEN is honored only when the environment is Development.
+      XR50Hub__BaseUrl: ${XR50HUB_BASE_URL:-https://platform.xr50.eu}
+      XR50Hub__SharedSecret: ${XR50HUB_SHARED_SECRET:-}
+      XR50Hub__DevelopmentToken: ${XR50HUB_DEV_TOKEN:-}
+
       # CORS Configuration (comma-separated origins, empty = permissive in dev only)
       Cors__AllowedOrigins__0: ${CORS_ORIGIN_0:-}
       Cors__AllowedOrigins__1: ${CORS_ORIGIN_1:-}

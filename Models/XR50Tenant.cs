@@ -45,6 +45,12 @@ namespace XR50TrainingAssetRepo.Models
 
         public bool IsInnovChatbotConfigured() => !string.IsNullOrEmpty(InnovChatbotBaseUrl);
 
+        // XR5.0 Hub Integration
+        // Tenant id used by the Hub IAM (session token "tenantId" claim). Hub-authenticated
+        // requests are scoped to the tenant whose HubTenantId matches; unset means the tenant
+        // is not reachable through Hub session tokens.
+        public Guid? HubTenantId { get; set; }
+
         // User Management
         public User? Owner { get; set; }
         public virtual ICollection<TenantAdmin> TenantAdmins { get; set; } = new List<TenantAdmin>();

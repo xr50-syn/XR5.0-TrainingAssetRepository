@@ -24,6 +24,26 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
                 ?? user.FindFirst("sub")?.Value;
         }
 
+        /// <summary>
+        /// User id for attributing writes (progress records, submissions). Falls back to the
+        /// configured development user ONLY under the Development anonymous bypass - the same
+        /// condition the authorization handlers use. Returns null when there is no usable
+        /// identity; callers must reject the request rather than invent one.
+        /// </summary>
+        public static string? GetEffectiveUserId(
+            this ClaimsPrincipal user, IamOptions options, IWebHostEnvironment environment)
+        {
+            var userId = user.GetUserId();
+            if (!string.IsNullOrEmpty(userId))
+            {
+                return userId;
+            }
+
+            return environment.IsDevelopment() && options.AllowAnonymousInDevelopment
+                ? options.DevelopmentUserId
+                : null;
+        }
+
         /// <summary>Tenant the token is scoped to, per the configured tenant claim.</summary>
         public static string? GetTenantName(this ClaimsPrincipal user, IamOptions options)
         {

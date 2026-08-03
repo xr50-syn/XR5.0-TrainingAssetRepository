@@ -92,6 +92,7 @@ namespace XR50TrainingAssetRepo.Controllers
                     InnovChatbotBaseUrl = request.InnovChatbotBaseUrl,
                     InnovChatbotApiToken = request.InnovChatbotApiToken,
                     InnovChatbotDefaultPilot = request.InnovChatbotDefaultPilot,
+                    HubTenantId = request.HubTenantId,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -203,9 +204,50 @@ namespace XR50TrainingAssetRepo.Controllers
             }
         }
 
-       
+
+        /// Set or clear the XR5.0 Hub tenant id this tenant is reachable under.
+        /// Hub session tokens whose tenantId claim matches are scoped to this tenant.
+
+        [HttpPut("{tenantName}/hub-tenant")]
+        [Authorize(Policy = "SystemAdmin")]
+        public async Task<ActionResult<TenantResponse>> SetHubTenant(string tenantName, [FromBody] SetHubTenantRequest request)
+        {
+            try
+            {
+                _logger.LogInformation("Setting Hub tenant id for tenant {TenantName} to {HubTenantId}",
+                    tenantName, request.HubTenantId?.ToString("D") ?? "(none)");
+
+                var tenant = await _tenantManagementService.GetTenantAsync(tenantName);
+                if (tenant == null)
+                {
+                    return this.ProblemNotFound($"Tenant '{tenantName}' not found.");
+                }
+
+                tenant.HubTenantId = request.HubTenantId;
+                var updated = await _tenantManagementService.UpdateTenantAsync(tenantName, tenant);
+
+                return Ok(TenantResponse.FromTenant(updated));
+            }
+            catch (ArgumentException)
+            {
+                return this.ProblemNotFound($"Tenant '{tenantName}' not found.");
+            }
+            catch (MySql.Data.MySqlClient.MySqlException ex) when (ex.Number == 1062)
+            {
+                // Unique index on HubTenantId: one Hub tenant maps to exactly one local tenant
+                _logger.LogWarning("Hub tenant id {HubTenantId} is already mapped to another tenant",
+                    request.HubTenantId?.ToString("D"));
+                return this.ProblemConflict($"Hub tenant id '{request.HubTenantId:D}' is already mapped to another tenant.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error setting Hub tenant id for tenant: {TenantName}", tenantName);
+                return this.ProblemServerError("Failed to set Hub tenant id.");
+            }
+        }
+
         /// Delete a tenant (soft delete - marks as inactive)
-        
+
         [HttpDelete("{tenantName}")]
         [Authorize(Policy = "SystemAdmin")]
         public async Task<ActionResult> DeleteTenant(string tenantName)
