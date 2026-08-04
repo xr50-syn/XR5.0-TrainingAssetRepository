@@ -1,0 +1,28 @@
+{
+  "TenantSettings":{
+    "UsersPath":"/ocs/v1.php/cloud/users",
+    "GroupsPath":"/ocs/v1.php/cloud/groups",
+    "SharesPath":"/ocs/v1.php/apps/files_sharing/api/v1/shares"
+  },
+  "IAM": {
+    "Authority": "http://localhost:8180/realms/xr50",
+    "MetadataEndpoint": "http://localhost:8180/realms/xr50/.well-known/openid-configuration",
+    "Issuer": "http://localhost:8180/realms/xr50",
+    "SwaggerIssuer": "http://192.168.1.33:8180/realms/xr50",
+    "Audience": "xr50-training-api",
+    "RequireHttpsMetadata": false,
+    "AllowAnonymousInDevelopment": true,
+    "DevelopmentUserId": "demoadmin"
+  },
+  "urls": "http://*:5286",
+  "Logging":{
+    "LogLevel":{
+      "Default":"Information",
+      "Microsoft.AspNetCore":"Warning"
+    }
+  },
+  "ChatbotApi": {
+    "BaseUrl": "https://test.xr50.work",
+    "ApiKey": "your-api-key"
+  }
+}

@@ -40,13 +40,13 @@ foreach ($bucket in $buckets) {
   $bucketExists = $false
 
   # Check if bucket already exists.
-  & aws --endpoint-url=http://localhost:9000 s3 ls "s3://$bucket" 2>$null
+  & aws --endpoint-url=http://localhost:10000 s3 ls "s3://$bucket" 2>$null
   if ($LASTEXITCODE -eq 0) {
     Write-Host "  Bucket $bucket already exists"
     $bucketExists = $true
   } else {
     Write-Host "  Creating bucket: $bucket"
-    & aws --endpoint-url=http://localhost:9000 --region us-east-1 s3 mb "s3://$bucket" 2>$null
+    & aws --endpoint-url=http://localhost:10000 --region us-east-1 s3 mb "s3://$bucket" 2>$null
     if ($LASTEXITCODE -eq 0) {
       Write-Host "  Successfully created bucket: $bucket"
       $bucketExists = $true
@@ -55,7 +55,7 @@ foreach ($bucket in $buckets) {
       Write-Host "    Make sure:"
       Write-Host "    - MinIO is running (docker-compose --profile sandbox up -d)"
       Write-Host "    - AWS CLI is configured with MinIO credentials"
-      Write-Host "    - You can access http://localhost:9000"
+      Write-Host "    - You can access http://localhost:10000"
       $bucketExists = $false
     }
   }
@@ -81,9 +81,9 @@ foreach ($bucket in $buckets) {
 
     $policyUri = (Get-Item $policyPath).FullName.Replace('\', '/')
     $policyParam = "file://$policyUri"
-    $policyCommand = "aws --endpoint-url=http://localhost:9000 s3api put-bucket-policy --bucket `"$bucket`" --policy `"$policyParam`""
+    $policyCommand = "aws --endpoint-url=http://localhost:10000 s3api put-bucket-policy --bucket `"$bucket`" --policy `"$policyParam`""
     Write-Host "  Command: $policyCommand"
-    & aws --endpoint-url=http://localhost:9000 s3api put-bucket-policy --bucket "$bucket" --policy "$policyParam" 2>$null
+    & aws --endpoint-url=http://localhost:10000 s3api put-bucket-policy --bucket "$bucket" --policy "$policyParam" 2>$null
     if ($LASTEXITCODE -eq 0) {
       Write-Host "  Bucket $bucket is now publicly readable"
     } else {
@@ -98,7 +98,7 @@ Write-Host ""
 Write-Host "=========================================="
 Write-Host "Listing all S3 buckets in MinIO:"
 Write-Host "=========================================="
-& aws --endpoint-url=http://localhost:9000 s3 ls
+& aws --endpoint-url=http://localhost:10000 s3 ls
 
 Write-Host ""
 Write-Host "=========================================="
@@ -111,11 +111,11 @@ foreach ($bucket in $buckets) {
 }
 Write-Host ""
 Write-Host "You can now:"
-Write-Host "  - Access MinIO Console: http://localhost:9001"
+Write-Host "  - Access MinIO Console: http://localhost:10001"
 Write-Host "  - Login with: minioadmin / minioadmin"
 Write-Host "  - Use Swagger API: http://localhost:5286/swagger"
 Write-Host ""
 Write-Host "To create additional buckets:"
-Write-Host "  aws --endpoint-url=http://localhost:9000 s3 mb s3://your-bucket-name"
+Write-Host "  aws --endpoint-url=http://localhost:10000 s3 mb s3://your-bucket-name"
 Write-Host ""
 Write-Host "=========================================="

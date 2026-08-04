@@ -35,12 +35,12 @@ echo ""
 
 for BUCKET in "${BUCKETS[@]}"; do
   # Check if bucket already exists
-  if aws --endpoint-url=http://localhost:9000 s3 ls "s3://$BUCKET" 2>/dev/null; then
+  if aws --endpoint-url=http://localhost:10000 s3 ls "s3://$BUCKET" 2>/dev/null; then
     echo "✓ Bucket $BUCKET already exists"
     BUCKET_EXISTS=true
   else
     echo "  Creating bucket: $BUCKET"
-    if aws --endpoint-url=http://localhost:9000 \
+    if aws --endpoint-url=http://localhost:10000 \
        --region us-east-1 \
        s3 mb "s3://$BUCKET" 2>/dev/null; then
       echo "  ✓ Successfully created bucket: $BUCKET"
@@ -50,7 +50,7 @@ for BUCKET in "${BUCKETS[@]}"; do
       echo "    Make sure:"
       echo "    - MinIO is running (docker-compose --profile sandbox up -d)"
       echo "    - AWS CLI is configured with MinIO credentials"
-      echo "    - You can access http://localhost:9000"
+      echo "    - You can access http://localhost:10000"
       BUCKET_EXISTS=false
     fi
   fi
@@ -75,7 +75,7 @@ for BUCKET in "${BUCKETS[@]}"; do
 EOF
 
     # Apply public read policy
-    if aws --endpoint-url=http://localhost:9000 \
+    if aws --endpoint-url=http://localhost:10000 \
        s3api put-bucket-policy \
        --bucket "$BUCKET" \
        --policy file:///tmp/public-policy-$BUCKET.json 2>/dev/null; then
@@ -93,7 +93,7 @@ echo ""
 echo "=========================================="
 echo "Listing all S3 buckets in MinIO:"
 echo "=========================================="
-aws --endpoint-url=http://localhost:9000 s3 ls
+aws --endpoint-url=http://localhost:10000 s3 ls
 
 echo ""
 echo "=========================================="
@@ -106,11 +106,11 @@ for BUCKET in "${BUCKETS[@]}"; do
 done
 echo ""
 echo "You can now:"
-echo "  - Access MinIO Console: http://localhost:9001"
+echo "  - Access MinIO Console: http://localhost:10001"
 echo "  - Login with: minioadmin / minioadmin"
 echo "  - Use Swagger API: http://localhost:5286/swagger"
 echo ""
 echo "To create additional buckets:"
-echo "  aws --endpoint-url=http://localhost:9000 s3 mb s3://your-bucket-name"
+echo "  aws --endpoint-url=http://localhost:10000 s3 mb s3://your-bucket-name"
 echo ""
 echo "=========================================="
