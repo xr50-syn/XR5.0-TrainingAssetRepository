@@ -92,8 +92,46 @@ aws --endpoint-url=http://localhost:9000 s3 ls
 
 ### Access the Services
 - **Repository API (Swagger)**: http://localhost:5286/swagger
+- **Authoring Tool (frontend)**: http://localhost:5173
 - **MinIO Console (Web UI)**: http://localhost:9001 (Login: minioadmin/minioadmin)
 - **MinIO API**: http://localhost:9000
+
+## Authoring Tool Frontend
+
+The sandbox profile also starts the **XR50 Training Programs Authoring Tool** (React/Vite). It runs
+the Vite **dev server** in a `node:22-alpine` container with the app bind-mounted from a sibling
+checkout - there is no image to build, and edits on disk hot-reload.
+
+Clone it next to this repository:
+
+```bash
+cd ..
+git clone https://github.com/immersivelives/XR50-Training-Programs-Authoring-Tool-Vite.git
+cd XR5.0-TrainingAssetRepository
+docker-compose --profile sandbox up -d
+```
+
+The first start runs `npm install` inside the container (a minute or two); dependencies are cached
+in the `authoring_tool_node_modules` volume, so later starts are immediate.
+
+Relevant `.env` settings:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `AUTHORING_TOOL_PATH` | `../XR50-Training-Programs-Authoring-Tool-Vite` | Where the app is checked out, relative to this repo |
+| `AUTHORING_TOOL_PORT` | `5173` | Host port for the dev server |
+| `AUTHORING_TOOL_SERVER_API` | `http://localhost` | Host the **browser** uses to reach the API and MinIO |
+
+`AUTHORING_TOOL_SERVER_API` is passed to the app as `VITE_SERVER_API`; the app appends `:5286` for
+the API and `:9000` for bucket downloads. Because the requests come from the browser, it must be an
+address reachable from your machine (e.g. `http://localhost`, or the LAN IP if you open the tool from
+another device) - not a compose service name. It is read at container start, so a change only needs
+`docker-compose --profile sandbox up -d authoring-tool`.
+
+On first load the tool asks for a Tenant ID, which must be an existing tenant (see "Create a Test
+Tenant" below). Cross-origin calls work out of the box because the sandbox runs with
+`ASPNETCORE_ENVIRONMENT=Development`, where CORS is permissive; if you set `CORS_ORIGIN_0`, include
+`http://localhost:5173` in the allowed origins.
 
 ## Testing the Repository
 
@@ -109,6 +147,7 @@ Example request body (using pre-created bucket):
   "tenantName": "pilot5",
   "tenantGroup": "pilot-5",
   "description": "Demo tenant using pre-created bucket",
+  "hubTenantId": "976092b0-0ca8-404d-99b8-30a8c755719c",
   "storageType": "S3",
   "s3Config": {
     "bucketName": "xr50-sandbox-tenant-demo",

@@ -11,7 +11,10 @@ Developed as part of the **Horizon Europe XR5.0 project** (Grant Agreement No. 1
 git clone https://github.com/xr50-syn/XR5.0-TrainingAssetRepository.git
 cd XR5.0-TrainingAssetRepository
 
-# Start sandbox environment (MinIO + MariaDB + Keycloak)
+# Optional: clone the Authoring Tool frontend next to this repo (sandbox profile serves it)
+git clone https://github.com/immersivelives/XR50-Training-Programs-Authoring-Tool-Vite.git ../XR50-Training-Programs-Authoring-Tool-Vite
+
+# Start sandbox environment (MinIO + MariaDB + Keycloak + Authoring Tool)
 cp .env.sandbox.example .env
 # Edit .env and replace change_me values before starting
 docker-compose --profile sandbox up -d
@@ -25,6 +28,7 @@ powershell -ExecutionPolicy Bypass -File .\sandbox-init-buckets.ps1
 
 # Access
 # - API Swagger: http://localhost:5286/swagger
+# - Authoring Tool: http://localhost:5173
 # - MinIO Console: http://localhost:9001 (minioadmin/minioadmin)
 # - Keycloak: http://localhost:8180 (admin/admin)
 ```

@@ -16,6 +16,9 @@ volumes:
   # Keycloak volume (for auth testing)
   keycloak_data:
     driver: local
+  # Authoring Tool node_modules (installed in-container, not in the host checkout)
+  authoring_tool_node_modules:
+    driver: local
 
 services:
   mariadb:
@@ -141,6 +144,29 @@ services:
       - minio    # For MinIO testing environment
       - sandbox  # For LocalStack sandbox environment
       - default  # Always included
+
+  # Authoring Tool frontend (React/Vite SPA) - dev server, not a production build.
+  # The app lives in a sibling repo and is bind-mounted; nothing is baked into an image.
+  authoring-tool:
+    image: node:22-alpine
+    container_name: authoring-tool
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    depends_on:
+      - training-repo
+    environment:
+      # Host the *browser* uses to reach the API and MinIO, so it must be a host-visible
+      # address (not a compose service name). The app appends :5286 for the API and
+      # :9000 for the bucket.
+      VITE_SERVER_API: ${AUTHORING_TOOL_SERVER_API:-http://localhost}
+    volumes:
+      - ${AUTHORING_TOOL_PATH:-../XR50-Training-Programs-Authoring-Tool-Vite}:/app
+      # Keep container-installed dependencies out of the host checkout
+      - authoring_tool_node_modules:/app/node_modules
+    ports:
+      - "${AUTHORING_TOOL_PORT:-5173}:5173"
+    profiles:
+      - sandbox
 
   # OwnCloud services (only for lab environment)
   owncloud:
