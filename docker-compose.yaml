@@ -253,7 +253,7 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
-    command: server /data --console-address ":10001"
+    command: server /data --address ":10000" --console-address ":10001"
     volumes:
       - minio_data:/data
     healthcheck:
