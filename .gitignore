@@ -382,4 +382,5 @@ app/
 .codegpt
 # Vendor-specific agent configuration is local. Shared instructions live in AGENTS.md.
 .claude/
+XR50-Training-Programs-Authoring-Tool-Vite/
 TODO.md
