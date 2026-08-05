@@ -50,6 +50,25 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
             return user.FindFirst(options.TenantClaim)?.Value;
         }
 
+        /// <summary>
+        /// The Hub tenant id (tenantId claim of the decrypted session token), present only on
+        /// principals authenticated through the XR50Hub scheme. Null for JWT/Keycloak principals.
+        /// </summary>
+        public static Guid? GetHubTenantId(this ClaimsPrincipal user)
+        {
+            return Guid.TryParse(user.FindFirst(HubSessionTokenDefaults.HubTenantIdClaim)?.Value, out var id)
+                ? id
+                : null;
+        }
+
+        /// <summary>True when the principal was authenticated by the XR5.0 Hub session token scheme.</summary>
+        public static bool IsHubAuthenticated(this ClaimsPrincipal user)
+        {
+            return user.Identity?.IsAuthenticated == true
+                && user.Identity.AuthenticationType == HubSessionTokenDefaults.SchemeName
+                && user.GetHubTenantId() != null;
+        }
+
         public static bool IsSystemAdmin(this ClaimsPrincipal user, IamOptions options)
         {
             return HasAnyRole(user, options, options.SystemAdminRoles);

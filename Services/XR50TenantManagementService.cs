@@ -27,6 +27,7 @@ namespace XR50TrainingAssetRepo.Services
         Task<XR50Tenant?> GetTenantByHubTenantIdAsync(Guid hubTenantId);
         Task<XR50Tenant> CreateTenantAsync(XR50Tenant tenant);
         Task<XR50Tenant> UpdateTenantAsync(string tenantName, XR50Tenant tenant);
+        Task GrantTenantAdminAsync(string tenantName, string tenantDatabaseName, string userName, string? userEmail);
         Task<User> GetOwnerUserAsync(string ownerName, string tenantName);
         Task DeleteTenantAsync(string tenantName);
         Task DeleteTenantCompletelyAsync(string tenantName); // New method for complete deletion
@@ -336,6 +337,47 @@ namespace XR50TrainingAssetRepo.Services
             createdTenant.TenantSchema = _tenantService.GetTenantSchema(tenant.TenantName);
             await CreateTenantStorageAsync(tenant);
             return createdTenant;
+        }
+
+        /// <summary>
+        /// Ensures a user exists in the tenant database and is a member of TenantAdmins,
+        /// WITHOUT touching the system-admin flag (self-service provisioning must never mint
+        /// cross-tenant admins). Existing rows are left as they are apart from filling an
+        /// empty e-mail, which the Hub identity join needs.
+        /// </summary>
+        public async Task GrantTenantAdminAsync(string tenantName, string tenantDatabaseName, string userName, string? userEmail)
+        {
+            var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
+            var tenantConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDatabaseName);
+
+            using var connection = new MySqlConnection(tenantConnectionString);
+            await connection.OpenAsync();
+
+            var upsertUserSql = @"
+                INSERT INTO `Users` (`UserName`, `FullName`, `UserEmail`, `Password`, `admin`)
+                VALUES (@userName, NULL, @userEmail, NULL, 0)
+                ON DUPLICATE KEY UPDATE
+                    `UserEmail` = IF(`UserEmail` IS NULL OR `UserEmail` = '', @userEmail, `UserEmail`)";
+
+            using (var userCommand = new MySqlCommand(upsertUserSql, connection))
+            {
+                userCommand.Parameters.AddWithValue("@userName", userName);
+                userCommand.Parameters.AddWithValue("@userEmail", userEmail ?? (object)DBNull.Value);
+                await userCommand.ExecuteNonQueryAsync();
+            }
+
+            var grantSql = @"
+                INSERT IGNORE INTO `TenantAdmins` (`TenantName`, `UserName`)
+                VALUES (@tenantName, @userName)";
+
+            using (var grantCommand = new MySqlCommand(grantSql, connection))
+            {
+                grantCommand.Parameters.AddWithValue("@tenantName", tenantName);
+                grantCommand.Parameters.AddWithValue("@userName", userName);
+                await grantCommand.ExecuteNonQueryAsync();
+            }
+
+            _logger.LogInformation("Granted tenant admin on {TenantName} to {UserName}", tenantName, userName);
         }
 
         public async Task<XR50Tenant> UpdateTenantAsync(string tenantName, XR50Tenant tenant)

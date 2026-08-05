@@ -275,6 +275,7 @@ public class AIAssistantMaterialUpdateTests
         public Task<XR50Tenant?> GetTenantByHubTenantIdAsync(Guid hubTenantId) => Task.FromResult<XR50Tenant?>(null);
         public Task<XR50Tenant> CreateTenantAsync(XR50Tenant tenant) => Task.FromResult(tenant);
         public Task<XR50Tenant> UpdateTenantAsync(string tenantName, XR50Tenant tenant) => Task.FromResult(tenant);
+        public Task GrantTenantAdminAsync(string tenantName, string tenantDatabaseName, string userName, string? userEmail) => Task.CompletedTask;
         public Task<User> GetOwnerUserAsync(string ownerName, string tenantName) => Task.FromResult<User>(null!);
         public Task DeleteTenantAsync(string tenantName) => Task.CompletedTask;
         public Task DeleteTenantCompletelyAsync(string tenantName) => Task.CompletedTask;

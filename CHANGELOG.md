@@ -2,7 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-08-03
+## [Unreleased] - 2026-08-05
+
+### Added - Self-service tenant provisioning for Hub-authenticated users
+
+#### Summary
+A fresh Hub-hosted deployment had a bootstrap hole: tenant creation required SystemAdmin, but with the Hub-only production auth surface no identity could ever hold that role before a tenant existed. Tenant creation now uses a new `TenantCreator` policy: system admins as before, plus any Hub-authenticated user provisioning the tenant for their **own** Hub tenant. Guard rails on the self-service path: the new tenant is force-bound to the caller's token `tenantId` (caller-supplied `hubTenantId` ignored — no GUID squatting), one local tenant per Hub tenant (409 on conflict, pre-checked because the registry upsert would otherwise rewrite the colliding row), the owner's `admin` flag is stripped (self-service cannot mint cross-tenant admins), and the creator is seeded into the tenant DB as its tenant admin, matched by their Hub e-mail. JWT/Keycloak principals still require SystemAdmin; tenant deletion and hub-tenant re-mapping remain SystemAdmin-only. The handler now also emits the raw `hubTenantId` claim.
+
+#### Affected files
+- `Infrastructure/Auth/TenantAuthorizationHandlers.cs` (`TenantCreatorRequirement`/handler), `ClaimsPrincipalExtensions.cs` (`GetHubTenantId`, `IsHubAuthenticated`), `XR50HubOptions.cs`, `HubSessionTokenAuthenticationHandler.cs` (hubTenantId claim)
+- `Controllers/XR50TenantController.cs` — TenantCreator policy, self-service binding/sanitization/409, creator grant
+- `Services/XR50TenantManagementService.cs` — `GrantTenantAdminAsync`
+- `Program.cs` — handler + policy registration
+- Docs: `docs/guides/authentication.md`
+- Tests: `Controllers/TenantSelfServiceCreationTests.cs` (new), `Integration/HubAuthenticationTests.cs`, `Integration/AuthorizationTests.cs`
 
 ### Added - XR5.0 Hub session token authentication (partner IAM integration)
 

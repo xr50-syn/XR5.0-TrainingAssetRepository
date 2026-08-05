@@ -203,6 +203,26 @@ public class HubAuthenticationTests : IClassFixture<HubAuthWebApplicationFixture
         response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
     }
 
+    // --- Self-service tenant creation ---
+
+    [Fact]
+    public async Task HubMember_PassesAuthorization_OnTenantCreation()
+    {
+        // Any Hub-authenticated user may reach the create endpoint (self-service provisioning
+        // for their own Hub tenant); the TenantCreator policy must not 401/403 them. The action
+        // itself then fails in the hermetic environment (registry uses raw MySQL).
+        var token = RegisterToken(HubDecryptResult.ValidToken(ClaimsFor(UnmappedTenantId)));
+        var request = Request(HttpMethod.Post, "/xr50/trainingAssetRepository/Tenants", token);
+        request.Content = new StringContent(
+            """{ "tenantName": "selfsvc", "storageType": "OwnCloud", "ownCloudConfig": { "tenantDirectory": "d" } }""",
+            System.Text.Encoding.UTF8, "application/json");
+
+        var response = await _client.SendAsync(request);
+
+        response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+        response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+    }
+
     // --- Development token ---
 
     [Fact]

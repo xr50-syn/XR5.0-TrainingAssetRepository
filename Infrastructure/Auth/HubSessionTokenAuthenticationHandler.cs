@@ -147,6 +147,7 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
                 new("sub", hubClaims.UserId.ToString("D")),
                 new(HubSessionTokenDefaults.SessionIdClaim, hubClaims.SessionId.ToString("D")),
                 new(HubSessionTokenDefaults.ApplicationIdClaim, hubClaims.ApplicationId.ToString("D")),
+                new(HubSessionTokenDefaults.HubTenantIdClaim, hubClaims.TenantId.ToString("D")),
             };
 
             // preferred_username heads the GetUserId() fallback chain; prefer the matched local

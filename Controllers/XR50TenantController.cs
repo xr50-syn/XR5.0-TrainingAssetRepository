@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services;
+using XR50TrainingAssetRepo.Infrastructure.Auth;
 using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 using Microsoft.AspNetCore.Authorization;
 
@@ -14,15 +15,18 @@ namespace XR50TrainingAssetRepo.Controllers
     {
         private readonly IXR50TenantManagementService _tenantManagementService;
         private readonly IStorageService _storageService;
+        private readonly IamOptions _iamOptions;
         private readonly ILogger<TenantsController> _logger;
 
         public TenantsController(
             IXR50TenantManagementService tenantManagementService,
             IStorageService storageService,
+            Microsoft.Extensions.Options.IOptions<IamOptions> iamOptions,
             ILogger<TenantsController> logger)
         {
             _tenantManagementService = tenantManagementService;
             _storageService = storageService;
+            _iamOptions = iamOptions.Value;
             _logger = logger;
         }
 
@@ -49,20 +53,53 @@ namespace XR50TrainingAssetRepo.Controllers
             }
         }
 
-       
-        /// Create a new tenant with pre-provisioned infrastructure
-        
+
+        /// Create a new tenant with pre-provisioned infrastructure.
+        /// System admins create tenants freely; Hub-authenticated users self-provision the
+        /// tenant for their OWN Hub tenant id (the token's tenantId claim), becoming its
+        /// tenant admin. Self-service can never bind another Hub tenant's id, mint a
+        /// system admin, or create a second tenant for the same Hub tenant.
+
         [HttpPost]
-        [Authorize(Policy = "SystemAdmin")]
+        [Authorize(Policy = "TenantCreator")]
         public async Task<ActionResult<TenantResponse>> CreateTenant([FromBody] CreateTenantRequest request)
         {
             try
             {
-                _logger.LogInformation("Creating tenant: {TenantName} with {StorageType} storage", 
+                _logger.LogInformation("Creating tenant: {TenantName} with {StorageType} storage",
                     request.TenantName, request.StorageType);
 
                 // Validate the request
                 request.Validate();
+
+                // Self-service: a Hub-authenticated caller without a system-admin role binds
+                // the new tenant to their own Hub tenant id; any caller-supplied hubTenantId
+                // is ignored. System admins keep the request's value.
+                var callerHubTenantId = User.GetHubTenantId();
+                var selfService = callerHubTenantId.HasValue && !User.IsSystemAdmin(_iamOptions);
+                var effectiveHubTenantId = selfService ? callerHubTenantId : request.HubTenantId;
+
+                if (selfService && request.Owner != null && request.Owner.Admin)
+                {
+                    // The owner row's admin flag maps to the SYSTEM-admin role; self-service
+                    // must not be able to mint one. Tenant-admin rights are granted below.
+                    _logger.LogInformation("Self-service tenant creation: downgrading owner admin flag for {TenantName}",
+                        request.TenantName);
+                    request.Owner.Admin = false;
+                }
+
+                // One local tenant per Hub tenant id. Checked here (not left to the unique
+                // index) because the registry INSERT uses ON DUPLICATE KEY UPDATE, which on a
+                // HubTenantId collision would silently rewrite the OTHER tenant's row.
+                if (effectiveHubTenantId.HasValue
+                    && await _tenantManagementService.GetTenantByHubTenantIdAsync(effectiveHubTenantId.Value) is XR50Tenant existing)
+                {
+                    _logger.LogWarning("Hub tenant id {HubTenantId} is already mapped to tenant {TenantName}",
+                        effectiveHubTenantId.Value, existing.TenantName);
+                    return this.ProblemConflict(selfService
+                        ? "Your Hub tenant already has a training tenant."
+                        : $"Hub tenant id '{effectiveHubTenantId.Value:D}' is already mapped to another tenant.");
+                }
 
                 // Validate storage type matches running implementation
                 var runningStorageType = _storageService.GetStorageType();
@@ -92,7 +129,7 @@ namespace XR50TrainingAssetRepo.Controllers
                     InnovChatbotBaseUrl = request.InnovChatbotBaseUrl,
                     InnovChatbotApiToken = request.InnovChatbotApiToken,
                     InnovChatbotDefaultPilot = request.InnovChatbotDefaultPilot,
-                    HubTenantId = request.HubTenantId,
+                    HubTenantId = effectiveHubTenantId,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -151,7 +188,20 @@ namespace XR50TrainingAssetRepo.Controllers
 
                 // Create the tenant
                 var createdTenant = await _tenantManagementService.CreateTenantAsync(tenant);
-                
+
+                // Self-service: the creator becomes tenant admin of the tenant they just
+                // provisioned (matched by the e-mail from their Hub identity).
+                if (selfService && !string.IsNullOrEmpty(createdTenant.TenantSchema))
+                {
+                    var creatorEmail = User.FindFirst("email")?.Value;
+                    var creatorUserName = User.GetUserId();
+                    if (!string.IsNullOrEmpty(creatorUserName))
+                    {
+                        await _tenantManagementService.GrantTenantAdminAsync(
+                            createdTenant.TenantName, createdTenant.TenantSchema, creatorUserName, creatorEmail);
+                    }
+                }
+
                 var response = TenantResponse.FromTenant(createdTenant);
                 
                 _logger.LogInformation("Successfully created tenant: {TenantName} with {StorageType} storage", 

@@ -42,6 +42,10 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
         public const string ApplicationIdClaim = "applicationId";
         public const string SkillLevelClaim = "skillLevel";
 
+        /// <summary>Raw Hub tenant id (GUID) from the token's tenantId claim, emitted even when
+        /// no local tenant is mapped. Used for self-service tenant provisioning.</summary>
+        public const string HubTenantIdClaim = "hubTenantId";
+
         /// <summary>HttpContext.Items key the handler uses to tell the challenge step that the
         /// failure was Hub unavailability (503) rather than a rejected token (401).</summary>
         public const string FailureKindItem = "XR50Hub.FailureKind";

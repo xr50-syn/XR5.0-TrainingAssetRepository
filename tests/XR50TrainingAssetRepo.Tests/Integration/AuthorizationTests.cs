@@ -171,6 +171,19 @@ public class AuthorizationTests : IClassFixture<WebApplicationFixture>
     }
 
     [Fact]
+    public async Task TenantUser_OnTenantCreation_Returns403()
+    {
+        // Tenant creation is TenantCreator-gated: JWT/test-scheme principals need a
+        // system-admin role (Hub self-service does not apply to this scheme).
+        var request = Request(HttpMethod.Post, "/xr50/trainingAssetRepository/Tenants", roles: "user", tenant: Tenant);
+        request.Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+
+        var response = await _client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
     public async Task SystemAdmin_OnTenantManagement_PassesAuthorization()
     {
         var response = await _client.SendAsync(

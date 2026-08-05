@@ -45,6 +45,14 @@ The Hub authenticates the user; **authorization stays grounded in our own regist
   Set the mapping per tenant with `PUT xr50/trainingAssetRepository/Tenants/{tenantName}/hub-tenant`
   (SystemAdmin) or at tenant creation (`hubTenantId` field). An unmapped `tenantId` still
   authenticates but carries no `tenantName`, so tenant-scoped endpoints return `403`.
+- **Self-service tenant provisioning**: any Hub-authenticated user may `POST Tenants` to create
+  the tenant for their *own* Hub tenant (`TenantCreator` policy). The new tenant is force-bound
+  to the caller's token `tenantId` (any caller-supplied `hubTenantId` is ignored), at most one
+  local tenant may exist per Hub tenant (`409` otherwise), the owner's system-admin flag is
+  stripped, and the creator is seeded as the tenant's admin (`TenantAdmins` row matched by their
+  Hub e-mail). This makes a fresh Hub-hosted deployment bootstrappable without any pre-seeded
+  admin: the first user of a pilot provisions and manages their own tenant. Tenant deletion and
+  re-mapping stay SystemAdmin-only, as does creation for JWT/Keycloak principals.
 - **User/roles**: the Hub identity is joined to the tenant DB's `Users` by e-mail
   (case-insensitive). `TenantAdmins` membership grants `tenantadmin`; `Users.admin` grants
   `systemadmin`. Known limitation: e-mail is the join key (the Hub `userId` GUID is not stored
