@@ -49,14 +49,14 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
             }
 
             var (tenantName, databaseName) = mapping.Value;
-            if (string.IsNullOrEmpty(claims.User.Email) || string.IsNullOrEmpty(databaseName))
+            if (string.IsNullOrEmpty(databaseName))
             {
                 return new HubLocalIdentity(tenantName, null, false, false);
             }
 
             try
             {
-                return await ResolveRolesAsync(tenantName, databaseName, claims.User.Email, cancellationToken);
+                return await ResolveRolesAsync(tenantName, databaseName, claims.UserId, claims.User.Email, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -94,7 +94,7 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
         }
 
         private async Task<HubLocalIdentity> ResolveRolesAsync(
-            string tenantName, string databaseName, string email, CancellationToken cancellationToken)
+            string tenantName, string databaseName, Guid hubUserId, string? email, CancellationToken cancellationToken)
         {
             var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
             var tenantConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, databaseName);
@@ -102,43 +102,31 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
             using var connection = new MySqlConnection(tenantConnectionString);
             await connection.OpenAsync(cancellationToken);
 
-            string? userName = null;
-            var isSystemAdmin = false;
-            var matches = 0;
-
-            // UserEmail has no unique index; take the first user by name so repeated logins
-            // resolve deterministically, and surface multi-matches for operators.
-            var userSql = @"
+            // Primary join: the Hub userId GUID against Users.UserName - the only identifier
+            // every Hub identity carries (service accounts have no e-mail). Provision such
+            // users locally with UserName = the Hub userId. Fallback for human users that were
+            // provisioned before GUID-keying: case-insensitive e-mail match.
+            var (userName, isSystemAdmin) = await FindUserAsync(connection, @"
                 SELECT UserName, admin
                 FROM Users
-                WHERE UserEmail IS NOT NULL AND LOWER(UserEmail) = LOWER(@email)
-                ORDER BY UserName";
+                WHERE LOWER(UserName) = LOWER(@key)", hubUserId.ToString("D"), cancellationToken);
 
-            using (var userCommand = new MySqlCommand(userSql, connection))
+            if (userName == null && !string.IsNullOrEmpty(email))
             {
-                userCommand.Parameters.AddWithValue("@email", email);
-                using var reader = await userCommand.ExecuteReaderAsync(cancellationToken);
-                while (await reader.ReadAsync(cancellationToken))
-                {
-                    matches++;
-                    if (userName == null)
-                    {
-                        userName = reader["UserName"]?.ToString();
-                        isSystemAdmin = Convert.ToBoolean(reader["admin"]);
-                    }
-                }
+                // UserEmail has no unique index; take the first user by name so repeated
+                // logins resolve deterministically.
+                (userName, isSystemAdmin) = await FindUserAsync(connection, @"
+                    SELECT UserName, admin
+                    FROM Users
+                    WHERE UserEmail IS NOT NULL AND LOWER(UserEmail) = LOWER(@key)
+                    ORDER BY UserName
+                    LIMIT 1", email, cancellationToken);
             }
 
             if (userName == null)
             {
-                _logger.LogDebug("No local user matches the Hub identity's email in tenant {TenantName}", tenantName);
+                _logger.LogDebug("No local user matches the Hub identity in tenant {TenantName}", tenantName);
                 return new HubLocalIdentity(tenantName, null, false, false);
-            }
-
-            if (matches > 1)
-            {
-                _logger.LogDebug("Multiple local users share an email in tenant {TenantName}; using {UserName}",
-                    tenantName, userName);
             }
 
             var adminSql = @"
@@ -152,6 +140,21 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
             var isTenantAdmin = Convert.ToInt32(await adminCommand.ExecuteScalarAsync(cancellationToken)) > 0;
 
             return new HubLocalIdentity(tenantName, userName, isTenantAdmin, isSystemAdmin);
+        }
+
+        private static async Task<(string? UserName, bool IsSystemAdmin)> FindUserAsync(
+            MySqlConnection connection, string sql, string key, CancellationToken cancellationToken)
+        {
+            using var command = new MySqlCommand(sql, connection);
+            command.Parameters.AddWithValue("@key", key);
+            using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+            if (await reader.ReadAsync(cancellationToken))
+            {
+                return (reader["UserName"]?.ToString(), Convert.ToBoolean(reader["admin"]));
+            }
+
+            return (null, false);
         }
     }
 }

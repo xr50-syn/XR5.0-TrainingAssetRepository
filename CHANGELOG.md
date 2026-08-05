@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-05
 
+### Changed - Hub identity joins local users by Hub userId GUID, e-mail as fallback
+
+#### Summary
+Most Hub identities will be e-mail-less service accounts, so e-mail cannot be the primary join key. The enricher now matches the token's `userId` GUID against `Users.UserName` first (provision Hub users locally with `UserName` = their Hub userId) and falls back to the case-insensitive e-mail match for human users provisioned by address. E-mail-less identities with no local row attribute their writes as the userId GUID (`preferred_username` fallback), which is also what self-service tenant creation seeds, so provisioned rows and written records always agree on the key.
+
+#### Affected files
+- `Infrastructure/Auth/HubIdentityEnricher.cs`, `HubSessionTokenAuthenticationHandler.cs`
+- Docs: `docs/guides/authentication.md`; Tests: `Controllers/TenantSelfServiceCreationTests.cs`
+
 ### Added - Self-service tenant provisioning for Hub-authenticated users
 
 #### Summary

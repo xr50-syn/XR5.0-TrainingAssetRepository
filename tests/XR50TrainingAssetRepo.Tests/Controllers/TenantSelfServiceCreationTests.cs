@@ -99,6 +99,19 @@ public class TenantSelfServiceCreationTests
         return new ClaimsPrincipal(new ClaimsIdentity(claims, HubSessionTokenDefaults.SchemeName));
     }
 
+    /// <summary>Mirrors what the handler emits for an e-mail-less service account: the Hub
+    /// userId GUID as preferred_username and no email claim.</summary>
+    private static ClaimsPrincipal ServiceAccountPrincipal(Guid hubTenantId, Guid hubUserId)
+    {
+        var claims = new List<Claim>
+        {
+            new("preferred_username", hubUserId.ToString("D")),
+            new(HubSessionTokenDefaults.HubTenantIdClaim, hubTenantId.ToString("D")),
+        };
+
+        return new ClaimsPrincipal(new ClaimsIdentity(claims, HubSessionTokenDefaults.SchemeName));
+    }
+
     private static CreateTenantRequest Request(Guid? requestedHubTenantId = null, bool ownerAdmin = false) => new()
     {
         TenantName = "selfservice",
@@ -144,6 +157,20 @@ public class TenantSelfServiceCreationTests
         service.Granted!.Value.TenantName.Should().Be("selfservice");
         service.Granted.Value.UserName.Should().Be("ada@pilot.eu");
         service.Granted.Value.Email.Should().Be("ada@pilot.eu");
+    }
+
+    [Fact]
+    public async Task SelfService_EmaillessServiceAccount_IsGrantedByHubUserIdGuid()
+    {
+        var hubUserId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
+        var service = new StubTenantManagementService();
+        var controller = CreateController(service, ServiceAccountPrincipal(CallerHubTenantId, hubUserId));
+
+        await controller.CreateTenant(Request());
+
+        service.Granted.Should().NotBeNull();
+        service.Granted!.Value.UserName.Should().Be(hubUserId.ToString("D"));
+        service.Granted.Value.Email.Should().BeNull();
     }
 
     [Fact]

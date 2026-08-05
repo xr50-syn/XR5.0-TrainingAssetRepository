@@ -31,9 +31,9 @@ never place it in a URL.
 
 | Hub claim | Emitted claim | Consumed by |
 |-----------|---------------|-------------|
-| `userId` | `sub` / NameIdentifier | audit, fallback user id |
-| `user.email` | `email`; also `preferred_username` when no local user matches | `GetUserId()` |
-| matched local `UserName` | `preferred_username` | progress records, `GetUserId()` |
+| `userId` | `sub` / NameIdentifier; primary local-user join key | role lookup, audit |
+| `user.email` | `email` | fallback local-user join, fallback attribution |
+| matched local `UserName` (else email, else userId GUID) | `preferred_username` | progress records, `GetUserId()` |
 | `tenantId` → registry lookup | `tenantName` | tenant-route authorization |
 | local DB roles | `role` (`tenantadmin` / `systemadmin`) | policy handlers |
 | `sessionId`, `applicationId`, `user.skillLevel` | same-named claims | available to controllers |
@@ -53,10 +53,12 @@ The Hub authenticates the user; **authorization stays grounded in our own regist
   Hub e-mail). This makes a fresh Hub-hosted deployment bootstrappable without any pre-seeded
   admin: the first user of a pilot provisions and manages their own tenant. Tenant deletion and
   re-mapping stay SystemAdmin-only, as does creation for JWT/Keycloak principals.
-- **User/roles**: the Hub identity is joined to the tenant DB's `Users` by e-mail
-  (case-insensitive). `TenantAdmins` membership grants `tenantadmin`; `Users.admin` grants
-  `systemadmin`. Known limitation: e-mail is the join key (the Hub `userId` GUID is not stored
-  locally); if several users share an e-mail the first by `UserName` wins.
+- **User/roles**: the Hub identity is joined to the tenant DB's `Users` primarily by the Hub
+  `userId` GUID against `UserName` (provision Hub users - especially e-mail-less service
+  accounts - with `UserName` = their Hub userId), falling back to a case-insensitive e-mail
+  match for human users provisioned by address. `TenantAdmins` membership grants `tenantadmin`;
+  `Users.admin` grants `systemadmin`. On the e-mail fallback, duplicates resolve to the first
+  user by `UserName`.
 
 ### Configuration
 
