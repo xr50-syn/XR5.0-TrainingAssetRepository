@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services.Materials;
 using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
@@ -15,13 +16,34 @@ namespace XR50TrainingAssetRepo.Controllers
     {
         private readonly IUserMaterialService _userMaterialService;
         private readonly ILogger<UsersProgressController> _logger;
+        private readonly IWebHostEnvironment _environment;
+        private readonly IamOptions _iamOptions;
 
         public UsersProgressController(
             IUserMaterialService userMaterialService,
-            ILogger<UsersProgressController> logger)
+            ILogger<UsersProgressController> logger,
+            IWebHostEnvironment environment,
+            IOptions<IamOptions> iamOptions)
         {
             _userMaterialService = userMaterialService;
             _logger = logger;
+            _environment = environment;
+            _iamOptions = iamOptions.Value;
+        }
+
+        /// <summary>
+        /// A member owns their progress and nobody else's: reading another user's records needs
+        /// a tenant-administration role. Returns null when the caller is allowed to proceed.
+        /// </summary>
+        private ActionResult? DenyIfNotOwnProgress(string userId)
+        {
+            if (User.CanActForUser(userId, _iamOptions, _environment))
+            {
+                return null;
+            }
+
+            _logger.LogWarning("Rejected cross-user progress access by {Actor}", User.GetUserId());
+            return this.ProblemForbidden("You can only access your own progress.");
         }
 
         /// <summary>
@@ -40,6 +62,11 @@ namespace XR50TrainingAssetRepo.Controllers
                     return this.ProblemBadRequest("userId is required.");
                 }
 
+                if (DenyIfNotOwnProgress(userId) is { } denied)
+                {
+                    return denied;
+                }
+
                 var result = await _userMaterialService.GetUserProgressAsync(userId);
                 return Ok(result);
             }
@@ -56,10 +83,12 @@ namespace XR50TrainingAssetRepo.Controllers
         }
 
         /// <summary>
-        /// Get overall progress for all users
+        /// Get overall progress for all users. Tenant-wide visibility is a management view,
+        /// so it needs a tenant-administration role; members read their own progress instead.
         /// GET /api/{tenantName}/users/progress
         /// </summary>
         [HttpGet("~/api/{tenantName}/users/progress")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<List<UserProgressResponse>>> GetAllUsersProgress(
             string tenantName)
         {
@@ -87,6 +116,11 @@ namespace XR50TrainingAssetRepo.Controllers
         {
             try
             {
+                if (DenyIfNotOwnProgress(userId) is { } denied)
+                {
+                    return denied;
+                }
+
                 var result = await _userMaterialService.GetUserMaterialDetailAsync(userId, materialId);
 
                 if (result == null)
@@ -115,6 +149,11 @@ namespace XR50TrainingAssetRepo.Controllers
         {
             try
             {
+                if (DenyIfNotOwnProgress(userId) is { } denied)
+                {
+                    return denied;
+                }
+
                 var result = await _userMaterialService.GetUserProgramMaterialsAsync(userId, programId);
 
                 if (result == null)

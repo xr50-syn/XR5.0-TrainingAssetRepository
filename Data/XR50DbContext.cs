@@ -373,6 +373,21 @@ namespace XR50TrainingAssetRepo.Data
             modelBuilder.Entity<TenantAdmin>()
                 .HasKey(ta => new { ta.TenantName, ta.UserName });
 
+            // Point the navigations at the key columns the TenantAdmins table actually has.
+            // By convention EF would invent shadow foreign keys (TenantName1 / UserName1) that
+            // exist in no schema, so any EF write to this table would fail.
+            modelBuilder.Entity<TenantAdmin>()
+                .HasOne(ta => ta.Tenant)
+                .WithMany(t => t.TenantAdmins)
+                .HasForeignKey(ta => ta.TenantName)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<TenantAdmin>()
+                .HasOne(ta => ta.User)
+                .WithMany()
+                .HasForeignKey(ta => ta.UserName)
+                .OnDelete(DeleteBehavior.NoAction);
+
             modelBuilder.Entity<MaterialRelationship>()
                 .HasKey(mr => mr.Id);
 

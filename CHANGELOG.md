@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-05
 
+### Fixed - Content-lifecycle authorization: members own their progress, nothing else
+
+#### Summary
+Auditing the lifecycle endpoints (not just tenant operations) turned up four places where the intended model — read content as a member, author as a tenant admin, write only your **own** progress — was not actually enforced. `POST materials/workflow-complete`, `video-complete` and `checklist-complete` create a material with all its steps/timestamps/entries but carried only the controller-level `TenantMember`, so any member could author content through them, bypassing the `TenantAdmin` gate on `POST materials`; they are now gated like every other authoring endpoint. `GET users/{userId}/progress`, `users/{userId}/materials/{materialId}` and `users/{userId}/programs/{programId}/materials` took the target user from the route with no check, so any member could read a colleague's quiz scores; they now require the caller to be that user or hold a tenant-administration role (403 otherwise), and the tenant-wide `GET users/progress` is `TenantAdmin`. `POST materials/{id}/complete` still had the ungated `demoadmin` identity fallback the earlier sweep removed elsewhere; it now uses `GetEffectiveUserId` and rejects unresolvable identities with 401. Finally, `ProgramProgressController`/`QuizProgressController` returned `("demoadmin", true)` — admin-level, tenant-wide progress visibility — whenever no identity resolved, and sourced "admin" from `Users.admin` alone, so a **tenant admin could not see their own tenant's progress**; both now derive it from the tenant-administration role (keeping the `Users.admin` flag as a fallback for principals whose roles are not in the token) and grant nothing without an identity.
+
+Writes were already self-attributed everywhere — no endpoint accepts a user id to record progress against — so the member half of the model needed no change.
+
+`DELETE innov-chatbot/{id}/history` is now `TenantAdmin` too: the INNOV chat request carries only query, pilot and expertise level, and the backend's clear-history call is `DELETE api/chat/history?pilot=…`, so history is per-pilot shared state — clearing it wipes every learner's conversation on that pilot, which is an administrative action rather than a per-learner reset. `POST ai-assistant/{id}/session/invalidate` and `POST materials/{id}/ai-assistant/refresh-status` are likewise not user-scoped (`AIAssistantSession` keys on the material, not the user) but are left at member level for now.
+
+#### Affected files
+- `Controllers/UsersProgressController.cs` (self-scoping + TenantAdmin on the tenant-wide view), `ProgramProgressController.cs`, `QuizProgressController.cs`, `XR50MaterialsController.cs` (three authoring endpoints gated, `/complete` identity fallback)
+- `Infrastructure/Auth/ClaimsPrincipalExtensions.cs` — `CanActForUser`, `CanReadOthersProgress`
+- Docs: `docs/guides/authentication.md` (role capability matrix)
+- Tests: `Integration/ProgressAuthorizationTests.cs` (new), `Integration/AuthorizationTests.cs`
+
+### Added - Local user/role coordination for Hub identities
+
+#### Summary
+The Hub operator will not carry roles in the session token, so the same user has to exist on both systems and permissions stay ours. Three pieces make that workable. Hub identities are now **provisioned just in time**: the first request of a mapped-tenant identity with no local row creates one keyed by the Hub `userId` (display name and e-mail from the token, no password, **no roles**), so new arrivals appear in the roster as plain members and an administrator only has to grant a role; subsequent requests refresh the display fields when the Hub profile changes. Opt out with `XR50Hub:AutoProvisionUsers=false`. New **`GET api/auth/me`** reports how a credential resolved locally — scheme, Hub `userId`/`tenantId`, joined local user, mapped tenant, effective role — which is also the shortest path to the id an administrator needs for a grant. New **`PUT api/{tenantName}/users/{userName}/role`** (TenantAdmin) grants or revokes `tenantadmin`, matching the two access levels the pilots asked for (`member`: read content, record own progress/scores; `tenantadmin`: full access within the tenant).
+
+Escalation paths closed along the way: the system-admin flag is no longer settable through the tenant-scoped user endpoints (a tenant admin could previously mint a cross-tenant admin — now reachable by anyone, since Hub users self-provision tenants), a tenant admin cannot demote themselves into a tenant with no administrator, deleting a user drops their role grants so a re-provisioned Hub user id inherits nothing, and user responses no longer include the stored password. Creating a user without a password is now allowed except on OwnCloud-backed tenants, so Hub service accounts can be pre-provisioned by their Hub userId. Also fixed EF's `TenantAdmin` mapping, which invented shadow foreign keys (`TenantName1`/`UserName1`) present in no schema, so any EF write to `TenantAdmins` would have failed.
+
+#### Affected files
+- `Infrastructure/Auth/HubIdentityEnricher.cs` (just-in-time provisioning + profile sync), `XR50HubOptions.cs` (`AutoProvisionUsers`)
+- `Controllers/XR50AuthController.cs` (new), `Controllers/XR50UserController.cs` (role endpoint, DTO responses, admin-flag guard, grant cleanup)
+- `Models/DTOs/XR50UserDtos.cs` (new), `Data/XR50DbContext.cs` (TenantAdmin relationships), `Infrastructure/ErrorHandling/ControllerProblemDetailsExtensions.cs` (`ProblemForbidden`)
+- Config: `appsettings.json`, `docker-compose.yaml`, `.env*.example`; Docs: `docs/guides/authentication.md`
+- Tests: `Integration/TenantUserRoleTests.cs` (new), `Integration/HubAuthenticationTests.cs`
+
 ### Changed - Hub identity joins local users by Hub userId GUID, e-mail as fallback
 
 #### Summary

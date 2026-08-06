@@ -12,9 +12,12 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
 
     /// <summary>
     /// Maps a decrypted Hub identity onto local data: the registry row whose HubTenantId matches
-    /// the token's tenantId, and the tenant-database user matched by email, from which the
-    /// tenant-admin (TenantAdmins membership) and system-admin (Users.admin) roles are derived.
-    /// The Hub authenticates the user; authorization stays grounded in our own registry.
+    /// the token's tenantId, and the tenant-database user matched by Hub userId (e-mail as
+    /// fallback), from which the tenant-admin (TenantAdmins membership) and system-admin
+    /// (Users.admin) roles are derived. The Hub authenticates the user and owns the profile;
+    /// authorization stays grounded in our own tables. Since the Hub token carries no roles, the
+    /// two systems must agree on who exists: unknown identities are provisioned here as plain
+    /// members, leaving administrators only the role grant to make.
     /// </summary>
     public class HubIdentityEnricher : IHubIdentityEnricher
     {
@@ -56,7 +59,7 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
 
             try
             {
-                return await ResolveRolesAsync(tenantName, databaseName, claims.UserId, claims.User.Email, cancellationToken);
+                return await ResolveRolesAsync(tenantName, databaseName, claims, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -94,8 +97,12 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
         }
 
         private async Task<HubLocalIdentity> ResolveRolesAsync(
-            string tenantName, string databaseName, Guid hubUserId, string? email, CancellationToken cancellationToken)
+            string tenantName, string databaseName, HubClaims claims, CancellationToken cancellationToken)
         {
+            var hubUserId = claims.UserId.ToString("D");
+            var email = claims.User.Email;
+            var fullName = BuildFullName(claims.User);
+
             var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
             var tenantConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, databaseName);
 
@@ -103,31 +110,42 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
             await connection.OpenAsync(cancellationToken);
 
             // Primary join: the Hub userId GUID against Users.UserName - the only identifier
-            // every Hub identity carries (service accounts have no e-mail). Provision such
-            // users locally with UserName = the Hub userId. Fallback for human users that were
-            // provisioned before GUID-keying: case-insensitive e-mail match.
-            var (userName, isSystemAdmin) = await FindUserAsync(connection, @"
-                SELECT UserName, admin
+            // every Hub identity carries (service accounts have no e-mail). Fallback for human
+            // users provisioned by address before GUID-keying: case-insensitive e-mail match.
+            var match = await FindUserAsync(connection, @"
+                SELECT UserName, admin, FullName, UserEmail
                 FROM Users
-                WHERE LOWER(UserName) = LOWER(@key)", hubUserId.ToString("D"), cancellationToken);
+                WHERE LOWER(UserName) = LOWER(@key)", hubUserId, cancellationToken);
 
-            if (userName == null && !string.IsNullOrEmpty(email))
+            if (match != null)
+            {
+                // The row is ours to keep current: the Hub owns the profile, we own the roles.
+                await SyncProfileAsync(connection, match.Value, fullName, email, cancellationToken);
+            }
+            else if (!string.IsNullOrEmpty(email))
             {
                 // UserEmail has no unique index; take the first user by name so repeated
                 // logins resolve deterministically.
-                (userName, isSystemAdmin) = await FindUserAsync(connection, @"
-                    SELECT UserName, admin
+                match = await FindUserAsync(connection, @"
+                    SELECT UserName, admin, FullName, UserEmail
                     FROM Users
                     WHERE UserEmail IS NOT NULL AND LOWER(UserEmail) = LOWER(@key)
                     ORDER BY UserName
                     LIMIT 1", email, cancellationToken);
             }
 
-            if (userName == null)
+            if (match == null && _options.AutoProvisionUsers)
+            {
+                match = await ProvisionUserAsync(connection, tenantName, hubUserId, fullName, email, cancellationToken);
+            }
+
+            if (match == null)
             {
                 _logger.LogDebug("No local user matches the Hub identity in tenant {TenantName}", tenantName);
                 return new HubLocalIdentity(tenantName, null, false, false);
             }
+
+            var (userName, isSystemAdmin, _, _) = match.Value;
 
             var adminSql = @"
                 SELECT COUNT(*)
@@ -142,7 +160,71 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
             return new HubLocalIdentity(tenantName, userName, isTenantAdmin, isSystemAdmin);
         }
 
-        private static async Task<(string? UserName, bool IsSystemAdmin)> FindUserAsync(
+        /// <summary>
+        /// Creates the local counterpart of a Hub identity, keyed by the Hub userId so that
+        /// e-mail-less service accounts join as reliably as human users. The row is a plain
+        /// member with no password: it exists so administrators have something to grant a role
+        /// to, and so writes (progress, submissions) attribute to a known user.
+        /// </summary>
+        private async Task<(string UserName, bool IsSystemAdmin, string? FullName, string? Email)?> ProvisionUserAsync(
+            MySqlConnection connection, string tenantName, string hubUserId, string? fullName, string? email,
+            CancellationToken cancellationToken)
+        {
+            var sql = @"
+                INSERT IGNORE INTO `Users` (`UserName`, `FullName`, `UserEmail`, `Password`, `admin`)
+                VALUES (@userName, @fullName, @userEmail, NULL, 0)";
+
+            using var command = new MySqlCommand(sql, connection);
+            command.Parameters.AddWithValue("@userName", hubUserId);
+            command.Parameters.AddWithValue("@fullName", (object?)fullName ?? DBNull.Value);
+            command.Parameters.AddWithValue("@userEmail", (object?)email ?? DBNull.Value);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "Provisioned local user for Hub identity {HubUserId} in tenant {TenantName} (member; roles must be granted)",
+                hubUserId, tenantName);
+
+            return (hubUserId, false, fullName, email);
+        }
+
+        /// <summary>
+        /// Keeps the display fields of a GUID-keyed row in step with the Hub profile. Writes
+        /// only when a value actually changed, so the common request path stays read-only.
+        /// </summary>
+        private static async Task SyncProfileAsync(
+            MySqlConnection connection,
+            (string UserName, bool IsSystemAdmin, string? FullName, string? Email) user,
+            string? fullName, string? email, CancellationToken cancellationToken)
+        {
+            var nameChanged = !string.IsNullOrEmpty(fullName) && !string.Equals(user.FullName, fullName, StringComparison.Ordinal);
+            var emailChanged = !string.IsNullOrEmpty(email) && !string.Equals(user.Email, email, StringComparison.OrdinalIgnoreCase);
+            if (!nameChanged && !emailChanged)
+            {
+                return;
+            }
+
+            var sql = @"
+                UPDATE `Users`
+                SET `FullName` = IF(@syncName, @fullName, `FullName`),
+                    `UserEmail` = IF(@syncEmail, @userEmail, `UserEmail`)
+                WHERE `UserName` = @userName";
+
+            using var command = new MySqlCommand(sql, connection);
+            command.Parameters.AddWithValue("@syncName", nameChanged);
+            command.Parameters.AddWithValue("@syncEmail", emailChanged);
+            command.Parameters.AddWithValue("@fullName", (object?)fullName ?? DBNull.Value);
+            command.Parameters.AddWithValue("@userEmail", (object?)email ?? DBNull.Value);
+            command.Parameters.AddWithValue("@userName", user.UserName);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        private static string? BuildFullName(HubUser user)
+        {
+            var fullName = $"{user.FirstName} {user.LastName}".Trim();
+            return string.IsNullOrEmpty(fullName) ? null : fullName;
+        }
+
+        private static async Task<(string UserName, bool IsSystemAdmin, string? FullName, string? Email)?> FindUserAsync(
             MySqlConnection connection, string sql, string key, CancellationToken cancellationToken)
         {
             using var command = new MySqlCommand(sql, connection);
@@ -151,10 +233,18 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
 
             if (await reader.ReadAsync(cancellationToken))
             {
-                return (reader["UserName"]?.ToString(), Convert.ToBoolean(reader["admin"]));
+                var userName = reader["UserName"]?.ToString();
+                if (!string.IsNullOrEmpty(userName))
+                {
+                    return (
+                        userName,
+                        Convert.ToBoolean(reader["admin"]),
+                        reader["FullName"] as string,
+                        reader["UserEmail"] as string);
+                }
             }
 
-            return (null, false);
+            return null;
         }
     }
 }

@@ -120,6 +120,7 @@ services:
       XR50Hub__BaseUrl: ${XR50HUB_BASE_URL:-https://platform.xr50.eu}
       XR50Hub__SharedSecret: ${XR50HUB_SHARED_SECRET:-}
       XR50Hub__DevelopmentToken: ${XR50HUB_DEV_TOKEN:-}
+      XR50Hub__AutoProvisionUsers: ${XR50HUB_AUTO_PROVISION_USERS:-true}
 
       # CORS Configuration (comma-separated origins, empty = permissive in dev only)
       Cors__AllowedOrigins__0: ${CORS_ORIGIN_0:-}

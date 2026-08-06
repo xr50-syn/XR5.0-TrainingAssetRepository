@@ -202,14 +202,14 @@ namespace XR50TrainingAssetRepo.Controllers
         {
             try
             {
-                // Extract user ID from JWT token claims (same logic as SubmitAnswers)
-                var userId = User.GetUserId();
-
-                // Authorization disabled - use default user if not authenticated
+                // Progress is always recorded against the caller: a member may write their own
+                // and nobody else's. The development user only applies under the Development
+                // anonymous bypass (same helper as SubmitAnswers).
+                var userId = User.GetEffectiveUserId(_iamOptions, _environment);
                 if (string.IsNullOrEmpty(userId))
                 {
-                    userId = _configuration.GetValue<string>("IAM:DevelopmentUserId") ?? "demoadmin";
-                    _logger.LogInformation("No auth token - using default user: {UserId}", userId);
+                    _logger.LogWarning("Material completion without a resolvable user identity rejected");
+                    return Unauthorized();
                 }
 
                 _logger.LogInformation(
@@ -4273,6 +4273,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         // POST: api/{tenantName}/materials/workflow-complete
         [HttpPost("workflow-complete")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<WorkflowMaterial>> CreateCompleteWorkflow(
             string tenantName,
             [FromBody] CompleteWorkflowRequest request)
@@ -4299,6 +4300,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         // POST: api/{tenantName}/materials/video-complete
         [HttpPost("video-complete")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<VideoMaterial>> CreateCompleteVideo(
             string tenantName,
             [FromBody] CompleteVideoRequest request)
@@ -4336,6 +4338,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
 
         // POST: api/{tenantName}/materials/checklist-complete
         [HttpPost("checklist-complete")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<ChecklistMaterial>> CreateCompleteChecklist(
             string tenantName,
             [FromBody] CompleteChecklistRequest request)

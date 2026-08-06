@@ -7,6 +7,22 @@ The XR50 Training API accepts two authentication schemes, selected per request:
 | XR5.0 Hub session token | `HL-Hub-Session-Token` | all (the only scheme outside Development) |
 | Keycloak JWT bearer | `Authorization: Bearer` | Development only |
 
+## What each role may do
+
+| | `member` | `tenantadmin` | `systemadmin` |
+|---|---|---|---|
+| Read training content (materials, assets, learning paths, programs) | ✔ | ✔ | ✔ |
+| Create / update / delete content | | ✔ | ✔ |
+| Read and write **own** progress (quiz submissions, completions) | ✔ | ✔ | ✔ |
+| Read another user's progress, or the tenant-wide progress view | | ✔ | ✔ |
+| Manage tenant users and grant `tenantadmin` | | ✔ | ✔ |
+| Set the system-admin flag, list/delete tenants, troubleshooting API | | | ✔ |
+
+Progress is always recorded against the caller's own identity - no endpoint accepts a user id to
+write against - and reading someone else's records requires a tenant-administration role.
+Tenant-scoped policies additionally require the token's `tenantName` to match the `{tenantName}`
+route segment; system administrators are exempt from that match.
+
 ## XR5.0 Hub Session Token (production)
 
 Every request from the XR5.0 Hub to this service carries an encrypted, opaque session token in
@@ -60,6 +76,41 @@ The Hub authenticates the user; **authorization stays grounded in our own regist
   `Users.admin` grants `systemadmin`. On the e-mail fallback, duplicates resolve to the first
   user by `UserName`.
 
+### Keeping users in step with the Hub
+
+The Hub session token deliberately carries **no roles** - the Hub operator keeps identity, we
+keep permissions - so the same user has to exist on both sides. Three things make that
+practical without anyone transcribing GUIDs:
+
+1. **Just-in-time provisioning.** The first request of a Hub identity whose tenant is mapped but
+   who has no local row creates one: `UserName` = the Hub `userId`, display name and e-mail from
+   the token, no password, **no roles**. New arrivals therefore show up in the roster as plain
+   members, and an administrator only has to grant a role. Turn it off with
+   `XR50Hub:AutoProvisionUsers=false` (`XR50HUB_AUTO_PROVISION_USERS`) if a deployment prefers
+   users to be pre-provisioned; unknown identities then authenticate with no tenant role.
+   Existing GUID-keyed rows have their display name and e-mail refreshed from the token when the
+   Hub profile changes - the Hub owns the profile, we own the roles.
+2. **`GET api/auth/me`** reports what the local side made of the credential: authentication
+   scheme, Hub `userId` and `tenantId`, the local user it joined to, the mapped tenant and the
+   effective role. This is the shortest path to the Hub user id needed for a grant, and the
+   first thing to check when a token authenticates but authorization surprises you.
+3. **`PUT api/{tenantName}/users/{userName}/role`** (TenantAdmin) with body
+   `{"role": "member" | "tenantadmin"}` is where a Hub identity becomes a tenant administrator.
+   The two roles match the two access levels the pilots asked for: `member` reads content and
+   records its own progress and quiz scores; `tenantadmin` has full access within the tenant,
+   including authoring and user management. `GET api/{tenantName}/users` lists every user with
+   its `role`; the stored password is never part of a response.
+
+System administration (`Users.admin`) is **not** grantable from the tenant surface: it crosses
+tenant boundaries, and any Hub user can provision their own tenant and become its admin. Only a
+system administrator can set that flag, through `POST`/`PUT api/{tenantName}/users`. Deleting a
+user also drops their role grants, so a re-provisioned Hub user id never inherits an old one.
+
+Pre-provisioning ahead of first login works too: `POST api/{tenantName}/users` with
+`userName` = the Hub `userId`. A password is only required for OwnCloud-backed tenants, which
+mirror users into their own account store; Hub-authenticated identities (service accounts in
+particular) never need one.
+
 ### Configuration
 
 ```jsonc
@@ -68,11 +119,13 @@ The Hub authenticates the user; **authorization stays grounded in our own regist
   "SharedSecret": "",                      // provided by the Hub operator out of band, env-only
   "DevelopmentToken": "",                  // fixed dev token, honored ONLY in Development
   "CacheSeconds": 60,
-  "TimeoutSeconds": 5
+  "TimeoutSeconds": 5,
+  "AutoProvisionUsers": true               // create a local user row on first sight of a Hub identity
 }
 ```
 
-Docker: `XR50HUB_BASE_URL`, `XR50HUB_SHARED_SECRET`, `XR50HUB_DEV_TOKEN` in `.env`
+Docker: `XR50HUB_BASE_URL`, `XR50HUB_SHARED_SECRET`, `XR50HUB_DEV_TOKEN`,
+`XR50HUB_AUTO_PROVISION_USERS` in `.env`
 (see `.env.example`). Secrets are never committed.
 
 ### Development token
