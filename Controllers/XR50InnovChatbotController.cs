@@ -263,9 +263,13 @@ namespace XR50TrainingAssetRepo.Controllers
         }
 
         /// <summary>
-        /// Clears the server-side chat history for the material's pilot.
+        /// Clears the server-side chat history for the material's pilot. The INNOV backend keys
+        /// history by pilot only - the chat request carries no user or session identifier - so
+        /// this wipes the conversation for everyone on that pilot, not just the caller. That
+        /// makes it an administrative action rather than a per-learner reset.
         /// </summary>
         [HttpDelete("{innovChatbotId}/history")]
+        [Authorize(Policy = "TenantAdmin")]
         public async Task<ActionResult<object>> ClearHistory(string tenantName, int innovChatbotId)
         {
             try

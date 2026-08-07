@@ -171,6 +171,19 @@ public class AuthorizationTests : IClassFixture<WebApplicationFixture>
     }
 
     [Fact]
+    public async Task TenantUser_OnTenantCreation_Returns403()
+    {
+        // Tenant creation is TenantCreator-gated: JWT/test-scheme principals need a
+        // system-admin role (Hub self-service does not apply to this scheme).
+        var request = Request(HttpMethod.Post, "/xr50/trainingAssetRepository/Tenants", roles: "user", tenant: Tenant);
+        request.Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+
+        var response = await _client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
     public async Task SystemAdmin_OnTenantManagement_PassesAuthorization()
     {
         var response = await _client.SendAsync(
@@ -192,5 +205,34 @@ public class AuthorizationTests : IClassFixture<WebApplicationFixture>
         // Authorization must pass; the tenant may not exist in the in-memory admin DB.
         response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
         response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task TenantUser_OnBulkMaterialCreation_Returns403()
+    {
+        // workflow-complete/video-complete/checklist-complete create a material with all its
+        // child entities; despite the name they are authoring, not progress, endpoints.
+        foreach (var route in new[] { "workflow-complete", "video-complete", "checklist-complete" })
+        {
+            var request = Request(HttpMethod.Post, $"/api/{Tenant}/materials/{route}",
+                user: "learner", roles: "user", tenant: Tenant);
+            request.Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+
+            var response = await _client.SendAsync(request);
+
+            response.StatusCode.Should().Be(HttpStatusCode.Forbidden, $"{route} is an authoring endpoint");
+        }
+    }
+
+    [Fact]
+    public async Task TenantUser_OnChatHistoryDeletion_Returns403()
+    {
+        // The INNOV backend keys chat history by pilot, with no user or session identifier, so
+        // clearing it affects every learner on that pilot - an administrative action.
+        var response = await _client.SendAsync(
+            Request(HttpMethod.Delete, $"/api/{Tenant}/innov-chatbot/1/history",
+                user: "learner", roles: "user", tenant: Tenant));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 }

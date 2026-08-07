@@ -5,9 +5,12 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using XR50TrainingAssetRepo.Models;
+using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Services;
+using XR50TrainingAssetRepo.Infrastructure.Auth;
 using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 
 namespace XR50TrainingAssetRepo.Controllers
@@ -23,6 +26,8 @@ namespace XR50TrainingAssetRepo.Controllers
         private readonly IXR50TenantManagementService _tenantManagementService;
         private readonly IConfiguration _configuration;
         private readonly HttpClient _httpClient;
+        private readonly IWebHostEnvironment _environment;
+        private readonly IamOptions _iamOptions;
 
         public UsersController(
             IXR50TenantDbContextFactory dbContextFactory,
@@ -30,7 +35,9 @@ namespace XR50TrainingAssetRepo.Controllers
             IStorageService storageService,
             IXR50TenantManagementService tenantManagementService,
             IConfiguration configuration,
-            HttpClient httpClient)
+            HttpClient httpClient,
+            IWebHostEnvironment environment,
+            IOptions<IamOptions> iamOptions)
         {
             _dbContextFactory = dbContextFactory;
             _logger = logger;
@@ -38,25 +45,39 @@ namespace XR50TrainingAssetRepo.Controllers
             _tenantManagementService = tenantManagementService;
             _configuration = configuration;
             _httpClient = httpClient;
+            _environment = environment;
+            _iamOptions = iamOptions.Value;
         }
+
+        /// <summary>
+        /// Whether the caller may set the system-admin flag. Tenant administration is scoped to
+        /// one tenant; Users.admin is not, so letting a tenant admin set it would hand them every
+        /// other tenant too - reachable now that any Hub user can provision their own tenant and
+        /// become its admin.
+        /// </summary>
+        private bool CanGrantSystemAdmin() =>
+            User.IsSystemAdmin(_iamOptions)
+            || (_environment.IsDevelopment() && _iamOptions.AllowAnonymousInDevelopment);
+
         // GET: api/{tenantName}/users
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<User>>> GetUsers(string tenantName)
+        public async Task<ActionResult<IEnumerable<TenantUserResponse>>> GetUsers(string tenantName)
         {
             _logger.LogInformation("Getting users for tenant: {TenantName}", tenantName);
 
             using var context = _dbContextFactory.CreateDbContext();
 
             var users = await context.Users.ToListAsync();
+            var admins = await GetTenantAdminNamesAsync(context, tenantName);
 
             _logger.LogInformation("Found {UserCount} users for tenant: {TenantName}", users.Count, tenantName);
 
-            return users;
+            return users.Select(u => TenantUserResponse.From(u, admins.Contains(u.UserName))).ToList();
         }
 
         // GET: api/{tenantName}/users/5
         [HttpGet("{userName}")]
-        public async Task<ActionResult<User>> GetUser(string tenantName, string userName)
+        public async Task<ActionResult<TenantUserResponse>> GetUser(string tenantName, string userName)
         {
             _logger.LogInformation("Getting user {UserName} for tenant: {TenantName}", userName, tenantName);
 
@@ -70,13 +91,93 @@ namespace XR50TrainingAssetRepo.Controllers
                 return this.ProblemNotFound($"User '{userName}' not found.");
             }
 
-            return user;
+            return TenantUserResponse.From(user, await IsTenantAdminAsync(context, tenantName, userName));
+        }
+
+        /// <summary>
+        /// Sets a user's tenant role. The XR5.0 Hub session token carries no roles, so this is
+        /// how a Hub identity becomes a tenant administrator: the Hub says who the user is, we
+        /// say what they may do. System administration is not settable here - it is granted on
+        /// the user record itself and crosses tenant boundaries.
+        /// </summary>
+        // PUT: api/{tenantName}/users/{userName}/role
+        [HttpPut("{userName}/role")]
+        [Authorize(Policy = "TenantAdmin")]
+        public async Task<ActionResult<TenantUserResponse>> SetUserRole(
+            string tenantName, string userName, SetUserRoleRequest request)
+        {
+            if (!TenantRoles.IsKnown(request.Role))
+            {
+                return this.ProblemBadRequest(
+                    $"Unknown role '{request.Role}'. Expected '{TenantRoles.Member}' or '{TenantRoles.TenantAdmin}'.");
+            }
+
+            var makeAdmin = string.Equals(request.Role, TenantRoles.TenantAdmin, StringComparison.OrdinalIgnoreCase);
+
+            // Demoting yourself can leave a tenant with no administrator at all, and the caller
+            // cannot undo it afterwards. Removing an admin is someone else's job.
+            if (!makeAdmin && string.Equals(userName, User.GetUserId(), StringComparison.OrdinalIgnoreCase))
+            {
+                return this.ProblemBadRequest(
+                    "You cannot remove your own tenant-admin role; ask another tenant admin to do it.");
+            }
+
+            try
+            {
+                using var context = _dbContextFactory.CreateDbContext();
+
+                var user = await context.Users.FindAsync(userName);
+                if (user == null)
+                {
+                    return this.ProblemNotFound($"User '{userName}' not found.");
+                }
+
+                var existing = await context.TenantAdmins
+                    .FirstOrDefaultAsync(ta => ta.TenantName == tenantName && ta.UserName == userName);
+
+                if (makeAdmin && existing == null)
+                {
+                    context.TenantAdmins.Add(new TenantAdmin { TenantName = tenantName, UserName = userName });
+                    await context.SaveChangesAsync();
+                    _logger.LogInformation("Granted tenant-admin on {TenantName} to {UserName} (by {Actor})",
+                        tenantName, userName, User.GetUserId());
+                }
+                else if (!makeAdmin && existing != null)
+                {
+                    context.TenantAdmins.Remove(existing);
+                    await context.SaveChangesAsync();
+                    _logger.LogInformation("Revoked tenant-admin on {TenantName} from {UserName} (by {Actor})",
+                        tenantName, userName, User.GetUserId());
+                }
+
+                return TenantUserResponse.From(user, makeAdmin);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error setting role for user {UserName} in tenant: {TenantName}", userName, tenantName);
+                return this.ProblemServerError("Failed to set the user role.");
+            }
+        }
+
+        private static async Task<HashSet<string>> GetTenantAdminNamesAsync(XR50TrainingContext context, string tenantName)
+        {
+            var names = await context.TenantAdmins
+                .Where(ta => ta.TenantName == tenantName)
+                .Select(ta => ta.UserName)
+                .ToListAsync();
+
+            return new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static async Task<bool> IsTenantAdminAsync(XR50TrainingContext context, string tenantName, string userName)
+        {
+            return await context.TenantAdmins.AnyAsync(ta => ta.TenantName == tenantName && ta.UserName == userName);
         }
 
         // FIXED: Create user in both MySQL and OwnCloud
         [HttpPost]
         [Authorize(Policy = "TenantAdmin")]
-        public async Task<ActionResult<User>> PostUser(string tenantName, User user)
+        public async Task<ActionResult<TenantUserResponse>> PostUser(string tenantName, User user)
         {
             _logger.LogInformation("Creating user {UserName} for tenant: {TenantName}", user.UserName, tenantName);
 
@@ -87,10 +188,20 @@ namespace XR50TrainingAssetRepo.Controllers
                 return this.ProblemBadRequest("UserName is required.");
             }
 
-            if (string.IsNullOrWhiteSpace(user.Password))
+            // A password is only meaningful for locally authenticated users. Identities the
+            // XR5.0 Hub authenticates (in particular e-mail-less service accounts) are
+            // pre-provisioned by their Hub userId and never carry one; OwnCloud storage still
+            // needs one because it mirrors users into its own account store.
+            var storageNeedsPassword = _storageService.GetStorageType() == "OwnCloud";
+            if (storageNeedsPassword && string.IsNullOrWhiteSpace(user.Password))
             {
                 _logger.LogWarning("User creation failed: Password is required for tenant: {TenantName}", tenantName);
-                return this.ProblemBadRequest("Password is required.");
+                return this.ProblemBadRequest("Password is required for OwnCloud-backed tenants.");
+            }
+
+            if (user.admin && !CanGrantSystemAdmin())
+            {
+                return this.ProblemForbidden("Only a system administrator can create system administrators.");
             }
 
             try
@@ -136,7 +247,7 @@ namespace XR50TrainingAssetRepo.Controllers
 
                 return CreatedAtAction(nameof(GetUser),
                     new { tenantName, userName = user.UserName },
-                    user);
+                    TenantUserResponse.From(user, isTenantAdmin: false));
             }
             catch (Exception ex)
             {
@@ -177,8 +288,16 @@ namespace XR50TrainingAssetRepo.Controllers
                 {
                     existingUser.Password = user.Password;
                 }
-                // Allow explicit setting of admin flag
-                existingUser.admin = user.admin;
+                // The system-admin flag stays where it is unless a system administrator moves it.
+                if (user.admin != existingUser.admin)
+                {
+                    if (!CanGrantSystemAdmin())
+                    {
+                        return this.ProblemForbidden("Only a system administrator can change the system-admin flag.");
+                    }
+
+                    existingUser.admin = user.admin;
+                }
 
                 await context.SaveChangesAsync();
 
@@ -258,6 +377,15 @@ namespace XR50TrainingAssetRepo.Controllers
                 }
 
                 context.Users.Remove(user);
+
+                // Drop any role grants with the user, so a later user of the same name (a Hub
+                // userId can be re-provisioned) does not silently inherit tenant administration.
+                var adminRows = await context.TenantAdmins.Where(ta => ta.UserName == userName).ToListAsync();
+                if (adminRows.Count > 0)
+                {
+                    context.TenantAdmins.RemoveRange(adminRows);
+                }
+
                 await context.SaveChangesAsync();
 
                 _logger.LogInformation("Deleted user {UserName} from database for tenant: {TenantName}", userName, tenantName);

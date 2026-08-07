@@ -182,6 +182,7 @@ builder.Services.AddScoped<IHubIdentityEnricher, HubIdentityEnricher>();
 builder.Services.AddSingleton<IAuthorizationHandler, TenantMemberHandler>();
 builder.Services.AddSingleton<IAuthorizationHandler, TenantAdminHandler>();
 builder.Services.AddSingleton<IAuthorizationHandler, SystemAdminHandler>();
+builder.Services.AddSingleton<IAuthorizationHandler, TenantCreatorHandler>();
 builder.Services.AddSingleton<IAuthorizationHandler, AuthenticatedUserHandler>();
 
 builder.Services.AddAuthorization(options =>
@@ -194,9 +195,14 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("TenantAdmin", policy =>
         policy.AddRequirements(new TenantAdminRequirement()));
 
-    // System-wide administration (tenant provisioning, cross-tenant operations)
+    // System-wide administration (cross-tenant operations, tenant deletion/re-mapping)
     options.AddPolicy("SystemAdmin", policy =>
         policy.AddRequirements(new SystemAdminRequirement()));
+
+    // Tenant creation: system admins, or any Hub-authenticated user provisioning the
+    // tenant for their own Hub tenant id (self-service; enforced in the controller).
+    options.AddPolicy("TenantCreator", policy =>
+        policy.AddRequirements(new TenantCreatorRequirement()));
 
     // Everything not explicitly annotated still requires a valid token
     // (the Development-only anonymous bypass is evaluated inside the handler).

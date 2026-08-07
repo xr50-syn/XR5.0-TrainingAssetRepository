@@ -44,10 +44,59 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
                 : null;
         }
 
+        /// <summary>
+        /// Whether the caller may see or touch progress recorded against another user. Members
+        /// are confined to their own records; tenant and system administrators see the whole
+        /// tenant. The Development anonymous bypass passes, as it does in the policy handlers.
+        /// </summary>
+        public static bool CanReadOthersProgress(
+            this ClaimsPrincipal user, IamOptions options, IWebHostEnvironment environment)
+        {
+            return (environment.IsDevelopment() && options.AllowAnonymousInDevelopment)
+                || user.IsTenantAdmin(options)
+                || user.IsSystemAdmin(options);
+        }
+
+        /// <summary>
+        /// Whether the caller may act on <paramref name="userId"/>'s progress: their own always,
+        /// anyone else's only with a tenant-administration role.
+        /// </summary>
+        public static bool CanActForUser(
+            this ClaimsPrincipal user, string? userId, IamOptions options, IWebHostEnvironment environment)
+        {
+            if (user.CanReadOthersProgress(options, environment))
+            {
+                return true;
+            }
+
+            var self = user.GetUserId();
+            return !string.IsNullOrEmpty(self)
+                && string.Equals(self, userId, StringComparison.OrdinalIgnoreCase);
+        }
+
         /// <summary>Tenant the token is scoped to, per the configured tenant claim.</summary>
         public static string? GetTenantName(this ClaimsPrincipal user, IamOptions options)
         {
             return user.FindFirst(options.TenantClaim)?.Value;
+        }
+
+        /// <summary>
+        /// The Hub tenant id (tenantId claim of the decrypted session token), present only on
+        /// principals authenticated through the XR50Hub scheme. Null for JWT/Keycloak principals.
+        /// </summary>
+        public static Guid? GetHubTenantId(this ClaimsPrincipal user)
+        {
+            return Guid.TryParse(user.FindFirst(HubSessionTokenDefaults.HubTenantIdClaim)?.Value, out var id)
+                ? id
+                : null;
+        }
+
+        /// <summary>True when the principal was authenticated by the XR5.0 Hub session token scheme.</summary>
+        public static bool IsHubAuthenticated(this ClaimsPrincipal user)
+        {
+            return user.Identity?.IsAuthenticated == true
+                && user.Identity.AuthenticationType == HubSessionTokenDefaults.SchemeName
+                && user.GetHubTenantId() != null;
         }
 
         public static bool IsSystemAdmin(this ClaimsPrincipal user, IamOptions options)

@@ -1,3 +1,5 @@
+using System.Net.Http.Json;
+using System.Text.Json;
 using XR50TrainingAssetRepo.Infrastructure.Auth;
 using XR50TrainingAssetRepo.Tests.Fixtures;
 
@@ -201,6 +203,71 @@ public class HubAuthenticationTests : IClassFixture<HubAuthWebApplicationFixture
 
         response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
         response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+    }
+
+    // --- Self-service tenant creation ---
+
+    [Fact]
+    public async Task HubMember_PassesAuthorization_OnTenantCreation()
+    {
+        // Any Hub-authenticated user may reach the create endpoint (self-service provisioning
+        // for their own Hub tenant); the TenantCreator policy must not 401/403 them. The action
+        // itself then fails in the hermetic environment (registry uses raw MySQL).
+        var token = RegisterToken(HubDecryptResult.ValidToken(ClaimsFor(UnmappedTenantId)));
+        var request = Request(HttpMethod.Post, "/xr50/trainingAssetRepository/Tenants", token);
+        request.Content = new StringContent(
+            """{ "tenantName": "selfsvc", "storageType": "OwnCloud", "ownCloudConfig": { "tenantDirectory": "d" } }""",
+            System.Text.Encoding.UTF8, "application/json");
+
+        var response = await _client.SendAsync(request);
+
+        response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+        response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+    }
+
+    // --- Identity introspection (GET api/auth/me) ---
+
+    [Fact]
+    public async Task Me_ReportsTheLocalResolutionOfAHubToken()
+    {
+        var claims = ClaimsFor(AdminTenantId, "ada@pilot.eu");
+        var token = RegisterToken(HubDecryptResult.ValidToken(claims));
+
+        var response = await _client.SendAsync(Request(HttpMethod.Get, "/api/auth/me", token));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("authenticated").GetBoolean().Should().BeTrue();
+        body.GetProperty("authenticationScheme").GetString().Should().Be(HubSessionTokenDefaults.SchemeName);
+        body.GetProperty("userName").GetString().Should().Be("hubadmin");
+        body.GetProperty("hubUserId").GetString().Should().Be(claims.UserId.ToString("D"));
+        body.GetProperty("hubTenantId").GetString().Should().Be(AdminTenantId.ToString("D"));
+        body.GetProperty("tenantName").GetString().Should().Be(Tenant);
+        body.GetProperty("role").GetString().Should().Be("tenantadmin");
+        body.GetProperty("email").GetString().Should().Be("ada@pilot.eu");
+        body.GetProperty("skillLevel").GetString().Should().Be("Advanced");
+    }
+
+    [Fact]
+    public async Task Me_ForAnUnmappedHubTenant_ReportsNoTenantAndPlainMembership()
+    {
+        var token = RegisterToken(HubDecryptResult.ValidToken(ClaimsFor(UnmappedTenantId)));
+
+        var response = await _client.SendAsync(Request(HttpMethod.Get, "/api/auth/me", token));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("tenantName").ValueKind.Should().Be(JsonValueKind.Null);
+        body.GetProperty("role").GetString().Should().Be("member");
+        body.GetProperty("hubTenantId").GetString().Should().Be(UnmappedTenantId.ToString("D"));
+    }
+
+    [Fact]
+    public async Task Me_WithoutACredential_Returns401()
+    {
+        var response = await _client.SendAsync(Request(HttpMethod.Get, "/api/auth/me"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     // --- Development token ---

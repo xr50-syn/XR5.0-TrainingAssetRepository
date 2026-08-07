@@ -30,6 +30,15 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
 
         /// <summary>Timeout in seconds for the decrypt call; it sits on the request hot path.</summary>
         public int TimeoutSeconds { get; set; } = 5;
+
+        /// <summary>
+        /// Create a local user row on the first request of a Hub identity whose tenant is mapped
+        /// but who has no matching row yet (keyed by the Hub userId). The Hub token carries no
+        /// roles, so users must exist on both sides; provisioning them just in time means an
+        /// administrator only has to grant roles, never to transcribe user ids by hand. New rows
+        /// are always plain members - roles are only ever granted through our own API.
+        /// </summary>
+        public bool AutoProvisionUsers { get; set; } = true;
     }
 
     /// <summary>Names shared between the Hub authentication pieces.</summary>
@@ -41,6 +50,10 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
         public const string SessionIdClaim = "sessionId";
         public const string ApplicationIdClaim = "applicationId";
         public const string SkillLevelClaim = "skillLevel";
+
+        /// <summary>Raw Hub tenant id (GUID) from the token's tenantId claim, emitted even when
+        /// no local tenant is mapped. Used for self-service tenant provisioning.</summary>
+        public const string HubTenantIdClaim = "hubTenantId";
 
         /// <summary>HttpContext.Items key the handler uses to tell the challenge step that the
         /// failure was Hub unavailability (503) rather than a rejected token (401).</summary>

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Models.DTOs;
 using XR50TrainingAssetRepo.Services;
@@ -20,15 +21,21 @@ namespace XR50TrainingAssetRepo.Controllers
         private readonly IUserMaterialService _userMaterialService;
         private readonly IXR50TenantDbContextFactory _dbContextFactory;
         private readonly ILogger<ProgramProgressController> _logger;
+        private readonly IWebHostEnvironment _environment;
+        private readonly IamOptions _iamOptions;
 
         public ProgramProgressController(
             IUserMaterialService userMaterialService,
             IXR50TenantDbContextFactory dbContextFactory,
-            ILogger<ProgramProgressController> logger)
+            ILogger<ProgramProgressController> logger,
+            IWebHostEnvironment environment,
+            IOptions<IamOptions> iamOptions)
         {
             _userMaterialService = userMaterialService;
             _dbContextFactory = dbContextFactory;
             _logger = logger;
+            _environment = environment;
+            _iamOptions = iamOptions.Value;
         }
 
         /// <summary>
@@ -70,19 +77,24 @@ namespace XR50TrainingAssetRepo.Controllers
         /// </summary>
         private async Task<(string? userId, bool isAdmin)> GetUserContextAsync()
         {
-            // Extract user ID from JWT claims
-            var userId = User.GetUserId();
+            // The development user only applies under the Development anonymous bypass; without
+            // a resolvable identity there is no progress to scope to.
+            var userId = User.GetEffectiveUserId(_iamOptions, _environment);
 
             _logger.LogDebug("Extracted userId from claims: {UserId}", userId);
 
-            // Authorization disabled - return default admin user if not authenticated
             if (string.IsNullOrEmpty(userId))
             {
-                _logger.LogInformation("No auth token - using default demoadmin user");
-                return ("demoadmin", true);
+                return (null, false);
             }
 
-            // Check admin status from database
+            // Tenant-wide visibility follows the tenant-administration role (the managers' view).
+            // The Users.admin flag stays honored for principals whose roles are not in the token.
+            if (User.CanReadOthersProgress(_iamOptions, _environment))
+            {
+                return (userId, true);
+            }
+
             using var context = _dbContextFactory.CreateDbContext();
             var user = await context.Users.FirstOrDefaultAsync(u => u.UserName == userId);
 

@@ -19,6 +19,15 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
     public class SystemAdminRequirement : IAuthorizationRequirement { }
 
     /// <summary>
+    /// Gate for tenant creation. System administrators always qualify; additionally, any
+    /// principal authenticated through the XR5.0 Hub scheme qualifies for SELF-SERVICE
+    /// provisioning - the controller then binds the new tenant to the caller's own Hub
+    /// tenant id, so a Hub user can only ever provision the tenant they belong to.
+    /// JWT/Keycloak principals without a system-admin role stay excluded.
+    /// </summary>
+    public class TenantCreatorRequirement : IAuthorizationRequirement { }
+
+    /// <summary>
     /// Requires any authenticated principal. Used as the global fallback policy so endpoints
     /// without an explicit [Authorize]/[AllowAnonymous] attribute still demand a valid token.
     /// </summary>
@@ -121,6 +130,20 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
         protected override bool IsSatisfied(AuthorizationHandlerContext context)
         {
             return context.User.IsSystemAdmin(Options);
+        }
+    }
+
+    public class TenantCreatorHandler : XR50AuthorizationHandler<TenantCreatorRequirement>
+    {
+        public TenantCreatorHandler(
+            IWebHostEnvironment environment,
+            IOptions<IamOptions> options,
+            IHttpContextAccessor httpContextAccessor)
+            : base(environment, options, httpContextAccessor) { }
+
+        protected override bool IsSatisfied(AuthorizationHandlerContext context)
+        {
+            return context.User.IsSystemAdmin(Options) || context.User.IsHubAuthenticated();
         }
     }
 

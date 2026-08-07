@@ -8,6 +8,10 @@ public static class ControllerProblemDetailsExtensions
         controller.CreateProblem(StatusCodes.Status400BadRequest, "Invalid request", detail,
             "https://api.xr50/errors/invalid-request", "invalid_request");
 
+    public static ActionResult ProblemForbidden(this ControllerBase controller, string detail) =>
+        controller.CreateProblem(StatusCodes.Status403Forbidden, "Forbidden", detail,
+            "https://api.xr50/errors/forbidden", "forbidden");
+
     public static ActionResult ProblemNotFound(this ControllerBase controller, string detail) =>
         controller.CreateProblem(StatusCodes.Status404NotFound, "Resource not found", detail,
             "https://api.xr50/errors/resource-not-found", "resource_not_found");

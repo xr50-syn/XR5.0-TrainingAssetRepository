@@ -147,15 +147,23 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
                 new("sub", hubClaims.UserId.ToString("D")),
                 new(HubSessionTokenDefaults.SessionIdClaim, hubClaims.SessionId.ToString("D")),
                 new(HubSessionTokenDefaults.ApplicationIdClaim, hubClaims.ApplicationId.ToString("D")),
+                new(HubSessionTokenDefaults.HubTenantIdClaim, hubClaims.TenantId.ToString("D")),
             };
 
             // preferred_username heads the GetUserId() fallback chain; prefer the matched local
             // user name so progress records keep keying on the same ids as the rest of the app.
-            var userId = localIdentity.LocalUserName ?? hubClaims.User.Email;
-            if (!string.IsNullOrEmpty(userId))
+            // E-mail-less identities (service accounts) attribute as their Hub userId GUID -
+            // the same value the enricher joins on, so provisioned rows and written records agree.
+            var userId = localIdentity.LocalUserName;
+            if (string.IsNullOrEmpty(userId))
             {
-                claims.Add(new Claim("preferred_username", userId));
+                userId = hubClaims.User.Email;
             }
+            if (string.IsNullOrEmpty(userId))
+            {
+                userId = hubClaims.UserId.ToString("D");
+            }
+            claims.Add(new Claim("preferred_username", userId));
 
             if (!string.IsNullOrEmpty(hubClaims.User.Email))
             {
