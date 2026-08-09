@@ -1,6 +1,6 @@
 {
-  "TenantName": "DECEIT Library of Forbidden Texts",
-  "TenantGroup": "DECEIT Library of Forbidden Texts",
+  "TenantName": "DECEIT_Library_of_Forbidden_Texts",
+  "TenantGroup": "DECEIT_Library_of_Forbidden_Texts",
   "TenantDirectory": "DECEIT_Library",
   "Description": "Requires more than 30 caster levels to enter the library. Certain Exceptions Apply",
   "OwnerName":  "headmistress",
@@ -9,7 +9,7 @@
     "fullName": "Mistress of DECEIT",
     "userEmail": "I_prank_my_students@deceit.hl",
     "password": "123",
-    "TenantName": "DECEIT Library of Forbidden Texts",
+    "TenantName": "DECEIT_Library_of_Forbidden_Texts",
     "admin": true
   },
   "adminList": [],

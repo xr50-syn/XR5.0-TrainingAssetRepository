@@ -44,7 +44,7 @@ function getTestTenant() {
   }
 
   // Fallback: generate new name (should only happen in setup.js)
-  return `test-${Date.now()}`;
+  return `test_${Date.now()}`;
 }
 
 const config = {

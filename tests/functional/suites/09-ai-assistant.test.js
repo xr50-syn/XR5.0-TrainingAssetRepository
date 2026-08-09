@@ -16,13 +16,14 @@ const config = require('../config');
  *    and flips status to "partial" so deploy-time smoke tests fail loudly when the
  *    chatbot side is misconfigured (bad base url, missing bearer, etc).
  *
- * These tests are permissive about 4xx status codes so the suite still runs in
- * environments without a live DataLens or without admin credentials — just like
- * the existing 05-materials suite.
+ * These tests tolerate 500 so the suite still runs in environments without a live
+ * DataLens backend. They deliberately do NOT tolerate 401/403: an authorization
+ * outcome must fail the suite loudly. Tolerating it made refused requests pass as
+ * successes, which hid authorization regressions on every endpoint here.
  */
 
 const OK_STATUSES = [200, 201];
-const TOLERATED_STATUSES = [200, 201, 401, 403, 500];
+const TOLERATED_STATUSES = [200, 201, 500];
 
 describe('AI Assistant Material', () => {
   let createdMaterialIds = [];
@@ -110,7 +111,7 @@ describe('AI Assistant Material', () => {
 
       expect(response.data).toHaveProperty('type', 'ai_assistant');
       expect(Array.isArray(response.data.assetIds)).toBe(true);
-      expect(response.data.assetIds).toEqual([Number(fixtureAssetId)]);
+      expect(response.data.assetIds).toEqual([String(fixtureAssetId)]);
       createdMaterialIds.push(response.data.id);
     });
 
@@ -123,7 +124,7 @@ describe('AI Assistant Material', () => {
       expect(TOLERATED_STATUSES).toContain(response.status);
       if (!OK_STATUSES.includes(response.status)) return;
 
-      expect(response.data.assetIds).toEqual([Number(fixtureAssetId)]);
+      expect(response.data.assetIds).toEqual([String(fixtureAssetId)]);
       createdMaterialIds.push(response.data.id);
     });
 
@@ -136,7 +137,7 @@ describe('AI Assistant Material', () => {
       expect(TOLERATED_STATUSES).toContain(response.status);
       if (!OK_STATUSES.includes(response.status)) return;
 
-      expect(response.data.assetIds).toEqual([Number(fixtureAssetId)]);
+      expect(response.data.assetIds).toEqual([String(fixtureAssetId)]);
       createdMaterialIds.push(response.data.id);
     });
 

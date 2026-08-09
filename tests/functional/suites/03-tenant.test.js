@@ -20,7 +20,7 @@ describe('Tenant Management', () => {
       await apiClient.authenticate(config.TEST_USER, config.TEST_PASSWORD);
     }
 
-    testTenantName = `verify-tenant-${Date.now()}`;
+    testTenantName = `verify_tenant_${Date.now()}`;
   });
 
   afterAll(async () => {
@@ -147,7 +147,7 @@ describe('Tenant Management', () => {
   describe('Delete Tenant', () => {
     test('can delete tenant', async () => {
       // Create a tenant specifically for deletion
-      const deleteTenantName = `delete-test-${Date.now()}`;
+      const deleteTenantName = `delete_test_${Date.now()}`;
       const tenantData = testData.createS3Tenant(deleteTenantName);
 
       const createResponse = await apiClient.createTenant(tenantData);

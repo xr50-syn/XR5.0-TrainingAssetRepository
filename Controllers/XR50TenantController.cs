@@ -454,7 +454,7 @@ namespace XR50TrainingAssetRepo.Controllers
             {
                 S3Example = new
                 {
-                    tenantName = "tenant-a",
+                    tenantName = "tenant_a",
                     tenantGroup = "enterprise",
                     description = "Tenant A Production Environment",
                     storageType = "S3",
@@ -477,7 +477,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 },
                 OwnCloudExample = new
                 {
-                    tenantName = "test-tenant",
+                    tenantName = "test_tenant",
                     tenantGroup = "development",
                     description = "Test Environment for Development",
                     storageType = "OwnCloud",
@@ -498,6 +498,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 },
                 Instructions = new[]
                 {
+                    "tenantName may contain only letters, digits and underscores: it becomes the per-tenant database name, and any other character is folded to '_', so 'foo-bar' and 'foo_bar' would resolve to the same database. Bucket names are unaffected and may keep hyphens",
                     "For S3 storage: Ensure bucket is pre-provisioned by infrastructure team",
                     "For OwnCloud storage: Directory will be created automatically",
                     "S3 buckets must exist and be accessible before tenant creation",

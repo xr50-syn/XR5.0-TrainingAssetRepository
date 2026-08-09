@@ -7,6 +7,13 @@ The XR50 Training API accepts two authentication schemes, selected per request:
 | XR5.0 Hub session token | `HL-Hub-Session-Token` | all (the only scheme outside Development) |
 | Keycloak JWT bearer | `Authorization: Bearer` | Development only |
 
+> This page describes current behaviour. The two schemes disagree about where roles come from —
+> the Hub path reads them from our database, the JWT path from token claims — and the JWT path
+> being Development-gated makes non-Hub deployment awkward for anyone who cannot run in
+> Development. A proposed direction for both is recorded in
+> [Identity and Authorization Direction](../design/identity-and-authorization-direction.md).
+> Nothing there is implemented; this document remains authoritative for how the system behaves.
+
 ## What each role may do
 
 | | `member` | `tenantadmin` | `systemadmin` |

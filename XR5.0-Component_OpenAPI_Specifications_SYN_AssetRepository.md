@@ -101,7 +101,7 @@ Authorization: Bearer eyJhbGciOi...
 Content-Type: application/json
 
 {
-  "Name": "pilot-factory",
+  "Name": "pilot_factory",
   "DisplayName": "Pilot Factory Tenant",
   "StorageType": "S3",
   "ConnectionString": "Server=db;Database=xr50_tenant_pilot_factory;User=root;Password=..."
@@ -111,7 +111,7 @@ Content-Type: application/json
 **Response (201 Created):**
 ```json
 {
-  "name": "pilot-factory",
+  "name": "pilot_factory",
   "displayName": "Pilot Factory Tenant",
   "storageType": "S3",
   "createdAt": "2025-06-15T10:30:00Z"
@@ -171,7 +171,7 @@ Content-Type: application/json
 
 **Upload a file:**
 ```http
-POST /api/pilot-factory/assets/upload?description=Safety+training+video
+POST /api/pilot_factory/assets/upload?description=Safety+training+video
 Authorization: Bearer eyJhbGciOi...
 Content-Type: multipart/form-data; boundary=---boundary
 
@@ -198,7 +198,7 @@ Content-Type: video/mp4
 
 **Download a file:**
 ```http
-GET /api/pilot-factory/assets/42/download
+GET /api/pilot_factory/assets/42/download
 Authorization: Bearer eyJhbGciOi...
 ```
 
@@ -293,7 +293,7 @@ Authorization: Bearer eyJhbGciOi...
 
 **Get material with full details:**
 ```http
-GET /api/pilot-factory/materials/5/detail
+GET /api/pilot_factory/materials/5/detail
 Authorization: Bearer eyJhbGciOi...
 ```
 
@@ -315,7 +315,7 @@ Authorization: Bearer eyJhbGciOi...
 
 **Submit quiz answers:**
 ```http
-POST /api/pilot-factory/materials/12/submit
+POST /api/pilot_factory/materials/12/submit
 Authorization: Bearer eyJhbGciOi...
 Content-Type: application/json
 
@@ -386,7 +386,7 @@ Content-Type: application/json
 
 **Create a training program:**
 ```http
-POST /api/pilot-factory/programs
+POST /api/pilot_factory/programs
 Authorization: Bearer eyJhbGciOi...
 Content-Type: application/json
 
@@ -495,7 +495,7 @@ Content-Type: application/json
 
 **Get user progress:**
 ```http
-GET /api/pilot-factory/users/user-001/progress
+GET /api/pilot_factory/users/user-001/progress
 Authorization: Bearer eyJhbGciOi...
 ```
 
@@ -582,7 +582,7 @@ Authorization: Bearer eyJhbGciOi...
 
 **Ask a question:**
 ```http
-POST /api/pilot-factory/chat/ask
+POST /api/pilot_factory/chat/ask
 Authorization: Bearer eyJhbGciOi...
 Content-Type: application/json
 
@@ -655,7 +655,7 @@ Content-Type: application/json
 
 **Ask a question:**
 ```http
-POST /api/pilot-factory/voice-assistant/ask
+POST /api/pilot_factory/voice-assistant/ask
 Authorization: Bearer eyJhbGciOi...
 Content-Type: application/json
 
@@ -667,7 +667,7 @@ Content-Type: application/json
 
 **Upload a document to the knowledge base:**
 ```http
-POST /api/pilot-factory/voice-assistant/documents
+POST /api/pilot_factory/voice-assistant/documents
 Authorization: Bearer eyJhbGciOi...
 Content-Type: multipart/form-data
 

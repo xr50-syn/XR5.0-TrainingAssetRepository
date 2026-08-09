@@ -67,7 +67,7 @@ GET /api/assets
 ## AI Extraction – Asset Management
 
 ### Display Assets
-GET /api/test-company/assets
+GET /api/test_company/assets
 
 ### Example Response
 ```json

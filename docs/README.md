@@ -32,6 +32,12 @@ This documentation is organized for **frontend developers** integrating with the
 |----------|-------------|
 | [Architecture Overview](architecture.md) | System architecture, multi-tenancy, storage backends, development guide |
 
+## Design
+
+| Document | Status | Description |
+|----------|--------|-------------|
+| [Identity and Authorization Direction](design/identity-and-authorization-direction.md) | Proposed | Where roles should live, configuration-driven deployment modes, and how a non-Hub install bootstraps — with a staged, backward-compatible migration path |
+
 ## Quick Links
 
 - **Swagger UI**: http://localhost:5286/swagger

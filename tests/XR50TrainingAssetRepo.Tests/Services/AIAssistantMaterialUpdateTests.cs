@@ -105,8 +105,8 @@ public class AIAssistantMaterialUpdateTests
         var service = new AIAssistantService(
             new HttpClient(),
             aiAssistantMaterialService,
-            new StubTenantService("test-tenant"),
-            new StubTenantManagementService("test-tenant", "tenant_default"),
+            new StubTenantService("test_tenant"),
+            new StubTenantManagementService("test_tenant", "tenant_default"),
             new ConfigurationBuilder().Build(),
             NullLogger<AIAssistantService>.Instance);
 

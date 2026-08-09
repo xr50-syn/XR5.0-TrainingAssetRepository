@@ -8,7 +8,7 @@ const axios = require('axios');
 
 describe('XR5.0 API Integration Tests', () => {
   const baseURL = process.env.XR50_API_URL || 'http://localhost:5000';
-  const testTenant = 'test-tenant';
+  const testTenant = 'test_tenant';
   
   // Test data cleanup
   const createdMaterials = [];
@@ -188,8 +188,8 @@ describe('XR5.0 API Integration Tests', () => {
 
   describe('Multi-tenant Isolation', () => {
     test('should isolate data between tenants', async () => {
-      const tenant1 = 'tenant-1';
-      const tenant2 = 'tenant-2';
+      const tenant1 = 'tenant_1';
+      const tenant2 = 'tenant_2';
       
       // Create material in tenant1
       const response1 = await axios.post(

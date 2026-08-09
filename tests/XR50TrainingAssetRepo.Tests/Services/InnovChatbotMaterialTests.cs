@@ -21,8 +21,8 @@ public class InnovChatbotMaterialTests
         await SeedMaterialWithCompletedAssetJobsAsync(factory);
 
         var provider = new FakeInnovProvider();
-        var tenantService = new StubTenantService("test-tenant");
-        var tenantManagementService = new StubTenantManagementService("test-tenant", "https://innov.test", "pilot-1");
+        var tenantService = new StubTenantService("test_tenant");
+        var tenantManagementService = new StubTenantManagementService("test_tenant", "https://innov.test", "pilot-1");
         var service = new InnovChatbotMaterialService(
             factory,
             new IChatbotProvider[] { provider },
@@ -87,8 +87,8 @@ public class InnovChatbotMaterialTests
         var service = new InnovChatbotMaterialService(
             factory,
             new IChatbotProvider[] { provider },
-            new StubTenantService("test-tenant"),
-            new StubTenantManagementService("test-tenant", "https://innov.test", "pilot-default"),
+            new StubTenantService("test_tenant"),
+            new StubTenantManagementService("test_tenant", "https://innov.test", "pilot-default"),
             NullLogger<InnovChatbotMaterialService>.Instance);
 
         var response = await service.ChatAsync(20, "What is the procedure?", "expert");

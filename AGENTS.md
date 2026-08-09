@@ -24,6 +24,10 @@ Start with `README.md` and `docs/README.md`. Architecture details are in
 - Preserve unrelated working-tree changes. Do not rewrite or delete user work.
 - Prefer small, targeted changes and follow the patterns in adjacent code.
 - Controllers are tenant-scoped through the `{tenantName}` route parameter.
+- Tenant names must match `^[a-zA-Z0-9_]+$`. The name becomes the per-tenant database as
+  `xr50_tenant_{name}` with any other character folded to `_`, so `foo-bar` and `foo_bar` would
+  resolve to one database and share data across a tenant boundary. Use underscores in examples,
+  fixtures and sample payloads. S3 bucket names are a separate field and keep hyphens.
 - Create tenant contexts through `IXR50TenantDbContextFactory`; never share a
   context between tenants, and dispose contexts with `using`.
 - Use structured logging with semantic placeholders. Do not add emoji to logs

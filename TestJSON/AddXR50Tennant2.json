@@ -1,14 +1,14 @@
 {
-  "TenantName": "Emmie's Stash of picture books",
+  "TenantName": "Emmies_Stash_of_picture_books",
   "TenantGroup": "Stash",
   "TenantDirectory": "Emmie",
-  "Description": "Emmie's Stash of picture books",
+  "Description": "Emmies_Stash_of_picture_books",
   "OwnerName":  "emmie",
   "Owner": {
     "userName": "emmie2",
     "fullName": "Fairy Queen Emerald burner NSFW account",
     "userEmail": "emmie@fairy.gov",
-    "TenantName": "Emmie's Stash of picture books",
+    "TenantName": "Emmies_Stash_of_picture_books",
     "password": "123",
     "admin": true
     

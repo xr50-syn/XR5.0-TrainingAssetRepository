@@ -47,6 +47,11 @@ fi
 
 
 
-# Start the application
+# Start the application.
+# --no-launch-profile is required: without it `dotnet run` applies Properties/launchSettings.json,
+# whose profiles pin ASPNETCORE_ENVIRONMENT=Development, and launch-profile variables take
+# precedence over the ambient environment. The container would then always run as Development
+# regardless of ASPNETCORE_ENVIRONMENT, keeping the anonymous authorization bypass, the
+# Development-only JWT bearer scheme and Swagger enabled in every deployment.
 echo "Starting the application..."
-dotnet run
+dotnet run --no-launch-profile

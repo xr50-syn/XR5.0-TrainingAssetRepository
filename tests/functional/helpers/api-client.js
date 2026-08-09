@@ -110,32 +110,33 @@ class ApiClient {
 
   // HTTP Methods
 
+  /**
+   * Builds axios options with auth/content-type headers MERGED under any caller-supplied
+   * headers, rather than replaced by them. Spreading `...options` over a `headers` key let a
+   * caller passing `options.headers` silently drop Authorization and Content-Type, which makes
+   * an auth regression look like an unrelated test bug.
+   */
+  _withHeaders(options = {}) {
+    return {
+      ...options,
+      headers: { ...this.getHeaders(options.auth !== false), ...(options.headers || {}) }
+    };
+  }
+
   async get(url, options = {}) {
-    return this.client.get(url, {
-      headers: this.getHeaders(options.auth !== false),
-      ...options
-    });
+    return this.client.get(url, this._withHeaders(options));
   }
 
   async post(url, data, options = {}) {
-    return this.client.post(url, data, {
-      headers: this.getHeaders(options.auth !== false),
-      ...options
-    });
+    return this.client.post(url, data, this._withHeaders(options));
   }
 
   async put(url, data, options = {}) {
-    return this.client.put(url, data, {
-      headers: this.getHeaders(options.auth !== false),
-      ...options
-    });
+    return this.client.put(url, data, this._withHeaders(options));
   }
 
   async delete(url, options = {}) {
-    return this.client.delete(url, {
-      headers: this.getHeaders(options.auth !== false),
-      ...options
-    });
+    return this.client.delete(url, this._withHeaders(options));
   }
 
   /**

@@ -200,7 +200,7 @@ export XR50_API_URL="http://your-xr50-instance:5000"
 
 # Optional
 export XR50_TEST_DB="postgresql://user:pass@host/db"
-export TEST_TENANT="your-test-tenant"
+export TEST_TENANT="your_test_tenant"
 ```
 
 ## Docker Usage

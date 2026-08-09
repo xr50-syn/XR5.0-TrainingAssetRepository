@@ -555,9 +555,13 @@ if (app.Environment.IsDevelopment())
           c.SwaggerEndpoint("/swagger/materials/swagger.json", "4. Material Management");
           c.SwaggerEndpoint("/swagger/assets/swagger.json", "5. Asset Management");
           c.SwaggerEndpoint("/swagger/users/swagger.json", "6. User Management");
-          c.SwaggerEndpoint("/swagger/v1/swagger.json", "Default");
           c.SwaggerEndpoint("/swagger/chat/swagger.json", "7. Chat API");
           c.SwaggerEndpoint("/swagger/ai-assistant/swagger.json", "8. AI Assistant API");
+          c.SwaggerEndpoint("/swagger/innov-chatbot/swagger.json", "9. INNOV Chatbot API");
+          // "all" is the only catch-all document declared via SwaggerDoc; the previous
+          // "/swagger/v1/swagger.json" entry named a document that is never generated and
+          // returned 404 from the UI dropdown.
+          c.SwaggerEndpoint("/swagger/all/swagger.json", "All Endpoints");
           // OAuth2 configuration for Swagger UI
           c.OAuthClientId("xr50-swagger");
           c.OAuthAppName("XR50 Training API - Swagger");

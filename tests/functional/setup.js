@@ -31,7 +31,7 @@ module.exports = async function globalSetup() {
   const STATE_FILE = path.join(__dirname, '.test-state.json');
 
   // Generate test tenant name
-  const testTenant = EXISTING_TENANT || process.env.TEST_TENANT || `test-${Date.now()}`;
+  const testTenant = EXISTING_TENANT || process.env.TEST_TENANT || `test_${Date.now()}`;
 
   // Save state file so all test files use the same tenant
   const state = {

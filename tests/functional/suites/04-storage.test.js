@@ -46,7 +46,7 @@ describe('S3 Storage Operations', () => {
       );
 
       // Accept success, auth issues, or server errors (storage misconfiguration)
-      expect([200, 201, 401, 403, 500]).toContain(response.status);
+      expect([200, 201]).toContain(response.status);
 
       if (response.status >= 400) {
         console.log('\n--- TEXT FILE UPLOAD FAILED ---');
@@ -80,7 +80,7 @@ describe('S3 Storage Operations', () => {
       );
 
       // Accept success, auth issues, or server errors (storage misconfiguration)
-      expect([200, 201, 401, 403, 500]).toContain(response.status);
+      expect([200, 201]).toContain(response.status);
 
       if (response.status >= 400) {
         console.log('\n--- IMAGE UPLOAD FAILED ---');
@@ -102,7 +102,7 @@ describe('S3 Storage Operations', () => {
     test('can list assets', async () => {
       const response = await apiClient.listAssets();
 
-      expect([200, 401, 403]).toContain(response.status);
+      expect([200]).toContain(response.status);
 
       if (response.status === 200) {
         expect(Array.isArray(response.data)).toBe(true);

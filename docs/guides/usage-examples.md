@@ -54,7 +54,7 @@ Using Swagger UI at http://localhost:5286/swagger:
 
 ```json
 {
-  "tenantName": "aerotech-manufacturing",
+  "tenantName": "aerotech_manufacturing",
   "tenantGroup": "pilot-aerospace",
   "description": "AeroTech Manufacturing XR Training Platform",
   "storageType": "S3",
@@ -78,7 +78,7 @@ Using Swagger UI at http://localhost:5286/swagger:
   "success": true,
   "data": {
     "tenantId": 1,
-    "tenantName": "aerotech-manufacturing",
+    "tenantName": "aerotech_manufacturing",
     "storageType": "S3",
     "s3BucketName": "xr50-tenant-aerotech-manufacturing",
     "createdAt": "2024-10-01T10:00:00Z"
@@ -103,7 +103,7 @@ Check that everything was created:
 
 #### Create Main Training Program
 
-**Endpoint**: `POST /api/aerotech-manufacturing/programs/`
+**Endpoint**: `POST /api/aerotech_manufacturing/programs/`
 
 ```json
 {
@@ -129,7 +129,7 @@ Check that everything was created:
 
 **1. Safety Protocols Learning Path**
 
-**Endpoint**: `POST /api/aerotech-manufacturing/learningpaths/`
+**Endpoint**: `POST /api/aerotech_manufacturing/learningpaths/`
 
 ```json
 {
@@ -166,7 +166,7 @@ Check that everything was created:
 
 #### Upload Safety Manual PDF
 
-**Endpoint**: `POST /api/aerotech-manufacturing/assets/upload`
+**Endpoint**: `POST /api/aerotech_manufacturing/assets/upload`
 
 **Form Data**:
 - `file`: safety-protocols-manual.pdf
@@ -218,7 +218,7 @@ Check that everything was created:
 
 #### Create Document Material
 
-**Endpoint**: `POST /api/aerotech-manufacturing/materials/`
+**Endpoint**: `POST /api/aerotech_manufacturing/materials/`
 
 ```json
 {
@@ -245,7 +245,7 @@ Check that everything was created:
 
 **2. Add Video Timestamps**:
 
-**Endpoint**: `POST /api/aerotech-manufacturing/materials/video/{materialId}/timestamps`
+**Endpoint**: `POST /api/aerotech_manufacturing/materials/video/{materialId}/timestamps`
 
 ```json
 {
@@ -288,7 +288,7 @@ Check that everything was created:
 
 #### Create Maintenance Checklist
 
-**Endpoint**: `POST /api/aerotech-manufacturing/materials/`
+**Endpoint**: `POST /api/aerotech_manufacturing/materials/`
 
 ```json
 {
@@ -300,7 +300,7 @@ Check that everything was created:
 
 **Add Checklist Entries**:
 
-**Endpoint**: `POST /api/aerotech-manufacturing/materials/checklist/{materialId}/entries`
+**Endpoint**: `POST /api/aerotech_manufacturing/materials/checklist/{materialId}/entries`
 
 ```json
 {
@@ -344,7 +344,7 @@ All API requests should include proper error handling:
 
 ```bash
 # Example using curl
-curl -X POST "http://localhost:5286/api/aerotech-manufacturing/materials/" \
+curl -X POST "http://localhost:5286/api/aerotech_manufacturing/materials/" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Safety Manual",
@@ -379,10 +379,10 @@ curl -X POST "http://localhost:5286/api/aerotech-manufacturing/materials/" \
 
 #### Get Asset Download URL
 
-**Endpoint**: `GET /api/aerotech-manufacturing/assets/{assetId}/download`
+**Endpoint**: `GET /api/aerotech_manufacturing/assets/{assetId}/download`
 
 ```bash
-curl -X GET "http://localhost:5286/api/aerotech-manufacturing/assets/1/download"
+curl -X GET "http://localhost:5286/api/aerotech_manufacturing/assets/1/download"
 ```
 
 **Response**:
@@ -400,7 +400,7 @@ curl -X GET "http://localhost:5286/api/aerotech-manufacturing/assets/1/download"
 
 #### Get File Information
 
-**Endpoint**: `GET /api/aerotech-manufacturing/assets/{assetId}/file-info`
+**Endpoint**: `GET /api/aerotech_manufacturing/assets/{assetId}/file-info`
 
 ```json
 {
@@ -421,7 +421,7 @@ curl -X GET "http://localhost:5286/api/aerotech-manufacturing/assets/1/download"
 
 #### Create Additional Users
 
-**Endpoint**: `POST /api/aerotech-manufacturing/users/`
+**Endpoint**: `POST /api/aerotech_manufacturing/users/`
 
 ```json
 {
@@ -435,7 +435,7 @@ curl -X GET "http://localhost:5286/api/aerotech-manufacturing/assets/1/download"
 
 #### List Tenant Users
 
-**Endpoint**: `GET /api/aerotech-manufacturing/users/`
+**Endpoint**: `GET /api/aerotech_manufacturing/users/`
 
 **Response**:
 ```json
@@ -481,7 +481,7 @@ curl -X GET "http://localhost:5286/api/aerotech-manufacturing/assets/1/download"
 
 **Create Share Link**:
 
-**Endpoint**: `POST /api/aerotech-manufacturing/assets/{assetId}/share`
+**Endpoint**: `POST /api/aerotech_manufacturing/assets/{assetId}/share`
 
 ```json
 {
@@ -509,7 +509,7 @@ curl -X GET "http://localhost:5286/api/aerotech-manufacturing/assets/1/download"
 
 #### Get Complete Training Program Structure
 
-**Endpoint**: `GET /api/aerotech-manufacturing/programs/{programId}`
+**Endpoint**: `GET /api/aerotech_manufacturing/programs/{programId}`
 
 **Response includes**:
 - Program details
@@ -585,7 +585,7 @@ For integration with XR training platforms:
 ### Asset Upload Failures
 ```bash
 # Check asset file size and type
-curl -X GET "http://localhost:5286/api/aerotech-manufacturing/assets/{id}/file-info"
+curl -X GET "http://localhost:5286/api/aerotech_manufacturing/assets/{id}/file-info"
 
 # Verify storage connectivity
 docker-compose logs training-repo
@@ -597,7 +597,7 @@ docker-compose logs training-repo
 docker-compose exec mariadb mysql -u root -p -e "SHOW DATABASES LIKE 'xr50_tenant_%';"
 
 # Verify tenant configuration
-curl -X GET "http://localhost:5286/api/tenants/aerotech-manufacturing"
+curl -X GET "http://localhost:5286/api/tenants/aerotech_manufacturing"
 ```
 
 ### Storage Backend Problems
