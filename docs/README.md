@@ -38,7 +38,7 @@ This documentation is organized for **frontend developers** integrating with the
 | Document | Status | Description |
 |----------|--------|-------------|
 | [Identity and Authorization Direction](design/identity-and-authorization-direction.md) | Proposed | Where roles should live, configuration-driven deployment modes, and how a non-Hub install bootstraps — with a staged, backward-compatible migration path |
-| [Agent Skill Portability](design/agent-skill-portability.md) | Proposed | Keeping the verification workflow vendor-neutral: neutral core, thin adapters, and the plan for a Codex adapter |
+| [Agent Skill Portability](design/agent-skill-portability.md) | Adopted | Keeping the verification workflow vendor-neutral with thin Claude Code and Codex adapters |
 
 ## Quick Links
 

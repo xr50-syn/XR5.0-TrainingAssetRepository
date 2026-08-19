@@ -111,7 +111,7 @@ tenant, material, asset, or external collection created by a live probe.
 - Keep shared project knowledge here or in `docs/`, using ordinary Markdown and
   executable commands rather than vendor-specific slash commands.
 - Do not require a particular model, agent vendor, IDE, or proprietary tool.
-- Vendor adapters such as `.claude/`, `.codex/`, or editor settings are optional
+- Vendor adapters such as `.claude/`, `.agents/skills/`, or editor settings are optional
   and must point back to this file. They are tracked in the repository so that a
   contributor gets the same workflow whichever agent they use, but they carry only
   trigger conditions and pointers - never project knowledge that exists nowhere
@@ -121,8 +121,8 @@ tenant, material, asset, or external collection created by a live probe.
   | Adapter | Status |
   |---|---|
   | `.claude/skills/` (`e2e-verify`, `e2e-probe`) | Present |
-  | `.codex/prompts/` | Planned - see [docs/design/agent-skill-portability.md](docs/design/agent-skill-portability.md) |
+  | `.agents/skills/` (`e2e-verify`, `e2e-probe`) | Present for Codex |
 
 - When behavior or commands change, update this guide and the relevant project
-  documentation together. A change to `.claude/` or `.codex/` that does not touch
-  `docs/guides/` is either a trigger-wording fix or a mistake.
+  documentation together. A change to `.claude/` or `.agents/skills/` that does not touch
+  `docs/guides/` is either adapter packaging or trigger wording only, or it is a mistake.

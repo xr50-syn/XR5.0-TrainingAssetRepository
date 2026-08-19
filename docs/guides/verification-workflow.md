@@ -2,8 +2,8 @@
 
 How to verify a change to this repository, from a one-line fix to a change that crosses the
 database and storage boundaries. This guide is vendor-neutral: every step is an ordinary
-command that a human or any coding agent can run. Agent adapters under `.claude/` and
-`.codex/` are thin pointers to this document and add nothing of their own.
+command that a human or any coding agent can run. Agent adapters under `.claude/skills/` and
+`.agents/skills/` are thin pointers to this document and add nothing of their own.
 
 The short version of the rules lives in [AGENTS.md](../../AGENTS.md) under "Verification".
 

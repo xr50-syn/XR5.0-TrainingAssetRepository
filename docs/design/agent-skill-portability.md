@@ -1,6 +1,6 @@
 # Agent Skill Portability
 
-**Status:** Proposed
+**Status:** Adopted
 
 How this repository offers its verification workflow to coding agents without requiring any
 particular one. Written when the Claude Code adapter under `.claude/` was added, to keep that
@@ -8,10 +8,11 @@ from becoming the privileged path.
 
 ## The problem
 
-Agent vendors each have their own format for packaged instructions — Claude Code has skills,
-Codex has prompt files, others have rules files or none at all. Encoding the verification
-workflow in one vendor's format makes contributors using a different tool second-class, and
-makes the workflow itself invisible to anyone reading the repository without an agent.
+Agent vendors discover packaged instructions from different locations — Claude Code uses
+`.claude/skills/`, while Codex discovers repository skills from `.agents/skills/`. Others have
+rules files or no adapter mechanism at all. Encoding the verification workflow in one vendor's
+location makes contributors using a different tool second-class, and makes the workflow itself
+invisible to anyone reading the repository without an agent.
 
 [AGENTS.md](../../AGENTS.md) already commits us against this: *"Do not require a particular
 model, agent vendor, IDE, or proprietary tool"* and *"Vendor adapters ... are optional local
@@ -24,9 +25,9 @@ docs/guides/verification-workflow.md   <- the procedure, in prose
 scripts/verify-e2e.sh                  <- the procedure, executable
 AGENTS.md                              <- the rules, and pointers to both
         |
-        +-- .claude/skills/*/SKILL.md   thin adapter: triggers + checklist
-        +-- .codex/prompts/*.md         thin adapter: triggers + checklist
-        +-- (no adapter)                still works: AGENTS.md points at the guide
+        +-- .claude/skills/*/SKILL.md        thin adapter: triggers + checklist
+        +-- .agents/skills/*/SKILL.md        thin Codex adapter: triggers + checklist
+        +-- (no adapter)                     still works: AGENTS.md points at the guide
 ```
 
 An adapter may contain trigger conditions, a short checklist, and a pointer. It may **not**
@@ -53,60 +54,46 @@ Any adapter, for any vendor, must:
 5. **Keep personal configuration untracked** — `settings.local.json` and equivalents stay
    gitignored.
 
-## Plan for Codex
+## Codex adapter
 
-Codex is open source, reads `AGENTS.md` natively, and supports user-defined prompt files. That
-makes it the cheapest second adapter and a good proof that the neutral core is genuinely
-neutral.
+Codex reads `AGENTS.md` natively and supports repository-scoped agent skills. That makes it a
+good second adapter and proof that the neutral core is genuinely neutral.
 
-### Step 0 — confirm the mechanism (do this first)
+### Mechanism confirmed
 
-The plan below assumes Codex discovers Markdown prompt files from a project directory and
-exposes them as invocable commands. **Confirm against the installed Codex release before
-building anything**, because this is the part most likely to have changed:
+The original proposal assumed project prompt files under `.codex/prompts/`. That assumption was
+checked before implementation and was no longer current. Codex CLI 0.148.0, the installed
+release when this adapter was adopted, follows the agent skills mechanism documented in the
+[official Codex skill documentation](https://learn.chatgpt.com/codex/build-skills):
 
-```bash
-codex --version
-codex --help                 # look for prompt/command discovery flags
-ls ~/.codex/                 # config.toml, prompts/, AGENTS.md
-```
+- repository skills live under `.agents/skills/<name>/SKILL.md`;
+- Codex scans from the current directory up to the repository root without a project config
+  entry;
+- users can invoke a skill explicitly as `$e2e-verify` or `$e2e-probe`;
+- Codex can select either skill implicitly from its frontmatter description.
 
-Specifically establish: (a) whether prompts can live in the project tree or only in `~/.codex/`,
-(b) whether discovery is automatic or needs a config entry, (c) whether prompts are
-user-invoked only or can be model-selected from a description. The answers change only the
-*packaging* below, never the content.
+The packaging changed; the vendor-neutral workflow did not.
 
-### Step 1 — verify the zero-adapter path already works
+### Zero-adapter path
 
-Before adding anything, check that Codex reaches the workflow through `AGENTS.md` alone. Open
-Codex in a clean checkout and ask it to verify a trivial change. It should find the
-verification section, follow the pointer to the guide, and run `scripts/verify-e2e.sh`.
+The zero-adapter path was verified before adding `.agents/skills/`: Codex read `AGENTS.md`,
+followed its pointer to the verification guide, and ran `scripts/verify-e2e.sh`. The adapter is
+therefore a convenience and stays minimal.
 
-If that works, the adapter is a convenience and can stay minimal. If it does not, the fix is to
-make the pointer in `AGENTS.md` more prominent — a fix that benefits every agent — rather than
-to compensate inside a Codex-specific file.
+If that path ever stops working, make the pointer in `AGENTS.md` more prominent rather than
+compensating with project knowledge inside a Codex-specific file.
 
-### Step 2 — add `.codex/prompts/`
+### Files
 
-Mirror the two Claude skills as prompt files:
+The Codex adapter mirrors the two Claude Code skills:
 
 | File | Mirrors | Content |
 |---|---|---|
-| `.codex/prompts/e2e-verify.md` | `.claude/skills/e2e-verify/SKILL.md` | ladder invocation + non-negotiables |
-| `.codex/prompts/e2e-probe.md` | `.claude/skills/e2e-probe/SKILL.md` | probe procedure + assertion checklist |
-| `.codex/README.md` | `.claude/README.md` | adapter design, pointer back to AGENTS.md |
+| `.agents/skills/e2e-verify/SKILL.md` | `.claude/skills/e2e-verify/SKILL.md` | ladder invocation + non-negotiables |
+| `.agents/skills/e2e-probe/SKILL.md` | `.claude/skills/e2e-probe/SKILL.md` | probe procedure + assertion checklist |
 
-Adapt only the frontmatter and invocation convention. If Codex prompts are user-invoked rather
-than model-selected, fold the Claude `description:` trigger conditions into a "Use this when"
-line in the body so the information is not lost.
-
-### Step 3 — gitignore
-
-Already prepared: `.codex/settings.local.json` is ignored while the rest of `.codex/` tracks.
-
-### Step 4 — declare it
-
-Add a row to the adapter table in `AGENTS.md` and this document's status becomes Adopted.
+The adapters use Codex's required `name` and `description` frontmatter. They need no scripts,
+assets, generated metadata or repository-local configuration.
 
 ## Other agents
 
@@ -126,8 +113,9 @@ Drift is the real risk: adapters are duplicated prose, and duplicated prose dive
   own `--help` is the interface.
 - **When behavior changes, update the guide and AGENTS.md together** — already an AGENTS.md
   rule, extended here to cover adapters.
-- **Review rule:** a pull request touching `.claude/` or `.codex/` without touching
-  `docs/guides/` is either a trigger-wording fix or a mistake. Ask which.
+- **Review rule:** a pull request touching `.claude/` or `.agents/skills/` without touching
+  `docs/guides/` is either adapter packaging or trigger wording only, or it is a mistake. Ask
+  which.
 
 ## What this deliberately does not do
 

@@ -380,7 +380,7 @@ app/
 !.env.example
 !.env.*.example
 .codegpt
-# Vendor agent adapters (.claude/, .codex/, ...) are tracked: they are thin pointers to
+# Vendor agent adapters (.claude/skills/, .agents/skills/, ...) are tracked: thin pointers to
 # AGENTS.md and docs/guides/verification-workflow.md, kept in the repo so a contributor gets
 # the same verification workflow whichever agent they use. Personal overrides stay local.
 .claude/settings.local.json
