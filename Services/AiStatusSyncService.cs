@@ -382,7 +382,7 @@ namespace XR50TrainingAssetRepo.Services
         private XR50TrainingContext CreateTenantContext(string tenantName)
         {
             var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
-            var tenantDbName = GetTenantSchema(tenantName);
+            var tenantDbName = XR50TenantDatabase.SchemaFor(tenantName);
             var tenantConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
             _logger.LogDebug("Created tenant connection for {Tenant}: tenant={TenantDb}",
@@ -393,35 +393,6 @@ namespace XR50TrainingAssetRepo.Services
 
             var tenantService = new DirectTenantService(tenantName);
             return new XR50TrainingContext(optionsBuilder.Options, tenantService, _configuration);
-        }
-
-        private static string GetTenantSchema(string tenantName)
-        {
-            var sanitized = Regex.Replace(tenantName, @"[^a-zA-Z0-9_]", "_");
-            return $"xr50_tenant_{sanitized}";
-        }
-
-        /// <summary>
-        /// Helper class for direct tenant service (no HttpContext required)
-        /// </summary>
-        private class DirectTenantService : IXR50TenantService
-        {
-            private readonly string _tenantName;
-
-            public DirectTenantService(string tenantName)
-            {
-                _tenantName = tenantName;
-            }
-
-            public string GetCurrentTenant() => _tenantName;
-            public Task<bool> ValidateTenantAsync(string tenantId) => Task.FromResult(true);
-            public Task<bool> TenantExistsAsync(string tenantName) => Task.FromResult(true);
-            public Task<XR50Tenant> CreateTenantAsync(XR50Tenant tenant) => Task.FromResult(tenant);
-            public string GetTenantSchema(string tenantName)
-            {
-                var sanitized = Regex.Replace(tenantName, @"[^a-zA-Z0-9_]", "_");
-                return $"xr50_tenant_{sanitized}";
-            }
         }
     }
 }

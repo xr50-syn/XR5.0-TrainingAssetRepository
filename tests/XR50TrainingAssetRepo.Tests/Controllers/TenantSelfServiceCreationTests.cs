@@ -32,7 +32,7 @@ public class TenantSelfServiceCreationTests
         public Task<XR50Tenant> CreateTenantAsync(XR50Tenant tenant)
         {
             CreatedTenant = tenant;
-            tenant.TenantSchema = $"xr50_tenant_{tenant.TenantName}";
+            tenant.TenantSchema = XR50TenantDatabase.SchemaFor(tenant.TenantName);
             return Task.FromResult(tenant);
         }
 
@@ -47,6 +47,18 @@ public class TenantSelfServiceCreationTests
         public Task<User> GetOwnerUserAsync(string ownerName, string tenantName) => Task.FromResult<User>(null!);
         public Task DeleteTenantAsync(string tenantName) => Task.CompletedTask;
         public Task DeleteTenantCompletelyAsync(string tenantName) => Task.CompletedTask;
+    }
+
+    private sealed class StubTenantService : IXR50TenantService
+    {
+        /// <summary>Simulates the derived tenant database already existing in MySQL.</summary>
+        public bool TenantDatabaseExists { get; set; }
+
+        public string GetCurrentTenant() => "default";
+        public Task<bool> ValidateTenantAsync(string tenantName) => Task.FromResult(TenantDatabaseExists);
+        public Task<bool> TenantExistsAsync(string tenantName) => Task.FromResult(TenantDatabaseExists);
+        public Task<XR50Tenant> CreateTenantAsync(XR50Tenant tenant) => Task.FromResult(tenant);
+        public string GetTenantSchema(string tenantName) => XR50TenantDatabase.SchemaFor(tenantName);
     }
 
     private sealed class StubStorageService : IStorageService
@@ -67,10 +79,12 @@ public class TenantSelfServiceCreationTests
         public string GetStorageType() => "OwnCloud";
     }
 
-    private static TenantsController CreateController(StubTenantManagementService service, ClaimsPrincipal user)
+    private static TenantsController CreateController(
+        StubTenantManagementService service, ClaimsPrincipal user, StubTenantService? tenantService = null)
     {
         var controller = new TenantsController(
             service,
+            tenantService ?? new StubTenantService(),
             new StubStorageService(),
             Options.Create(new IamOptions()),
             NullLogger<TenantsController>.Instance)
@@ -112,9 +126,10 @@ public class TenantSelfServiceCreationTests
         return new ClaimsPrincipal(new ClaimsIdentity(claims, HubSessionTokenDefaults.SchemeName));
     }
 
-    private static CreateTenantRequest Request(Guid? requestedHubTenantId = null, bool ownerAdmin = false) => new()
+    private static CreateTenantRequest Request(
+        Guid? requestedHubTenantId = null, bool ownerAdmin = false, string tenantName = "selfservice") => new()
     {
-        TenantName = "selfservice",
+        TenantName = tenantName,
         StorageType = "OwnCloud",
         OwnCloudConfig = new OwnCloudConfigurationRequest { TenantDirectory = "selfservice-files" },
         HubTenantId = requestedHubTenantId,
@@ -183,6 +198,48 @@ public class TenantSelfServiceCreationTests
         var controller = CreateController(service, HubPrincipal(CallerHubTenantId));
 
         var result = await controller.CreateTenant(Request());
+
+        var problem = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+        service.CreatedTenant.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task UuidTenantName_IsAccepted()
+    {
+        var service = new StubTenantManagementService();
+        var controller = CreateController(service, HubPrincipal(CallerHubTenantId));
+
+        var result = await controller.CreateTenant(
+            Request(tenantName: "3f2b1a90-7c4d-4e5f-9a6b-8d7c6e5f4a3b"));
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        service.CreatedTenant!.TenantName.Should().Be("3f2b1a90-7c4d-4e5f-9a6b-8d7c6e5f4a3b");
+    }
+
+    [Fact]
+    public async Task TenantName_WithOtherSpecialCharacters_IsStillRejected()
+    {
+        var service = new StubTenantManagementService();
+        var controller = CreateController(service, HubPrincipal(CallerHubTenantId));
+
+        var result = await controller.CreateTenant(Request(tenantName: "foo bar"));
+
+        var problem = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        service.CreatedTenant.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task TenantName_WhoseDerivedDatabaseAlreadyExists_Returns409()
+    {
+        // "foo-bar" and "foo_bar" both derive xr50_tenant_foo_bar; with the database already
+        // present, creation must refuse instead of silently attaching to the existing data.
+        var service = new StubTenantManagementService();
+        var tenantService = new StubTenantService { TenantDatabaseExists = true };
+        var controller = CreateController(service, HubPrincipal(CallerHubTenantId), tenantService);
+
+        var result = await controller.CreateTenant(Request(tenantName: "foo-bar"));
 
         var problem = result.Result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(StatusCodes.Status409Conflict);

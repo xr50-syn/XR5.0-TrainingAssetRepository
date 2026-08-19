@@ -137,25 +137,5 @@ namespace XR50TrainingAssetRepo.Services
             }
         }
 
-        // Helper class for direct tenant service
-        private class DirectTenantService : IXR50TenantService
-        {
-            private readonly string _tenantName;
-
-            public DirectTenantService(string tenantName)
-            {
-                _tenantName = tenantName;
-            }
-
-            public string GetCurrentTenant() => _tenantName;
-            public Task<bool> ValidateTenantAsync(string tenantId) => Task.FromResult(true);
-            public Task<bool> TenantExistsAsync(string tenantName) => Task.FromResult(true);
-            public Task<XR50Tenant> CreateTenantAsync(XR50Tenant tenant) => Task.FromResult(tenant);
-            public string GetTenantSchema(string tenantName)
-            {
-                var sanitized = System.Text.RegularExpressions.Regex.Replace(tenantName, @"[^a-zA-Z0-9_]", "_");
-                return $"xr50_tenant_{sanitized}";
-            }
-        }
     }
 }

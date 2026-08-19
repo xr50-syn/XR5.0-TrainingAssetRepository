@@ -334,11 +334,7 @@ namespace XR50TrainingAssetRepo.Services
             }
         }
 
-        private string GetTenantDatabase(string tenantName)
-        {
-            var sanitized = Regex.Replace(tenantName, @"[^a-zA-Z0-9_]", "_");
-            return $"xr50_tenant_{sanitized}";
-        }
+        private string GetTenantDatabase(string tenantName) => XR50TenantDatabase.SchemaFor(tenantName);
 
         private string GetBaseDatabaseName()
         {

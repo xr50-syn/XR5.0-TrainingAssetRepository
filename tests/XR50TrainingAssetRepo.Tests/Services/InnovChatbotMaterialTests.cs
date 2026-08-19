@@ -209,7 +209,7 @@ public class InnovChatbotMaterialTests
         public Task<bool> ValidateTenantAsync(string tenantName) => Task.FromResult(true);
         public Task<bool> TenantExistsAsync(string tenantName) => Task.FromResult(true);
         public Task<XR50Tenant> CreateTenantAsync(XR50Tenant tenant) => Task.FromResult(tenant);
-        public string GetTenantSchema(string tenantName) => $"xr50_tenant_{tenantName}";
+        public string GetTenantSchema(string tenantName) => XR50TenantDatabase.SchemaFor(tenantName);
     }
 
     private sealed class StubTenantManagementService : IXR50TenantManagementService

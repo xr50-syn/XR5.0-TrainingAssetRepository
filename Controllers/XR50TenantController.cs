@@ -14,17 +14,20 @@ namespace XR50TrainingAssetRepo.Controllers
     public class TenantsController : ControllerBase
     {
         private readonly IXR50TenantManagementService _tenantManagementService;
+        private readonly IXR50TenantService _tenantService;
         private readonly IStorageService _storageService;
         private readonly IamOptions _iamOptions;
         private readonly ILogger<TenantsController> _logger;
 
         public TenantsController(
             IXR50TenantManagementService tenantManagementService,
+            IXR50TenantService tenantService,
             IStorageService storageService,
             Microsoft.Extensions.Options.IOptions<IamOptions> iamOptions,
             ILogger<TenantsController> logger)
         {
             _tenantManagementService = tenantManagementService;
+            _tenantService = tenantService;
             _storageService = storageService;
             _iamOptions = iamOptions.Value;
             _logger = logger;
@@ -101,6 +104,20 @@ namespace XR50TrainingAssetRepo.Controllers
                         : $"Hub tenant id '{effectiveHubTenantId.Value:D}' is already mapped to another tenant.");
                 }
 
+                // Distinct names can fold to the same per-tenant database name (hyphens and
+                // underscores both derive '_' positions, e.g. "foo-bar" vs "foo_bar"), and the
+                // provisioning path uses CREATE DATABASE IF NOT EXISTS - a collision would
+                // silently attach the new tenant to the existing tenant's data. Checked here,
+                // before any storage or database provisioning, so it surfaces as a clean 409.
+                if (await _tenantService.TenantExistsAsync(request.TenantName))
+                {
+                    _logger.LogWarning("Tenant database for {TenantName} already exists ({TenantSchema})",
+                        request.TenantName, _tenantService.GetTenantSchema(request.TenantName));
+                    return this.ProblemConflict(
+                        $"A tenant whose database name matches '{request.TenantName}' already exists. " +
+                        "Note that names differing only in '-' vs '_' map to the same database.");
+                }
+
                 // Validate storage type matches running implementation
                 var runningStorageType = _storageService.GetStorageType();
                 if (!request.StorageType.Equals(runningStorageType, StringComparison.OrdinalIgnoreCase))
@@ -114,7 +131,7 @@ namespace XR50TrainingAssetRepo.Controllers
                 // Sharing a collection across tenants would let chatbot queries surface another
                 // tenant's documents — see the "default collection cross-tenant" security fix.
                 var defaultAICollection = string.IsNullOrWhiteSpace(request.DefaultAICollection)
-                    ? $"aiassist_default_{System.Text.RegularExpressions.Regex.Replace(request.TenantName, @"[^a-zA-Z0-9_]", "_")}"
+                    ? $"aiassist_default_{XR50TenantDatabase.Sanitize(request.TenantName)}"
                     : request.DefaultAICollection;
 
                 // Create tenant object from request

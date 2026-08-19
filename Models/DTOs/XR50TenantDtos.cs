@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using XR50TrainingAssetRepo.Services;
 
 namespace XR50TrainingAssetRepo.Models.DTOs
 {
@@ -93,13 +94,6 @@ namespace XR50TrainingAssetRepo.Models.DTOs
     
     public class CreateTenantRequest
     {
-        /// <summary>
-        /// Characters that survive the tenant-name to database-name fold in
-        /// XR50TenantService.GetTenantSchema unchanged. See Validate() for why this matters.
-        /// </summary>
-        private static readonly System.Text.RegularExpressions.Regex TenantNamePattern =
-            new(@"^[a-zA-Z0-9_]+$", System.Text.RegularExpressions.RegexOptions.Compiled);
-
         [Required]
         [StringLength(50, MinimumLength = 3)]
         public string TenantName { get; set; } = "";
@@ -140,16 +134,13 @@ namespace XR50TrainingAssetRepo.Models.DTOs
                 throw new ArgumentException("TenantName is required");
 
             // The tenant name becomes the per-tenant database name via
-            // GetTenantSchema() = "xr50_tenant_" + Regex.Replace(name, "[^a-zA-Z0-9_]", "_").
-            // Any character outside that set is folded to '_', so unless the name is already
-            // schema-safe two distinct tenants can collapse onto ONE database - "foo bar",
-            // "foo-bar" and "foo.bar" all yield xr50_tenant_foo_bar, silently sharing data
-            // across a tenant boundary. Require names that survive the fold unchanged.
-            if (!TenantNamePattern.IsMatch(TenantName))
+            // XR50TenantDatabase.SchemaFor, which folds disallowed characters to '_' - see
+            // that class for the accepted set and the collision story behind it.
+            if (!XR50TenantDatabase.IsAcceptableTenantName(TenantName))
                 throw new ArgumentException(
-                    "TenantName may contain only letters, digits and underscores. Other characters are " +
-                    "folded to '_' when deriving the per-tenant database name, which would let two " +
-                    "different tenants resolve to the same database.");
+                    "TenantName may contain only letters, digits, underscores and hyphens. Other " +
+                    "characters are folded to '_' when deriving the per-tenant database name, which " +
+                    "would let two different tenants resolve to the same database.");
 
             // Belt and braces for callers that invoke Validate() directly rather than going
             // through model binding, where [StringLength(50)] already applies. The ceiling is
