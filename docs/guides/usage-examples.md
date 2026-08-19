@@ -1,5 +1,15 @@
 # XR5.0 Training Asset Repository - Usage Examples
 
+> **Response conventions.** Read and write endpoints return the resource itself - an object or
+> an array - with **no** `{ "success": ..., "data": ... }` wrapper. Integer ids serialize as JSON
+> **strings** (`"1"`, not `1`) API-wide. Errors are
+> [RFC 7807 problem details](https://datatracker.ietf.org/doc/html/rfc7807) carrying a stable
+> `errorCode`. The progress and user-material endpoints are the exception: their DTOs do include
+> a `success` flag - see [User Progress API](../api/user-progress-api.md).
+>
+> Response bodies below are illustrative. Swagger at `/swagger` is the authoritative contract;
+> see also [Architecture](../architecture.md#response-format).
+
 ## Table of Contents
 1. [Complete Setup Scenario](#complete-setup-scenario)
 2. [Tenant Creation Walkthrough](#tenant-creation-walkthrough)
@@ -49,7 +59,7 @@ Wait for services to start (30-60 seconds), then verify:
 Using Swagger UI at http://localhost:5286/swagger:
 
 1. Navigate to **1. Tenant Management**
-2. Use `POST /api/tenants/create`
+2. Use `POST /xr50/trainingAssetRepository/tenants`
 3. Request body:
 
 ```json
@@ -72,18 +82,17 @@ Using Swagger UI at http://localhost:5286/swagger:
 }
 ```
 
-**Expected Response**:
+**Expected Response** (`200 OK`):
 ```json
 {
-  "success": true,
-  "data": {
-    "tenantId": 1,
-    "tenantName": "aerotech_manufacturing",
-    "storageType": "S3",
-    "s3BucketName": "xr50-tenant-aerotech-manufacturing",
-    "createdAt": "2024-10-01T10:00:00Z"
-  },
-  "message": "Tenant created successfully with S3 storage"
+  "tenantName": "aerotech_manufacturing",
+  "tenantGroup": "manufacturing",
+  "description": "Aerotech Manufacturing training tenant",
+  "ownerName": "sysadmin",
+  "storageType": "S3",
+  "defaultAICollection": "aiassist_default_aerotech_manufacturing",
+  "createdAt": "2024-10-01T10:00:00Z",
+  "s3Config": { "bucketName": "xr50-tenant-aerotech-manufacturing", "bucketRegion": "eu-west-1" }
 }
 ```
 
@@ -354,24 +363,28 @@ curl -X POST "http://localhost:5286/api/aerotech_manufacturing/materials/" \
   }'
 ```
 
-**Success Response (200)**:
+**Success Response (201)**:
 ```json
 {
-  "success": true,
-  "data": { "id": 1, "name": "Safety Manual", ... },
-  "message": "Material created successfully"
+  "status": "success",
+  "message": "Material created successfully",
+  "id": "1",
+  "name": "Safety Manual",
+  "type": "pdf",
+  "created_at": "2024-10-01T10:00:00Z"
 }
 ```
 
-**Error Response (400)**:
+**Error Response (400)** - RFC 7807 problem details:
 ```json
 {
-  "success": false,
-  "error": "ValidationError",
-  "message": "Material name is required",
-  "details": {
-    "name": ["The Name field is required."]
-  }
+  "type": "https://api.xr50/errors/validation-error",
+  "title": "Validation error",
+  "status": "400",
+  "detail": "Material name is required.",
+  "instance": "/api/aerotech_manufacturing/materials",
+  "traceId": "0HNNTPT4KIMFV:00000001",
+  "errorCode": "validation_error"
 }
 ```
 
@@ -597,7 +610,7 @@ docker-compose logs training-repo
 docker-compose exec mariadb mysql -u root -p -e "SHOW DATABASES LIKE 'xr50_tenant_%';"
 
 # Verify tenant configuration
-curl -X GET "http://localhost:5286/api/tenants/aerotech_manufacturing"
+curl -X GET "http://localhost:5286/xr50/trainingAssetRepository/tenants/aerotech_manufacturing"
 ```
 
 ### Storage Backend Problems

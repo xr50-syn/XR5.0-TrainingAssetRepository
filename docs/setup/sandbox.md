@@ -47,7 +47,7 @@ docker-compose --profile sandbox up -d
 docker-compose ps
 
 # Verify MinIO is healthy
-curl http://localhost:9000/minio/health/live
+curl http://localhost:10000/minio/health/live
 
 # Check Repository API
 curl http://localhost:5286/health
@@ -80,12 +80,12 @@ This creates the following buckets in MinIO:
 **Alternative**: Create buckets manually via MinIO Console or AWS CLI:
 ```bash
 # Using AWS CLI
-aws --endpoint-url=http://localhost:9000 s3 mb s3://xr50-sandbox-tenant-demo
-aws --endpoint-url=http://localhost:9000 s3 mb s3://xr50-sandbox-tenant-pilot4
-aws --endpoint-url=http://localhost:9000 s3 mb s3://xr50-sandbox-tenant-pilot5
+aws --endpoint-url=http://localhost:10000 s3 mb s3://xr50-sandbox-tenant-demo
+aws --endpoint-url=http://localhost:10000 s3 mb s3://xr50-sandbox-tenant-pilot4
+aws --endpoint-url=http://localhost:10000 s3 mb s3://xr50-sandbox-tenant-pilot5
 
 # Verify buckets were created
-aws --endpoint-url=http://localhost:9000 s3 ls
+aws --endpoint-url=http://localhost:10000 s3 ls
 ```
 
 **Note**: In a real AWS environment, you would need to create these buckets manually or through infrastructure-as-code before creating tenants.
@@ -93,8 +93,8 @@ aws --endpoint-url=http://localhost:9000 s3 ls
 ### Access the Services
 - **Repository API (Swagger)**: http://localhost:5286/swagger
 - **Authoring Tool (frontend)**: http://localhost:5173
-- **MinIO Console (Web UI)**: http://localhost:9001 (Login: minioadmin/minioadmin)
-- **MinIO API**: http://localhost:9000
+- **MinIO Console (Web UI)**: http://localhost:10001 (Login: minioadmin/minioadmin)
+- **MinIO API**: http://localhost:10000
 
 ## Authoring Tool Frontend
 
@@ -123,7 +123,7 @@ Relevant `.env` settings:
 | `AUTHORING_TOOL_SERVER_API` | `http://localhost` | Host the **browser** uses to reach the API and MinIO |
 
 `AUTHORING_TOOL_SERVER_API` is passed to the app as `VITE_SERVER_API`; the app appends `:5286` for
-the API and `:9000` for bucket downloads. Because the requests come from the browser, it must be an
+the API and `:10000` for bucket downloads. Because the requests come from the browser, it must be an
 address reachable from your machine (e.g. `http://localhost`, or the LAN IP if you open the tool from
 another device) - not a compose service name. It is read at container start, so a change only needs
 `docker-compose --profile sandbox up -d authoring-tool`.
@@ -139,7 +139,7 @@ Tenant" below). Cross-origin calls work out of the box because the sandbox runs 
 
 Open Swagger UI at http://localhost:5286/swagger and use the tenant creation endpoint:
 
-**POST** `/api/tenants/create`
+**POST** `/xr50/trainingAssetRepository/tenants`
 
 Example request body (using pre-created bucket):
 ```json
@@ -171,14 +171,14 @@ Example request body (using pre-created bucket):
 If you need additional buckets, you can create them:
 
 **Option 1 - Via MinIO Console (Easiest)**:
-1. Go to http://localhost:9001
+1. Go to http://localhost:10001
 2. Login with minioadmin/minioadmin
 3. Click "Create Bucket"
 4. Enter bucket name (e.g., `xr50-sandbox-tenant-newcompany`)
 
 **Option 2 - Via AWS CLI**:
 ```bash
-aws --endpoint-url=http://localhost:9000 s3 mb s3://xr50-sandbox-tenant-newcompany
+aws --endpoint-url=http://localhost:10000 s3 mb s3://xr50-sandbox-tenant-newcompany
 ```
 
 ### 2. Upload Test Assets
@@ -188,7 +188,7 @@ Use the Asset Management endpoints in Swagger to upload test files and experimen
 ### 3. Verify Data in MinIO
 
 **Option 1 - Via MinIO Console (Visual)**:
-1. Go to http://localhost:9001
+1. Go to http://localhost:10001
 2. Login with minioadmin/minioadmin
 3. Click on your bucket
 4. Browse files visually, download, upload, etc.
@@ -196,16 +196,16 @@ Use the Asset Management endpoints in Swagger to upload test files and experimen
 **Option 2 - Via AWS CLI**:
 ```bash
 # List all S3 buckets
-aws --endpoint-url=http://localhost:9000 s3 ls
+aws --endpoint-url=http://localhost:10000 s3 ls
 
 # List contents of a specific bucket
-aws --endpoint-url=http://localhost:9000 s3 ls s3://xr50-sandbox-tenant-demo/
+aws --endpoint-url=http://localhost:10000 s3 ls s3://xr50-sandbox-tenant-demo/
 
 # List with details
-aws --endpoint-url=http://localhost:9000 s3 ls s3://xr50-sandbox-tenant-demo/ --recursive
+aws --endpoint-url=http://localhost:10000 s3 ls s3://xr50-sandbox-tenant-demo/ --recursive
 
 # Download a file
-aws --endpoint-url=http://localhost:9000 s3 cp s3://xr50-sandbox-tenant-demo/myfile.pdf ./
+aws --endpoint-url=http://localhost:10000 s3 cp s3://xr50-sandbox-tenant-demo/myfile.pdf ./
 ```
 
 ## Important Notes
@@ -213,7 +213,7 @@ aws --endpoint-url=http://localhost:9000 s3 cp s3://xr50-sandbox-tenant-demo/myf
 ### Sandbox vs Production
 - **Sandbox credentials**: minioadmin/minioadmin (MinIO defaults)
 - **Production credentials**: Must be valid AWS credentials
-- **Sandbox endpoint**: http://minio:9000 (inside Docker) or http://localhost:9000 (from host)
+- **Sandbox endpoint**: http://minio:10000 (inside Docker) or http://localhost:10000 (from host)
 - **Production endpoint**: Uses real AWS endpoints
 
 ### Data Persistence ✅
@@ -233,7 +233,7 @@ docker-compose --profile sandbox down
 docker-compose --profile sandbox up -d
 
 # File is still there!
-aws --endpoint-url=http://localhost:9000 s3 ls s3://your-bucket/ --recursive
+aws --endpoint-url=http://localhost:10000 s3 ls s3://your-bucket/ --recursive
 ```
 
 **To reset and start fresh** (WARNING: Deletes all data):
@@ -262,19 +262,19 @@ The application requires buckets to be pre-provisioned. This is by design for se
 
 1. Check if the bucket exists:
 ```bash
-aws --endpoint-url=http://localhost:9000 s3 ls
+aws --endpoint-url=http://localhost:10000 s3 ls
 ```
 
 2. If missing, create the bucket via MinIO Console or CLI:
 ```bash
-aws --endpoint-url=http://localhost:9000 s3 mb s3://your-bucket-name
+aws --endpoint-url=http://localhost:10000 s3 mb s3://your-bucket-name
 ```
 
 3. Verify the bucket name in your tenant creation request matches exactly.
 
 ### Cannot Access MinIO Console
 
-**Problem**: http://localhost:9001 doesn't load.
+**Problem**: http://localhost:10001 doesn't load.
 
 **Solution**:
 ```bash
@@ -302,15 +302,14 @@ docker-compose logs minio
 If ports 9000, 9001, 5286, or 3306 are already in use:
 ```bash
 # Find what's using the port (example for port 9000)
-netstat -ano | findstr :9000    # Windows
-lsof -i :9000                    # Linux/Mac
+netstat -ano | findstr :10000    # Windows
+lsof -i :10000                    # Linux/Mac
 ```
 
 ### Reset Everything
 ```bash
 # Complete reset
 docker-compose --profile sandbox down -v
-rm -rf .localstack
 docker-compose --profile sandbox up -d --build
 ```
 

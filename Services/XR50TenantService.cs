@@ -122,12 +122,18 @@ namespace XR50TrainingAssetRepo.Services
                 using var connection = new MySqlConnection(connectionString);
                 await connection.OpenAsync();
 
-                // Check if tenant database exists
-                var databaseName = GetTenantSchema(tenantName);
-                var sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = @databaseName";
-                
+                // Both callers of this method use it as a pre-creation collision guard, so the
+                // question being asked is "would this tenant name land on a database that is
+                // already taken", not "does this exact identifier exist". Compare on the
+                // case-folded key: SCHEMA_NAME = @databaseName is case-SENSITIVE under
+                // lower_case_table_names=0, which would let "Foo_Bar" past the guard while a
+                // server running with lower_case_table_names=1 folds it onto the existing
+                // "foo_bar" database and silently shares that tenant's data.
+                var collisionKey = XR50TenantDatabase.CollisionKeyFor(tenantName);
+                var sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA WHERE LOWER(SCHEMA_NAME) = @collisionKey";
+
                 using var command = new MySqlCommand(sql, connection);
-                command.Parameters.AddWithValue("@databaseName", databaseName);
+                command.Parameters.AddWithValue("@collisionKey", collisionKey);
                 
                 var count = Convert.ToInt32(await command.ExecuteScalarAsync());
                 return count > 0;

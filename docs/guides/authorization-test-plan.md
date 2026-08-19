@@ -82,8 +82,11 @@ takes an *authenticated* request (the probe script does this after acquiring its
 
 ### P0-3. Provision a tenant whose name matches the Keycloak claim
 
-> Tenant names must match `^[a-zA-Z0-9_]+$` (see finding 3). Use `test_company`, not
-> `test-company`. Bucket names are a separate field and may keep hyphens.
+> Tenant names must match `^[a-zA-Z0-9_-]+$`, 3-50 characters (finding 3, as later relaxed to
+> admit UUID-style names). Hyphens are accepted but still fold to `_` in the derived database,
+> so `test-company` and `test_company` collide and the second one is refused with `409`. Use
+> `test_company` here to match the realm claim. Bucket names are a separate field and may keep
+> hyphens.
 
 The bundled realm gives `testuser`, `admin` and `tenantadmin` the attribute
 `tenantName=test_company` (`keycloak-config/xr50-realm.json`). `TenantMemberHandler` compares
@@ -416,7 +419,7 @@ them as a regression net.
 | 4 | MinIO endpoint corrected to `:10000` to match `docker-compose.yaml` | all `.env*.example` |
 | 5 | `401`/`403` removed from tolerated statuses — a refused request now fails the suite | `suites/04-storage.test.js`, `suites/09-ai-assistant.test.js` |
 | 6 | Request headers **merged** under caller options instead of replaced, so `options.headers` can no longer silently drop `Authorization` | `helpers/api-client.js` |
-| 7 | Tenant names restricted to `^[a-zA-Z0-9_]+$` (max 52 chars), closing the schema-collision leak | `Models/DTOs/XR50TenantDtos.cs` |
+| 7 | Tenant names restricted to `^[a-zA-Z0-9_]+$` (max 50 chars), closing the schema-collision leak. **Superseded:** hyphens were later re-admitted for UUID-style names, with the collision risk handled by a `409` guard on the derived database name instead — see `Services/XR50TenantDatabase.cs` and the tenant-naming rule in `AGENTS.md` | `Models/DTOs/XR50TenantDtos.cs` |
 | 8 | Generated test tenant names switched to underscores to satisfy the new rule | `config.js`, `setup.js`, `suites/03-tenant.test.js` |
 | 9 | Swagger dropdown: dead `v1`/"Default" entry replaced with the real `all` document, `innov-chatbot` added | `Program.cs` |
 

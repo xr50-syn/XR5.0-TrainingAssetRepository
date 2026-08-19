@@ -104,18 +104,21 @@ namespace XR50TrainingAssetRepo.Controllers
                         : $"Hub tenant id '{effectiveHubTenantId.Value:D}' is already mapped to another tenant.");
                 }
 
-                // Distinct names can fold to the same per-tenant database name (hyphens and
-                // underscores both derive '_' positions, e.g. "foo-bar" vs "foo_bar"), and the
-                // provisioning path uses CREATE DATABASE IF NOT EXISTS - a collision would
-                // silently attach the new tenant to the existing tenant's data. Checked here,
-                // before any storage or database provisioning, so it surfaces as a clean 409.
+                // Distinct names can fold to the same per-tenant database name - hyphens and
+                // underscores both derive '_' positions ("foo-bar" vs "foo_bar"), and case is
+                // folded too because MySQL lowercases identifiers under
+                // lower_case_table_names=1 ("Foo_Bar" vs "foo_bar"). The provisioning path uses
+                // CREATE DATABASE IF NOT EXISTS, so a collision would silently attach the new
+                // tenant to the existing tenant's data. Checked here, before any storage or
+                // database provisioning, so it surfaces as a clean 409.
                 if (await _tenantService.TenantExistsAsync(request.TenantName))
                 {
                     _logger.LogWarning("Tenant database for {TenantName} already exists ({TenantSchema})",
                         request.TenantName, _tenantService.GetTenantSchema(request.TenantName));
                     return this.ProblemConflict(
                         $"A tenant whose database name matches '{request.TenantName}' already exists. " +
-                        "Note that names differing only in '-' vs '_' map to the same database.");
+                        "Note that names differing only in '-' vs '_', or only in letter case, " +
+                        "map to the same database.");
                 }
 
                 // Validate storage type matches running implementation

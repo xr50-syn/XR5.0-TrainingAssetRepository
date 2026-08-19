@@ -49,14 +49,23 @@ public class TenantSelfServiceCreationTests
         public Task DeleteTenantCompletelyAsync(string tenantName) => Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Stands in for the MySQL-backed tenant service. Existence is resolved the way the real
+    /// service resolves it - by collision key rather than by exact name - so these tests cover
+    /// the separator and case folding that makes two distinct names share one database.
+    /// </summary>
     private sealed class StubTenantService : IXR50TenantService
     {
-        /// <summary>Simulates the derived tenant database already existing in MySQL.</summary>
-        public bool TenantDatabaseExists { get; set; }
+        /// <summary>Tenant names whose derived database is already present in MySQL.</summary>
+        public List<string> ExistingTenants { get; } = new();
+
+        private bool Exists(string tenantName) =>
+            ExistingTenants.Any(existing =>
+                XR50TenantDatabase.CollisionKeyFor(existing) == XR50TenantDatabase.CollisionKeyFor(tenantName));
 
         public string GetCurrentTenant() => "default";
-        public Task<bool> ValidateTenantAsync(string tenantName) => Task.FromResult(TenantDatabaseExists);
-        public Task<bool> TenantExistsAsync(string tenantName) => Task.FromResult(TenantDatabaseExists);
+        public Task<bool> ValidateTenantAsync(string tenantName) => Task.FromResult(Exists(tenantName));
+        public Task<bool> TenantExistsAsync(string tenantName) => Task.FromResult(Exists(tenantName));
         public Task<XR50Tenant> CreateTenantAsync(XR50Tenant tenant) => Task.FromResult(tenant);
         public string GetTenantSchema(string tenantName) => XR50TenantDatabase.SchemaFor(tenantName);
     }
@@ -230,20 +239,51 @@ public class TenantSelfServiceCreationTests
         service.CreatedTenant.Should().BeNull();
     }
 
-    [Fact]
-    public async Task TenantName_WhoseDerivedDatabaseAlreadyExists_Returns409()
+    /// <summary>
+    /// Each pair derives one database: '-' and '_' both fold to '_', and MySQL lowercases
+    /// database identifiers under lower_case_table_names=1. Provisioning runs
+    /// CREATE DATABASE IF NOT EXISTS, so letting either variant through would attach the new
+    /// tenant to the existing tenant's data instead of failing.
+    /// </summary>
+    [Theory]
+    [InlineData("foo_bar", "foo-bar")]
+    [InlineData("foo-bar", "foo_bar")]
+    [InlineData("foo_bar", "Foo_Bar")]
+    [InlineData("foo_bar", "FOO-BAR")]
+    [InlineData("foo_bar", "foo_bar")]
+    public async Task TenantName_WhoseDerivedDatabaseAlreadyExists_Returns409(
+        string existingTenant, string requestedTenant)
     {
-        // "foo-bar" and "foo_bar" both derive xr50_tenant_foo_bar; with the database already
-        // present, creation must refuse instead of silently attaching to the existing data.
         var service = new StubTenantManagementService();
-        var tenantService = new StubTenantService { TenantDatabaseExists = true };
+        var tenantService = new StubTenantService { ExistingTenants = { existingTenant } };
         var controller = CreateController(service, HubPrincipal(CallerHubTenantId), tenantService);
 
-        var result = await controller.CreateTenant(Request(tenantName: "foo-bar"));
+        var result = await controller.CreateTenant(Request(tenantName: requestedTenant));
 
         var problem = result.Result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(StatusCodes.Status409Conflict);
         service.CreatedTenant.Should().BeNull();
+    }
+
+    /// <summary>
+    /// The guard must not over-reach: a name that merely resembles an existing tenant still
+    /// derives its own database and has to be accepted.
+    /// </summary>
+    [Theory]
+    [InlineData("foo_bar", "foo_barz")]
+    [InlineData("foo_bar", "foo_ba")]
+    [InlineData("foo_bar", "foobar")]
+    public async Task TenantName_DerivingADifferentDatabase_IsAccepted(
+        string existingTenant, string requestedTenant)
+    {
+        var service = new StubTenantManagementService();
+        var tenantService = new StubTenantService { ExistingTenants = { existingTenant } };
+        var controller = CreateController(service, HubPrincipal(CallerHubTenantId), tenantService);
+
+        var result = await controller.CreateTenant(Request(tenantName: requestedTenant));
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        service.CreatedTenant!.TenantName.Should().Be(requestedTenant);
     }
 
     [Fact]
