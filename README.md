@@ -67,7 +67,7 @@ docker-compose --profile prod up -d      # AWS S3
 
 ## Technology Stack
 
-- **Backend**: ASP.NET Core 8.0
+- **Backend**: ASP.NET Core 10.0
 - **Database**: MySQL/MariaDB with Entity Framework Core
 - **Storage**: AWS S3, OwnCloud, MinIO
 - **Auth**: Keycloak (JWT Bearer)
