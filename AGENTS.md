@@ -24,9 +24,14 @@ Start with `README.md` and `docs/README.md`. Architecture details are in
 - Preserve unrelated working-tree changes. Do not rewrite or delete user work.
 - Prefer small, targeted changes and follow the patterns in adjacent code.
 - Controllers are tenant-scoped through the `{tenantName}` route parameter.
-- Tenant names must match `^[a-zA-Z0-9_]+$`. The name becomes the per-tenant database as
-  `xr50_tenant_{name}` with any other character folded to `_`, so `foo-bar` and `foo_bar` would
-  resolve to one database and share data across a tenant boundary. Use underscores in examples,
+- Tenant names must match `^[a-zA-Z0-9_-]+$` and be 3-50 characters. The name becomes the
+  per-tenant database as `xr50_tenant_{name}` with any other character folded to `_`, so distinct
+  names can still collide: `foo-bar` and `foo_bar` both derive `xr50_tenant_foo_bar`, and
+  `Foo_Bar` folds onto it as well on a server with `lower_case_table_names=1`. Tenant creation
+  refuses a colliding name with `409` by checking the derived database before provisioning
+  anything. `Services/XR50TenantDatabase.cs` is the single source of truth for this mapping:
+  derive database names through `SchemaFor` and answer "is this name already taken" through
+  `CollisionKeyFor`, never by rebuilding the string inline. Use underscores in examples,
   fixtures and sample payloads. S3 bucket names are a separate field and keep hyphens.
 - Create tenant contexts through `IXR50TenantDbContextFactory`; never share a
   context between tenants, and dispose contexts with `using`.
@@ -75,6 +80,14 @@ the test scope.
 4. For a narrow live API behavior not covered by tests, use a focused `curl`
    probe and report the request, expected result, actual result, and cleanup.
 
+`./scripts/verify-e2e.sh` runs rungs 1-3 in order and can start the sandbox stack
+with `--up`; `--help` lists the rungs and flags. The full procedure, including how
+to build a targeted probe with a control group and verified cleanup, is in
+[docs/guides/verification-workflow.md](docs/guides/verification-workflow.md).
+Read that guide before verifying a change that touches persistence, storage,
+authorization, or tenant provisioning - the hermetic suite stubs the database and
+cannot catch those.
+
 Functional test routing:
 
 | Area | Command from `tests/functional` |
@@ -99,6 +112,17 @@ tenant, material, asset, or external collection created by a live probe.
   executable commands rather than vendor-specific slash commands.
 - Do not require a particular model, agent vendor, IDE, or proprietary tool.
 - Vendor adapters such as `.claude/`, `.codex/`, or editor settings are optional
-  local configuration and should point back to this file.
+  and must point back to this file. They are tracked in the repository so that a
+  contributor gets the same workflow whichever agent they use, but they carry only
+  trigger conditions and pointers - never project knowledge that exists nowhere
+  else. Deleting every adapter directory must lose no information, and an agent
+  with no adapter at all still finds the workflow through this file.
+
+  | Adapter | Status |
+  |---|---|
+  | `.claude/skills/` (`e2e-verify`, `e2e-probe`) | Present |
+  | `.codex/prompts/` | Planned - see [docs/design/agent-skill-portability.md](docs/design/agent-skill-portability.md) |
+
 - When behavior or commands change, update this guide and the relevant project
-  documentation together.
+  documentation together. A change to `.claude/` or `.codex/` that does not touch
+  `docs/guides/` is either a trigger-wording fix or a mistake.

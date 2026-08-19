@@ -11,6 +11,12 @@ This guide shows how to make MinIO buckets publicly accessible so files can be d
 ## Prerequisites
 
 - MinIO is running on the VM at `http://minio.example.com:9000`
+
+> The `:9000` port here is MinIO's own default for a standalone deployment. The sandbox stack in
+> this repository publishes MinIO on **`:10000`** (console on `:10001`) - see
+> [Sandbox Setup](sandbox.md). Substitute accordingly if you are pointing these commands at the
+> local compose stack rather than a partner VM.
+
 - You have access to the VM or MinIO Web Console
 - Files uploaded through the application will return URLs like: `http://minio.example.com:9000/bucket-name/file-name`
 

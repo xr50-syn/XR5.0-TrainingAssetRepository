@@ -32,6 +32,21 @@ namespace XR50TrainingAssetRepo.Services
 
         /// <summary>The per-tenant database (schema) name for a tenant.</summary>
         public static string SchemaFor(string tenantName) => $"{SchemaPrefix}{Sanitize(tenantName)}";
+
+        /// <summary>
+        /// The key used to decide whether two tenant names would land on the same database.
+        /// Case is folded on top of <see cref="Sanitize"/> because MySQL lowercases database
+        /// identifiers when lower_case_table_names=1 (the default on Windows and macOS), so
+        /// "Foo_Bar" and "foo_bar" resolve to ONE database there while
+        /// <see cref="SchemaFor"/> still reports them as distinct names. Comparing on this key
+        /// keeps the collision check correct on every server configuration; it deliberately
+        /// does NOT change the derived database name, which must stay stable for tenants that
+        /// already exist with mixed-case names.
+        /// Safe to fold with ToLowerInvariant: Sanitize has already reduced the input to
+        /// [a-zA-Z0-9_], where invariant lowercasing and MySQL's LOWER() agree exactly.
+        /// </summary>
+        public static string CollisionKeyFor(string tenantName) =>
+            SchemaFor(tenantName).ToLowerInvariant();
     }
 
     /// <summary>

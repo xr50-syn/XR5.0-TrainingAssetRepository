@@ -157,11 +157,19 @@ Base URL: /api/{tenantName}/
 
 ### Endpoint Categories
 
-#### **1. Tenant Management** (`/api/tenants/`)
-- `POST /create` - Create new tenant with storage provisioning
-- `GET /` - List all tenants (admin only)
-- `GET /{name}` - Get tenant details
-- `DELETE /{name}` - Remove tenant and all data
+#### **1. Tenant Management** (`/xr50/trainingAssetRepository/tenants`)
+
+Tenant management is the one group that is **not** under `/api/{tenantName}/` - it operates on
+tenants rather than within one.
+
+- `POST /` - Create a new tenant with storage provisioning
+- `GET /` - List all tenants (system admin only)
+- `GET /{tenantName}` - Get tenant details
+- `DELETE /{tenantName}` - Remove tenant and all data
+- `PUT /{tenantName}/hub-tenant` - Rebind the tenant to an XR5.0 Hub tenant id
+- `GET /{tenantName}/validate-storage` - Check the tenant's storage configuration
+- `GET /{tenantName}/storage-stats` - Storage usage for the tenant
+- `GET /examples/create-requests` - Sample creation payloads per storage type
 
 #### **2. Training Program Management** (`/api/{tenant}/programs/`)
 - `GET /` - List training programs
@@ -218,28 +226,45 @@ an automatic download of every object in tenant storage.
 - `PUT /{id}` - Update user
 - `DELETE /{id}` - Remove user access
 
+#### **7. Other endpoint groups**
+
+Not enumerated here; see Swagger at `/swagger` for the full contract.
+
+- `/api/{tenant}/ai-assistant` - AI Assistant materials and chat (DataLens-backed)
+- `/api/{tenant}/innov-chatbot` - INNOV chatbot material type
+- `/api/{tenant}/program-progress`, `/api/{tenant}/quiz-progress` - progress tracking
+- `/api/auth` - token introspection (`/api/auth/me`)
+- `/api/troubleshooting` - system-admin diagnostics and per-tenant migrations
+
 ### Response Format
-All endpoints return JSON with consistent structure:
+
+Successful responses return the resource directly - an object or an array - with **no wrapper
+envelope**. Write endpoints may return a small status object instead, for example material
+creation:
+
+```json
+{ "status": "success", "message": "Material created successfully", "id": "1", "name": "..." }
+```
+
+Note that integer ids serialize as JSON **strings** (`"1"`, not `1`). This is a deliberate
+API-wide contract; clients and tests must not assume numbers.
+
+Errors use [RFC 7807 problem details](https://datatracker.ietf.org/doc/html/rfc7807):
 
 ```json
 {
-  "success": true,
-  "data": { /* response payload */ },
-  "message": "Operation completed successfully",
-  "timestamp": "2024-09-10T14:30:00Z"
+  "type": "https://api.xr50/errors/resource-not-found",
+  "title": "Resource not found",
+  "status": "404",
+  "detail": "Material 999999 was not found.",
+  "instance": "/api/test_company/materials/999999",
+  "traceId": "0HNNTPT4KIMFV:00000001",
+  "errorCode": "resource_not_found"
 }
 ```
 
-Error responses:
-```json
-{
-  "success": false,
-  "error": "ValidationError",
-  "message": "Detailed error description",
-  "details": { /* validation errors */ },
-  "timestamp": "2024-09-10T14:30:00Z"
-}
-```
+`status` is a string for the same reason. `errorCode` is the stable machine-readable
+discriminator; `type` and `title` are human-facing and may be reworded.
 
 ---
 

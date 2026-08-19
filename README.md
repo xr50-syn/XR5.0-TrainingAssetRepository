@@ -29,7 +29,7 @@ powershell -ExecutionPolicy Bypass -File .\sandbox-init-buckets.ps1
 # Access
 # - API Swagger: http://localhost:5286/swagger
 # - Authoring Tool: http://localhost:5173
-# - MinIO Console: http://localhost:9001 (minioadmin/minioadmin)
+# - MinIO Console: http://localhost:10001 (minioadmin/minioadmin)
 # - Keycloak: http://localhost:8180 (admin/admin)
 ```
 
