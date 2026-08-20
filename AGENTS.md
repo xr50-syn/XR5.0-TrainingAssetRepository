@@ -9,9 +9,9 @@ must not replace or contradict it.
 XR5.0 Training Asset Repository is a multi-tenant ASP.NET Core service for XR
 training assets, materials, programs, learning paths, users, and progress.
 
-- Application target: .NET 8
-- Test target: .NET 10
-- Persistence: EF Core 8 with Pomelo MySQL/MariaDB
+- Application and test target: .NET 10 (LTS)
+- Persistence: EF Core 8 with Pomelo MySQL/MariaDB (EF stays on 8.x until Pomelo ships a
+  stable EF Core 10 provider)
 - Tenant model: one database per tenant
 - Storage: S3-compatible storage or OwnCloud through `IStorageService`
 - API documentation: Swagger/OpenAPI

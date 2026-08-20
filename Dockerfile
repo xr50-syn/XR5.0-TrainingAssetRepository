@@ -1,4 +1,4 @@
-# Build with the current SDK (it builds the net8.0 target), run on the matching ASP.NET 8 runtime.
+# .NET 10 LTS for build and runtime.
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
@@ -11,7 +11,7 @@ RUN dotnet publish XR50TrainingAssetRepo.csproj -c Release -o /app/publish --no-
 
 # Runtime image: no SDK, no EF tools. The committed migrations are compiled into the
 # application and applied by it (at startup, or through the `migrate` verb).
-FROM mcr.microsoft.com/dotnet/aspnet:8.0
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 
 RUN apt-get update \
@@ -20,7 +20,7 @@ RUN apt-get update \
 
 COPY --from=build /app/publish .
 
-# aspnet:8.0 listens on 8080 by default; the stack, the health checks and the docs use 5286.
+# The aspnet image listens on 8080 by default; the stack, the health checks and the docs use 5286.
 ENV ASPNETCORE_URLS=http://+:5286
 
 # start_period covers schema migration of every tenant database at startup.

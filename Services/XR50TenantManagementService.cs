@@ -13,7 +13,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
-using Newtonsoft.Json.Linq;
 using MySql.Data.MySqlClient;
 using XR50TrainingAssetRepo.Models;
 

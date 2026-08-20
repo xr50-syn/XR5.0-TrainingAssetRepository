@@ -1,12 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- The design-time host (dotnet ef) and local runs must work on machines that only have a
-         newer runtime installed; the container image ships the matching 8.0 runtime. -->
-    <RollForward>Major</RollForward>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,20 +22,20 @@
 
   <ItemGroup>
     <PackageReference Include="AWSSDK.S3" Version="4.0.7.14" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.Certificate" Version="8.0.21" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.21" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.21">
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Certificate" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.11" />
+    <!-- EF Core stays on the 8.x line until Pomelo ships a stable EF Core 10 provider; the
+         runtime and ASP.NET Core are on .NET 10 LTS. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.30" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.30">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="8.0.6" />
     <PackageReference Include="MySql.Data" Version="9.1.0" />
-    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.2" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
-    <PackageReference Include="System.ComponentModel" Version="4.3.0" />
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.3" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.6" />
     <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.1.2" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.19.2" />
   </ItemGroup>
 
   <ItemGroup>

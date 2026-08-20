@@ -12,7 +12,7 @@ For *which* checks a given change needs, and how to probe behavior no suite cove
 | Hermetic tests | .NET 10 / xUnit | `tests/XR50TrainingAssetRepo.Tests/` | no |
 | Functional tests | Node.js 20+ / Jest | `tests/functional/` | yes - running API, MariaDB, storage, Keycloak |
 
-The application targets .NET 8; the test project targets .NET 10.
+The application and the test project both target .NET 10.
 
 ## Quick start
 
