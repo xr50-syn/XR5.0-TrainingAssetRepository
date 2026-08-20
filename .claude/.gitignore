@@ -1,0 +1,8 @@
+# Local settings (personal overrides)
+settings.local.json
+
+# Plans (temporary)
+plans/
+
+# Session-specific files
+todos/
