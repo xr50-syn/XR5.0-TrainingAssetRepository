@@ -26,7 +26,7 @@ services:
     container_name: mariadb
     ports:
       - "3306:3306"
-    restart: always
+    restart: no
     environment:
       MYSQL_ROOT_PASSWORD: ${XR50_REPO_DB_PASSWORD}
       MYSQL_USER: ${XR50_REPO_DB_USER}
@@ -173,7 +173,7 @@ services:
   owncloud:
     image: owncloud/server:10.15
     container_name: owncloud_server
-    restart: always
+    restart: no
     ports:
       - 8080:8080
     # FIXED: Wait for health checks instead of just service start
@@ -209,7 +209,7 @@ services:
   owncloud_mariadb:
     image: mariadb:10.11
     container_name: owncloud_mariadb
-    restart: always
+    restart: no
     environment:
       - MYSQL_ROOT_PASSWORD=${OWNCLOUD_DB_PASSWORD:-owncloud}
       - MYSQL_USER=${OWNCLOUD_DB_USER:-owncloud}
@@ -231,7 +231,7 @@ services:
   owncloud_redis:
     image: redis:6
     container_name: owncloud_redis
-    restart: always
+    restart: no
     command: ["--databases", "1"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
