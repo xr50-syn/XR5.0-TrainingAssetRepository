@@ -28,8 +28,12 @@ using Amazon.S3.Model;
 using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 using XR50TrainingAssetRepo.Infrastructure.Auth;
 using Microsoft.AspNetCore.Authorization;
+using XR50TrainingAssetRepo.Services.Migrations;
 
-var builder = WebApplication.CreateBuilder(args);
+// `dotnet XR50TrainingAssetRepo.dll migrate ...` runs the schema migrator instead of serving.
+// Its arguments are kept away from the configuration builder so `--tenant x` is not read as a setting.
+var (isMigrateVerb, migrateArgs) = MigrateCli.Split(args);
+var builder = WebApplication.CreateBuilder(isMigrateVerb ? Array.Empty<string>() : args);
 
 // Ensure environment variables override appsettings.json (important for Docker)
 builder.Configuration.AddEnvironmentVariables();
@@ -502,6 +506,12 @@ builder.Services.AddCors(options =>
 });
 var app = builder.Build();
 
+if (isMigrateVerb)
+{
+    return await MigrateCli.RunAsync(
+        app.Services.GetRequiredService<IXR50SchemaMigrator>(), migrateArgs, Console.Out, CancellationToken.None);
+}
+
 // Outside Development the Hub integration is the only auth path; a missing secret or a
 // non-TLS decrypt endpoint means every request will fail closed, so say why at startup.
 if (!app.Environment.IsDevelopment())
@@ -583,6 +593,8 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
 
 app.Run();
 
+return 0;
+
 public class HierarchicalOrderDocumentFilter : IDocumentFilter
 {
     public void Apply(OpenApiDocument swaggerDoc, DocumentFilterContext context)
@@ -633,6 +645,13 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IXR50TenantTroubleshootingService, XR50TenantTroubleshootingService>();
         services.AddScoped<IXR50ManualTableCreator, XR50ManualTableCreator>();
         services.AddScoped<IXR50TenantDbContextFactory, XR50TenantDbContextFactory>();
+
+        // Schema migrations: one code path for startup, the migrate CLI verb, tenant creation
+        // and the troubleshooting endpoints.
+        services.AddSingleton<ISchemaInspector, MySqlSchemaInspector>();
+        services.AddSingleton<IMigrationTargetFactory, EfMigrationTargetFactory>();
+        services.AddSingleton<ILegacySchemaReconciler, LegacySchemaReconciler>();
+        services.AddSingleton<IXR50SchemaMigrator, XR50SchemaMigrator>();
         services.AddScoped<ILearningPathService, LearningPathService>();
         services.AddScoped<IAssetService, AssetService>();
 
