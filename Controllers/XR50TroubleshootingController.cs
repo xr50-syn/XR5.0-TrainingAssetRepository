@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Services;
+using XR50TrainingAssetRepo.Services.Migrations;
 using XR50TrainingAssetRepo.Infrastructure;
 using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 using Microsoft.AspNetCore.Authorization;
@@ -15,26 +16,24 @@ namespace XR50TrainingAssetRepo.Controllers
         private readonly IXR50TenantTroubleshootingService _troubleshootingService;
         private readonly XR50MigrationService _migrationService;
         private readonly IXR50TenantManagementService _tenantManagementService;
-        private readonly IXR50ManualTableCreator _tableCreator;
+        private readonly IXR50SchemaMigrator _schemaMigrator;
         private readonly ILogger<TenantTroubleshootingController> _logger;
 
         public TenantTroubleshootingController(
             IXR50TenantTroubleshootingService troubleshootingService,
             XR50MigrationService migrationService,
             IXR50TenantManagementService tenantManagementService,
-            IXR50ManualTableCreator tableCreator,
+            IXR50SchemaMigrator schemaMigrator,
             ILogger<TenantTroubleshootingController> logger)
         {
             _troubleshootingService = troubleshootingService;
             _migrationService = migrationService;
             _tenantManagementService = tenantManagementService;
-            _tableCreator = tableCreator;
+            _schemaMigrator = schemaMigrator;
             _logger = logger;
         }
 
-       
         /// Diagnose a specific tenant's database health
-        
         [HttpGet("diagnose/{tenantName}")]
         public async Task<ActionResult<TenantDiagnosticResult>> DiagnoseTenant(string tenantName)
         {
@@ -50,24 +49,20 @@ namespace XR50TrainingAssetRepo.Controllers
             }
         }
 
-       
-        /// Repair a tenant's database
-        
+        /// Repair a tenant's database: create it if missing and bring it to the committed schema
         [HttpPost("repair/{tenantName}")]
         public async Task<ActionResult> RepairTenant(string tenantName)
         {
             try
             {
                 var success = await _troubleshootingService.RepairTenantDatabaseAsync(tenantName);
-                
+
                 if (success)
                 {
                     return Ok(new { Message = $"Tenant {tenantName} repaired successfully" });
                 }
-                else
-                {
-                    return this.ProblemBadRequest($"Failed to repair tenant '{tenantName}'.");
-                }
+
+                return this.ProblemBadRequest($"Failed to repair tenant '{tenantName}'.");
             }
             catch (Exception ex)
             {
@@ -76,18 +71,125 @@ namespace XR50TrainingAssetRepo.Controllers
             }
         }
 
-       
+        // ----- Schema migrations -----
+
+        /// Migration state of the base database and every registered tenant. Read-only.
+        [HttpGet("migration-status")]
+        public async Task<ActionResult<IReadOnlyList<MigrationTargetStatus>>> GetMigrationStatus()
+        {
+            try
+            {
+                return Ok(await _schemaMigrator.GetStatusAsync(null, HttpContext.RequestAborted));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reading migration status");
+                return this.ProblemServerError("Error reading migration status.");
+            }
+        }
+
+        /// Migration state of one registered tenant's database. Read-only.
+        [HttpGet("migration-status/{tenantName}")]
+        public async Task<ActionResult<IReadOnlyList<MigrationTargetStatus>>> GetMigrationStatus(string tenantName)
+        {
+            try
+            {
+                if (!await TenantIsRegisteredAsync(tenantName))
+                {
+                    return this.ProblemNotFound($"Tenant '{tenantName}' is not registered.");
+                }
+
+                return Ok(await _schemaMigrator.GetStatusAsync(tenantName, HttpContext.RequestAborted));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reading migration status of tenant {TenantName}", tenantName);
+                return this.ProblemServerError($"Error reading migration status of tenant '{tenantName}'.");
+            }
+        }
+
+        /// Apply pending migrations to one registered tenant's database (adopting a legacy
+        /// database if needed). Idempotent: a current database reports nothing applied.
+        [HttpPost("migrate/{tenantName}")]
+        public async Task<ActionResult<MigrationRunResult>> MigrateTenant(string tenantName)
+        {
+            try
+            {
+                if (!await TenantIsRegisteredAsync(tenantName))
+                {
+                    return this.ProblemNotFound($"Tenant '{tenantName}' is not registered.");
+                }
+
+                var result = await _schemaMigrator.MigrateTenantAsync(tenantName, null, HttpContext.RequestAborted);
+                if (result.Succeeded)
+                {
+                    return Ok(result);
+                }
+
+                if (result.StateBefore == SchemaState.Missing)
+                {
+                    return this.ProblemNotFound(result.Error ?? $"Database of tenant '{tenantName}' does not exist.");
+                }
+
+                if (result.ManualInterventionRequired)
+                {
+                    return this.ProblemConflict(result.Error ?? $"Tenant '{tenantName}' needs manual intervention before it can be migrated.");
+                }
+
+                return this.ProblemServerError(result.Error ?? $"Migration of tenant '{tenantName}' failed.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating tenant {TenantName}", tenantName);
+                return this.ProblemServerError($"Error migrating tenant '{tenantName}'.");
+            }
+        }
+
+        /// Apply pending migrations to the base database and every registered tenant. One
+        /// tenant's failure does not stop the others; the report says which succeeded.
+        [HttpPost("migrate-all")]
+        public async Task<ActionResult<MigrationRunReport>> MigrateAll()
+        {
+            try
+            {
+                var report = await _schemaMigrator.MigrateAllAsync(
+                    new MigrateOptions { TolerateTenantFailures = true }, HttpContext.RequestAborted);
+                return Ok(report);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error migrating all databases");
+                return this.ProblemServerError("Error migrating all databases.");
+            }
+        }
+
+        // GetTenantAsync reports an unknown tenant by throwing; the tenant controller maps that
+        // to 404 and so do the migration endpoints.
+        private async Task<bool> TenantIsRegisteredAsync(string tenantName)
+        {
+            try
+            {
+                return await _tenantManagementService.GetTenantAsync(tenantName) is not null;
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+        }
+
+        // ----- Diagnostics -----
+
         /// Test tenant database connection
-        
         [HttpGet("test-connection/{tenantName}")]
         public async Task<ActionResult> TestConnection(string tenantName)
         {
             try
             {
                 var canConnect = await _troubleshootingService.TestTenantConnectionAsync(tenantName);
-                
-                return Ok(new { 
-                    TenantName = tenantName, 
+
+                return Ok(new
+                {
+                    TenantName = tenantName,
                     CanConnect = canConnect,
                     Message = canConnect ? "Connection successful" : "Connection failed"
                 });
@@ -99,9 +201,7 @@ namespace XR50TrainingAssetRepo.Controllers
             }
         }
 
-       
         /// Get all tenant databases
-        
         [HttpGet("databases")]
         [DevelopmentOnly]
         public async Task<ActionResult<List<string>>> GetAllTenantDatabases()
@@ -118,9 +218,7 @@ namespace XR50TrainingAssetRepo.Controllers
             }
         }
 
-       
         /// Create a test tenant for debugging
-        
         [HttpPost("create-test-tenant/{tenantName}")]
         public async Task<ActionResult> CreateTestTenant(string tenantName)
         {
@@ -136,11 +234,10 @@ namespace XR50TrainingAssetRepo.Controllers
                 };
 
                 var createdTenant = await _tenantManagementService.CreateTenantAsync(testTenant);
-                
-                // Immediately diagnose the created tenant
                 var diagnostic = await _troubleshootingService.DiagnoseTenantAsync(tenantName);
-                
-                return Ok(new { 
+
+                return Ok(new
+                {
                     Message = $"Test tenant {tenantName} created",
                     Tenant = createdTenant,
                     Diagnostic = diagnostic
@@ -153,9 +250,7 @@ namespace XR50TrainingAssetRepo.Controllers
             }
         }
 
-       
         /// Force recreate a tenant database
-        
         [HttpPost("force-recreate/{tenantName}")]
         [DevelopmentOnly]
         public async Task<ActionResult> ForceRecreateTenant(string tenantName)
@@ -164,7 +259,6 @@ namespace XR50TrainingAssetRepo.Controllers
             {
                 _logger.LogInformation("Force recreating tenant {TenantName}", tenantName);
 
-                // Create tenant object
                 var tenant = new XR50Tenant
                 {
                     TenantName = tenantName,
@@ -173,13 +267,11 @@ namespace XR50TrainingAssetRepo.Controllers
                     OwnerName = "System"
                 };
 
-                // Use migration service directly
                 await _migrationService.CreateTenantDatabaseAsync(tenant);
-                
-                // Test the result
                 var diagnostic = await _troubleshootingService.DiagnoseTenantAsync(tenantName);
-                
-                return Ok(new { 
+
+                return Ok(new
+                {
                     Message = $"Tenant {tenantName} force recreated",
                     Diagnostic = diagnostic
                 });
@@ -191,43 +283,7 @@ namespace XR50TrainingAssetRepo.Controllers
             }
         }
 
-       
-        /// Manually create tables in tenant database
-        
-        [HttpPost("create-tables/{tenantName}")]
-        public async Task<ActionResult> CreateTablesManually(string tenantName)
-        {
-            try
-            {
-                var success = await _tableCreator.CreateAllTablesAsync(tenantName);
-                
-                if (success)
-                {
-                    var tables = await _tableCreator.GetExistingTablesAsync(tenantName);
-                    var diagnostic = await _troubleshootingService.DiagnoseTenantAsync(tenantName);
-                    
-                    return Ok(new { 
-                        Message = $"Tables created manually for tenant {tenantName}",
-                        TablesCreated = tables,
-                        TableCount = tables.Count,
-                        Diagnostic = diagnostic
-                    });
-                }
-                else
-                {
-                    return this.ProblemBadRequest($"Failed to create tables for tenant '{tenantName}'.");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error manually creating tables for tenant {TenantName}", tenantName);
-                return this.ProblemServerError($"Error creating tables for tenant '{tenantName}'.");
-            }
-        }
-
-       
-        /// Completely rebuild tenant database (drop and recreate all tables)
-        
+        /// Completely rebuild tenant database (drop the database and recreate it from the migrations)
         [HttpPost("rebuild/{tenantName}")]
         [DevelopmentOnly]
         public async Task<ActionResult> RebuildTenantDatabase(string tenantName)
@@ -235,20 +291,19 @@ namespace XR50TrainingAssetRepo.Controllers
             try
             {
                 var success = await _migrationService.RepairTenantDatabaseAsync(tenantName);
-                
+
                 if (success)
                 {
-                    var tables = await _tableCreator.GetExistingTablesAsync(tenantName);
-                    return Ok(new { 
+                    var tables = await _troubleshootingService.GetTablesInTenantDatabaseAsync(tenantName);
+                    return Ok(new
+                    {
                         Message = $"Tenant database {tenantName} rebuilt successfully",
                         TablesCreated = tables,
                         TableCount = tables.Count
                     });
                 }
-                else
-                {
-                    return this.ProblemBadRequest($"Failed to rebuild tenant database '{tenantName}'.");
-                }
+
+                return this.ProblemBadRequest($"Failed to rebuild tenant database '{tenantName}'.");
             }
             catch (Exception ex)
             {
@@ -257,16 +312,15 @@ namespace XR50TrainingAssetRepo.Controllers
             }
         }
 
-       
         /// Get existing tables in tenant database
-        
         [HttpGet("tables/{tenantName}")]
         public async Task<ActionResult<List<string>>> GetTenantTables(string tenantName)
         {
             try
             {
-                var tables = await _tableCreator.GetExistingTablesAsync(tenantName);
-                return Ok(new {
+                var tables = await _troubleshootingService.GetTablesInTenantDatabaseAsync(tenantName);
+                return Ok(new
+                {
                     TenantName = tenantName,
                     Tables = tables,
                     TableCount = tables.Count
@@ -279,9 +333,7 @@ namespace XR50TrainingAssetRepo.Controllers
             }
         }
 
-       
         /// Completely delete tenant database (WARNING: This will delete all data!)
-        
         [HttpDelete("delete-database/{tenantName}")]
         [DevelopmentOnly]
         public async Task<ActionResult> DeleteTenantDatabase(string tenantName)
@@ -289,20 +341,19 @@ namespace XR50TrainingAssetRepo.Controllers
             try
             {
                 _logger.LogWarning("Request to delete tenant database: {TenantName}", tenantName);
-                
+
                 var success = await _migrationService.DeleteTenantDatabaseAsync(tenantName);
-                
+
                 if (success)
                 {
-                    return Ok(new { 
+                    return Ok(new
+                    {
                         Message = $"Tenant database {tenantName} deleted successfully",
                         Warning = "All data has been permanently deleted"
                     });
                 }
-                else
-                {
-                    return this.ProblemBadRequest($"Failed to delete tenant database '{tenantName}'.");
-                }
+
+                return this.ProblemBadRequest($"Failed to delete tenant database '{tenantName}'.");
             }
             catch (Exception ex)
             {
@@ -311,9 +362,7 @@ namespace XR50TrainingAssetRepo.Controllers
             }
         }
 
-       
         /// Completely delete tenant (database AND registry entry) - WARNING: PERMANENT!
-        
         [HttpDelete("delete-completely/{tenantName}")]
         [DevelopmentOnly]
         public async Task<ActionResult> DeleteTenantCompletely(string tenantName)
@@ -321,10 +370,11 @@ namespace XR50TrainingAssetRepo.Controllers
             try
             {
                 _logger.LogWarning("Request to completely delete tenant: {TenantName}", tenantName);
-                
+
                 await _tenantManagementService.DeleteTenantCompletelyAsync(tenantName);
-                
-                return Ok(new { 
+
+                return Ok(new
+                {
                     Message = $"Tenant {tenantName} completely deleted",
                     Warning = "Database and registry entry permanently deleted"
                 });
@@ -336,9 +386,7 @@ namespace XR50TrainingAssetRepo.Controllers
             }
         }
 
-
         /// Get all tenants with their health status
-
         [HttpGet("health-check")]
         public async Task<ActionResult> GetTenantsHealthCheck()
         {
@@ -367,189 +415,6 @@ namespace XR50TrainingAssetRepo.Controllers
             {
                 _logger.LogError(ex, "Error performing health check");
                 return this.ProblemServerError("Error performing health check.");
-            }
-        }
-
-
-        /// Migrate Annotations columns for video and image materials
-
-        [HttpPost("migrate-annotations/{tenantName}")]
-        public async Task<ActionResult> MigrateAnnotationsColumns(string tenantName)
-        {
-            try
-            {
-                _logger.LogInformation("Running Annotations column migration for tenant: {TenantName}", tenantName);
-
-                var success = await _tableCreator.MigrateAnnotationsColumnsAsync(tenantName);
-
-                if (success)
-                {
-                    return Ok(new {
-                        Message = $"Annotations columns migrated successfully for tenant {tenantName}",
-                        Details = "Added 'startTime' and 'Annotations' columns to Materials table"
-                    });
-                }
-                else
-                {
-                    return this.ProblemBadRequest($"Failed to migrate Annotations columns for tenant '{tenantName}'.");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error migrating Annotations columns for tenant {TenantName}", tenantName);
-                return this.ProblemServerError($"Error migrating Annotations columns for tenant '{tenantName}'.");
-            }
-        }
-
-        /// <summary>
-        /// Migrate QuizAnswers table to rename IsCorrect to CorrectAnswer and add Extra column
-        /// </summary>
-        [HttpPost("migrate-quiz-answers/{tenantName}")]
-        public async Task<ActionResult> MigrateQuizAnswersTable(string tenantName)
-        {
-            try
-            {
-                _logger.LogInformation("Running QuizAnswers table migration for tenant: {TenantName}", tenantName);
-
-                var success = await _tableCreator.MigrateQuizAnswersTableAsync(tenantName);
-
-                if (success)
-                {
-                    return Ok(new {
-                        Message = $"QuizAnswers table migrated successfully for tenant {tenantName}",
-                        Details = "Renamed 'IsCorrect' to 'CorrectAnswer' and added 'Extra' column"
-                    });
-                }
-                else
-                {
-                    return this.ProblemBadRequest($"Failed to migrate QuizAnswers table for tenant '{tenantName}'.");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error migrating QuizAnswers table for tenant {TenantName}", tenantName);
-                return this.ProblemServerError($"Error migrating QuizAnswers table for tenant '{tenantName}'.");
-            }
-        }
-
-        /// <summary>
-        /// Migrate Materials table to add EvaluationMode and MinScore columns for Quiz materials
-        /// </summary>
-        [HttpPost("migrate-quiz-evaluation/{tenantName}")]
-        public async Task<ActionResult> MigrateQuizEvaluationColumns(string tenantName)
-        {
-            try
-            {
-                _logger.LogInformation("Running Quiz evaluation columns migration for tenant: {TenantName}", tenantName);
-
-                var success = await _tableCreator.MigrateQuizEvaluationColumnsAsync(tenantName);
-
-                if (success)
-                {
-                    return Ok(new {
-                        Message = $"Quiz evaluation columns migrated successfully for tenant {tenantName}",
-                        Details = "Added 'EvaluationMode' and 'MinScore' columns to Materials table"
-                    });
-                }
-                else
-                {
-                    return this.ProblemBadRequest($"Failed to migrate Quiz evaluation columns for tenant '{tenantName}'.");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error migrating Quiz evaluation columns for tenant {TenantName}", tenantName);
-                return this.ProblemServerError($"Error migrating Quiz evaluation columns for tenant '{tenantName}'.");
-            }
-        }
-
-        /// <summary>
-        /// Migrate Materials table to add CollectionName for AI Assistant materials
-        /// </summary>
-        [HttpPost("migrate-ai-assistant-collections/{tenantName}")]
-        public async Task<ActionResult> MigrateAIAssistantCollectionColumns(string tenantName)
-        {
-            try
-            {
-                _logger.LogInformation("Running AI Assistant collection column migration for tenant: {TenantName}", tenantName);
-
-                var success = await _tableCreator.MigrateAIAssistantCollectionColumnsAsync(tenantName);
-
-                if (success)
-                {
-                    return Ok(new {
-                        Message = $"AI Assistant collection columns migrated successfully for tenant {tenantName}",
-                        Details = "Added 'CollectionName' to Materials table and backfilled existing AI Assistant materials"
-                    });
-                }
-                else
-                {
-                    return this.ProblemBadRequest($"Failed to migrate AI Assistant collection columns for tenant '{tenantName}'.");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error migrating AI Assistant collection columns for tenant {TenantName}", tenantName);
-                return this.ProblemServerError($"Error migrating AI Assistant collection columns for tenant '{tenantName}'.");
-            }
-        }
-
-        /// <summary>
-        /// Add SHA-256 content hash deduplication metadata to an existing tenant database.
-        /// </summary>
-        [HttpPost("migrate-asset-content-hash/{tenantName}")]
-        public async Task<ActionResult> MigrateAssetContentHash(string tenantName)
-        {
-            try
-            {
-                var success = await _tableCreator.MigrateAssetContentHashAsync(tenantName);
-                if (success)
-                {
-                    return Ok(new
-                    {
-                        Message = $"Asset content hash schema migrated successfully for tenant {tenantName}",
-                        Details = "Added nullable ContentHash and a tenant-local unique index"
-                    });
-                }
-
-                return this.ProblemBadRequest($"Failed to migrate asset content hash schema for tenant '{tenantName}'.");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error migrating asset content hash schema for tenant {TenantName}", tenantName);
-                return this.ProblemServerError($"Error migrating asset content hash schema for tenant '{tenantName}'.");
-            }
-        }
-
-        /// <summary>
-        /// Create the AIAssistantMaterialAssetJobs table on an existing tenant DB.
-        /// Per-(material, asset) DataLens ingest state used by the new submit/sync flow.
-        /// </summary>
-        [HttpPost("migrate-ai-assistant-material-asset-jobs/{tenantName}")]
-        public async Task<ActionResult> MigrateAIAssistantMaterialAssetJobsTable(string tenantName)
-        {
-            try
-            {
-                _logger.LogInformation("Running AIAssistantMaterialAssetJobs table migration for tenant: {TenantName}", tenantName);
-
-                var success = await _tableCreator.MigrateAIAssistantMaterialAssetJobsTableAsync(tenantName);
-
-                if (success)
-                {
-                    return Ok(new {
-                        Message = $"AIAssistantMaterialAssetJobs table migrated successfully for tenant {tenantName}",
-                        Details = "Created per-(material, asset) DataLens job tracking table"
-                    });
-                }
-                else
-                {
-                    return this.ProblemBadRequest($"Failed to migrate AIAssistantMaterialAssetJobs table for tenant '{tenantName}'.");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error migrating AIAssistantMaterialAssetJobs table for tenant {TenantName}", tenantName);
-                return this.ProblemServerError($"Error migrating AIAssistantMaterialAssetJobs table for tenant '{tenantName}'.");
             }
         }
     }

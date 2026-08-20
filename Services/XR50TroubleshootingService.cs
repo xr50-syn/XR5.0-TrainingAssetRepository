@@ -3,6 +3,7 @@ using MySql.Data.MySqlClient;
 using XR50TrainingAssetRepo.Data;
 using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Services;
+using XR50TrainingAssetRepo.Services.Migrations;
 
 namespace XR50TrainingAssetRepo.Services
 {
@@ -12,6 +13,7 @@ namespace XR50TrainingAssetRepo.Services
         Task<bool> RepairTenantDatabaseAsync(string tenantName);
         Task<List<string>> GetAllTenantDatabasesAsync();
         Task<bool> TestTenantConnectionAsync(string tenantName);
+        Task<List<string>> GetTablesInTenantDatabaseAsync(string tenantName);
     }
 
     public class XR50TenantTroubleshootingService : IXR50TenantTroubleshootingService
@@ -20,17 +22,20 @@ namespace XR50TrainingAssetRepo.Services
         private readonly IConfiguration _configuration;
         private readonly ILogger<XR50TenantTroubleshootingService> _logger;
         private readonly IXR50TenantService _tenantService;
+        private readonly IXR50SchemaMigrator _schemaMigrator;
 
         public XR50TenantTroubleshootingService(
             IServiceProvider serviceProvider,
             IConfiguration configuration,
             ILogger<XR50TenantTroubleshootingService> logger,
-            IXR50TenantService tenantService)
+            IXR50TenantService tenantService,
+            IXR50SchemaMigrator schemaMigrator)
         {
             _serviceProvider = serviceProvider;
             _configuration = configuration;
             _logger = logger;
             _tenantService = tenantService;
+            _schemaMigrator = schemaMigrator;
         }
 
         public async Task<TenantDiagnosticResult> DiagnoseTenantAsync(string tenantName)
@@ -101,27 +106,13 @@ namespace XR50TrainingAssetRepo.Services
                     await createDbCommand.ExecuteNonQueryAsync();
                 }
 
-                // 3. Apply migrations
-                var tenantConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
-                var optionsBuilder = new DbContextOptionsBuilder<XR50TrainingContext>();
-                optionsBuilder.UseMySql(tenantConnectionString, ServerVersion.AutoDetect(tenantConnectionString));
-
-                var mockTenantService = new DirectTenantService(tenantName);
-                using var context = new XR50TrainingContext(optionsBuilder.Options, mockTenantService, _configuration);
-
-                // Try migrations first
-                try
+                // 3. Bring the schema to the committed migrations (adopting a legacy database if needed)
+                var migration = await _schemaMigrator.MigrateTenantAsync(tenantName);
+                if (!migration.Succeeded)
                 {
-                    await context.Database.MigrateAsync();
-                    _logger.LogInformation("Successfully applied migrations for tenant {TenantName}", tenantName);
-                }
-                catch (Exception migrationEx)
-                {
-                    _logger.LogWarning(migrationEx, "Migration failed for tenant {TenantName}, trying EnsureCreated", tenantName);
-                    
-                    // Fallback to EnsureCreated
-                    await context.Database.EnsureCreatedAsync();
-                    _logger.LogInformation("Successfully created database structure for tenant {TenantName}", tenantName);
+                    _logger.LogError("Repair of tenant {TenantName} failed at schema migration ({State}): {Error}",
+                        tenantName, migration.StateBefore, migration.Error);
+                    return false;
                 }
 
                 // 4. Verify repair
@@ -222,7 +213,7 @@ namespace XR50TrainingAssetRepo.Services
             }
         }
 
-        private async Task<List<string>> GetTablesInTenantDatabaseAsync(string tenantName)
+        public async Task<List<string>> GetTablesInTenantDatabaseAsync(string tenantName)
         {
             var tables = new List<string>();
 
@@ -256,28 +247,16 @@ namespace XR50TrainingAssetRepo.Services
         {
             try
             {
-                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
-                var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
-                var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
-                var tenantConnectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
-
-                var optionsBuilder = new DbContextOptionsBuilder<XR50TrainingContext>();
-                optionsBuilder.UseMySql(tenantConnectionString, ServerVersion.AutoDetect(tenantConnectionString));
-
-                var mockTenantService = new DirectTenantService(tenantName);
-                using var context = new XR50TrainingContext(optionsBuilder.Options, mockTenantService, _configuration);
-
-                var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
-                var appliedMigrations = await context.Database.GetAppliedMigrationsAsync();
-
-                return $"Applied: {appliedMigrations.Count()}, Pending: {pendingMigrations.Count()}";
+                var status = (await _schemaMigrator.GetStatusAsync(tenantName)).Single();
+                return status.Error is null
+                    ? $"{status.State}: applied {status.Applied.Count}, pending {status.Pending.Count}"
+                    : $"{status.State}: {status.Error}";
             }
             catch (Exception ex)
             {
                 return $"Error: {ex.Message}";
             }
         }
-
     }
 
     // Diagnostic result model

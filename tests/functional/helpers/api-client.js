@@ -226,6 +226,21 @@ class ApiClient {
     return this.get(`${config.TENANT_API_URL}/${tenantName}/storage-stats`);
   }
 
+  // Schema migration operations (system admin)
+
+  async getMigrationStatus(tenantName) {
+    const suffix = tenantName ? `/${tenantName}` : '';
+    return this.get(`${config.API_BASE_URL}/api/troubleshooting/migration-status${suffix}`);
+  }
+
+  async migrateTenant(tenantName) {
+    return this.post(`${config.API_BASE_URL}/api/troubleshooting/migrate/${tenantName}`, {});
+  }
+
+  async migrateAll() {
+    return this.post(`${config.API_BASE_URL}/api/troubleshooting/migrate-all`, {});
+  }
+
   // Material operations (uses configured tenant)
 
   async listMaterials() {

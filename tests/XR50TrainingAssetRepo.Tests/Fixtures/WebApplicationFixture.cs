@@ -33,7 +33,10 @@ public class WebApplicationFixture : WebApplicationFactory<Program>
                 // Disable the Development anonymous bypass so hermetic tests exercise the real
                 // authorization pipeline; requests authenticate through TestAuthHandler instead.
                 ["IAM:AllowAnonymousInDevelopment"] = "false",
-                ["Storage:Type"] = "InMemory"
+                ["Storage:Type"] = "InMemory",
+                // Startup schema migration needs a real server; the hermetic host skips it and
+                // gets a no-op migrator below.
+                ["Database:MigrateOnStartup"] = "false"
             });
         });
 
@@ -95,6 +98,15 @@ public class WebApplicationFixture : WebApplicationFactory<Program>
 
         // Register test DbContext factory that returns the in-memory context
         services.AddScoped<IXR50TenantDbContextFactory, TestDbContextFactory>();
+
+        // No server to migrate: every target reports Managed with nothing pending.
+        var migratorDescriptor = services.SingleOrDefault(
+            d => d.ServiceType == typeof(XR50TrainingAssetRepo.Services.Migrations.IXR50SchemaMigrator));
+        if (migratorDescriptor != null)
+        {
+            services.Remove(migratorDescriptor);
+        }
+        services.AddSingleton<XR50TrainingAssetRepo.Services.Migrations.IXR50SchemaMigrator, NoOpSchemaMigrator>();
 
         // Replace storage service with mock
         var storageDescriptor = services.SingleOrDefault(
@@ -236,4 +248,42 @@ public class MockStorageService : IStorageService
     }
 
     public string GetStorageType() => "InMemory";
+}
+
+/// <summary>
+/// Hermetic stand-in for the schema migrator: there is no server, so every database is
+/// reported as Managed and current. Controller tests for the troubleshooting endpoints use it.
+/// </summary>
+public class NoOpSchemaMigrator : XR50TrainingAssetRepo.Services.Migrations.IXR50SchemaMigrator
+{
+    public Task<IReadOnlyList<XR50TrainingAssetRepo.Services.Migrations.MigrationRunResult>> MigrateCentralAsync(
+        XR50TrainingAssetRepo.Services.Migrations.MigrateOptions? options = null, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<XR50TrainingAssetRepo.Services.Migrations.MigrationRunResult>>(new[]
+        {
+            Ok("registry@test_db", "test_db"),
+            Ok("training@test_db", "test_db")
+        });
+
+    public Task<XR50TrainingAssetRepo.Services.Migrations.MigrationRunResult> MigrateTenantAsync(
+        string tenantName, XR50TrainingAssetRepo.Services.Migrations.MigrateOptions? options = null, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Ok($"tenant:{tenantName}@{XR50TenantDatabase.SchemaFor(tenantName)}", XR50TenantDatabase.SchemaFor(tenantName)));
+
+    public async Task<XR50TrainingAssetRepo.Services.Migrations.MigrationRunReport> MigrateAllAsync(
+        XR50TrainingAssetRepo.Services.Migrations.MigrateOptions? options = null, CancellationToken cancellationToken = default) =>
+        new(await MigrateCentralAsync(options, cancellationToken), Array.Empty<string>(), true);
+
+    public Task<IReadOnlyList<XR50TrainingAssetRepo.Services.Migrations.MigrationTargetStatus>> GetStatusAsync(
+        string? tenantName = null, CancellationToken cancellationToken = default)
+    {
+        var target = tenantName is null ? "training@test_db" : $"tenant:{tenantName}@{XR50TenantDatabase.SchemaFor(tenantName)}";
+        return Task.FromResult<IReadOnlyList<XR50TrainingAssetRepo.Services.Migrations.MigrationTargetStatus>>(new[]
+        {
+            new XR50TrainingAssetRepo.Services.Migrations.MigrationTargetStatus(
+                target, tenantName is null ? "test_db" : XR50TenantDatabase.SchemaFor(tenantName),
+                XR50TrainingAssetRepo.Services.Migrations.SchemaState.Managed, new[] { "00000000000000_Baseline" }, Array.Empty<string>(), null)
+        });
+    }
+
+    private static XR50TrainingAssetRepo.Services.Migrations.MigrationRunResult Ok(string target, string database) =>
+        new(target, database, XR50TrainingAssetRepo.Services.Migrations.SchemaState.Managed, true, false, Array.Empty<string>(), null);
 }

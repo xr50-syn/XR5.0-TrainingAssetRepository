@@ -2,6 +2,8 @@ namespace XR50TrainingAssetRepo.Services.Migrations
 {
     public sealed class XR50SchemaMigrator : IXR50SchemaMigrator
     {
+        public const string MigrateOnStartupKey = "Database:MigrateOnStartup";
+        public const string TolerateTenantFailuresKey = "Database:TolerateTenantMigrationFailures";
         public const string LockTimeoutKey = "Database:LockTimeoutSeconds";
         private const string TenantSchemaLikePattern = "xr50\\_tenant\\_%";
 

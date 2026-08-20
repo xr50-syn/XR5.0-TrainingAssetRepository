@@ -1,8 +1,6 @@
 volumes:
   repodb_mysql:
     driver: local
-  db_migrations:
-    driver: local
   # OwnCloud volumes (for lab environment)
   owncloud_files:
     driver: local
@@ -69,6 +67,11 @@ services:
       XR50_REPO_DB_NAME: ${XR50_REPO_DB_NAME}
       ConnectionStrings__DefaultConnection: server=mariadb;port=3306;database=${XR50_REPO_DB_NAME};user=${XR50_REPO_DB_USER};password=${XR50_REPO_DB_PASSWORD};
       BaseDatabaseName: ${XR50_REPO_DB_NAME}
+      # Schema migrations are applied at startup to the base database and every registered
+      # tenant. Set DB_MIGRATE_ON_STARTUP=false to run them by hand:
+      #   docker compose --profile sandbox run --rm --no-deps training-repo migrate --status
+      Database__MigrateOnStartup: ${DB_MIGRATE_ON_STARTUP:-true}
+      Database__TolerateTenantMigrationFailures: ${DB_TOLERATE_TENANT_MIGRATION_FAILURES:-false}
       
       # S3 Configuration (used when STORAGE_TYPE=S3)
       S3Settings__ServiceUrl: ${AWS_HOST:-}
@@ -130,8 +133,6 @@ services:
     ports:
       - "5286:5286"
       - "7069:7069"
-    volumes:
-      - db_migrations:/App/Migrations
     # Added: Health check for training-repo
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5286/health"] # Adjust endpoint as needed
