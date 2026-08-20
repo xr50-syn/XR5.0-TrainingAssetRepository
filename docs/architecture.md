@@ -101,13 +101,14 @@ The XR5.0 Training Asset Repository is a research prototype developed as part of
 #### **Service Layer**
 - **IStorageService**: Abstract storage interface with S3/OwnCloud implementations
 - **IXR50TenantManagementService**: Dynamic tenant database management
-- **XR50MigrationService**: Automated database schema provisioning
+- **XR50MigrationService**: Tenant database lifecycle (create, migrate, register, drop)
+- **IXR50SchemaMigrator**: Applies the committed EF Core migrations to every database, adopting pre-migration ones
 - **Asset/Material/Program Services**: Business logic implementation
 
 #### **Data Layer**
 - **XR50TrainingContext**: Entity Framework context with dynamic connection strings
 - **XR50TenantDbContextFactory**: Per-tenant database context creation
-- **Migration System**: Automated schema deployment per tenant
+- **Migrations** (`Migrations/Training`, `Migrations/Registry`): the committed schema, one stream per DbContext
 
 ---
 
@@ -117,10 +118,9 @@ The XR5.0 Training Asset Repository is a research prototype developed as part of
 The system implements a **Database-per-Tenant** pattern with shared application infrastructure:
 
 ```
-Admin Database (xr50_repository)
-├── Tenants table (tenant configurations)
-├── Global users table
-└── System configuration
+Base database (magical_library, set by XR50_REPO_DB_NAME)
+├── XR50TenantRegistry (tenant configurations; XR50RegistryContext)
+└── the full tenant schema, serving the "default" tenant (XR50TrainingContext)
 
 Tenant Databases (xr50_tenant_[name])
 ├── Assets
@@ -214,10 +214,10 @@ hashes what it stores like any other upload, so the content participates in dedu
 it targets one specific asset there is no duplicate to silently reuse: content another asset already
 holds is refused with `409 Conflict` naming that asset.
 
-Before serving uploads with this schema on an existing tenant, a system administrator must run
-`POST /api/troubleshooting/migrate-asset-content-hash/{tenantName}` (or the normal idempotent
-`create-tables` workflow). Existing asset rows retain a null hash and are not backfilled, avoiding
-an automatic download of every object in tenant storage.
+Existing tenant databases receive the `ContentHash` and `StorageKey` columns when they are
+migrated (at startup, or through `POST /api/troubleshooting/migrate/{tenantName}`). Existing
+asset rows retain a null hash and are not backfilled, avoiding an automatic download of every
+object in tenant storage.
 
 #### **6. User Management** (`/api/{tenant}/users/`)
 - `GET /` - List tenant users
@@ -234,7 +234,7 @@ Not enumerated here; see Swagger at `/swagger` for the full contract.
 - `/api/{tenant}/innov-chatbot` - INNOV chatbot material type
 - `/api/{tenant}/program-progress`, `/api/{tenant}/quiz-progress` - progress tracking
 - `/api/auth` - token introspection (`/api/auth/me`)
-- `/api/troubleshooting` - system-admin diagnostics and per-tenant migrations
+- `/api/troubleshooting` - system-admin diagnostics and schema migrations (`migration-status`, `migrate/{tenant}`, `migrate-all`)
 
 ### Response Format
 
@@ -484,9 +484,10 @@ cp .env.example .env
 # Using Docker
 docker-compose --profile lab up -d mariadb
 
-# Or local MySQL
+# Or local MySQL: create the base database (XR50_REPO_DB_NAME); the application creates
+# its tables at startup from the committed migrations.
 mysql -u root -p
-CREATE DATABASE xr50_repository;
+CREATE DATABASE magical_library;
 ```
 
 #### 3. Run Application
@@ -587,20 +588,74 @@ public class BaseController : ControllerBase
 
 ### Database Migrations
 
-#### **Creating Migrations**
+The schema is owned by EF Core migrations committed under `Migrations/`, one stream per
+DbContext, each with its own history table:
+
+| Context | Migrations | History table | Applied to |
+|---|---|---|---|
+| `XR50TrainingContext` | `Migrations/Training` | `__EFMigrationsHistory` | every `xr50_tenant_*` database and the base database (the "default" tenant) |
+| `XR50RegistryContext` | `Migrations/Registry` | `__EFMigrationsHistory_Registry` | the base database (`XR50TenantRegistry`) |
+
+#### **Authoring a migration**
 ```bash
-# Add new migration
-dotnet ef migrations add MigrationName --context XR50TrainingContext
-
-# Update database
-dotnet ef database update --context XR50TrainingContext
+dotnet tool restore    # pins dotnet-ef through .config/dotnet-tools.json
+dotnet build
+dotnet ef migrations add <Name> --context XR50TrainingContext --output-dir Migrations/Training --no-build
+# registry changes: --context XR50RegistryContext --output-dir Migrations/Registry
 ```
+No database is needed: the design-time factories pin the server version
+(`Database:ServerVersion`, default `10.11.0-mariadb`). Commit the migration with the updated
+snapshot; the hermetic `MigrationModelDriftTests` fails when they disagree. Keep each
+migration to one concern: MySQL DDL is not transactional, so a failed multi-statement
+migration stops halfway and has to be repaired by hand.
 
-#### **Multi-Tenant Migrations**
-The system automatically applies migrations to tenant databases during:
-- Tenant creation
-- Application startup (for existing tenants)
-- Manual migration service calls
+#### **When migrations run**
+- **Startup** (`Database:MigrateOnStartup`, default `true`): before Kestrel listens and before
+  background services start, the registry and the training schema of the base database are
+  migrated, then every active tenant in `XR50TenantRegistry`, in sequence. A failure keeps the
+  application down; with `Database:TolerateTenantMigrationFailures=true` only central
+  failures do. Schemas named `xr50_tenant_*` that no registry row points at are reported as
+  orphans and left alone.
+- **Tenant creation**: after `CREATE DATABASE`, the new database receives the full migration
+  set before the tenant is registered.
+- **Operator CLI**: `dotnet XR50TrainingAssetRepo.dll migrate [--status] [--all | --central |
+  --tenant <name> ...] [--target <id>] [--no-adopt-legacy] [--tolerate-tenant-failures] [--json]`;
+  exit codes 0 ok, 1 failed, 2 usage, 3 manual intervention. With the stack:
+  `docker compose --profile sandbox run --rm --no-deps training-repo migrate --status`.
+- **HTTP** (system admin): `GET /api/troubleshooting/migration-status[/{tenant}]`,
+  `POST /api/troubleshooting/migrate/{tenant}` (404 unregistered, 409 manual intervention),
+  `POST /api/troubleshooting/migrate-all`. `POST repair/{tenant}` creates a missing database
+  and migrates it.
+
+A server-side advisory lock (`GET_LOCK`) per database serialises concurrent appliers.
+
+#### **States and adoption**
+Each database is classified before anything is done to it:
+
+| State | Meaning | Action |
+|---|---|---|
+| `Empty` | no model tables, no history | apply every migration |
+| `Managed` | history holds the Baseline | apply pending migrations |
+| `LegacyRawDdl` | built by the pre-migration CREATE TABLE script; no history | reconcile (the frozen legacy script and routines, then the finishing ALTERs), stamp the Baseline, apply the rest |
+| `LegacyEfConvention` | built by the old boot-time `InitialCreate` or `EnsureCreated` | if every table is empty, drop them and rebuild from the Baseline; otherwise refuse |
+| `Unknown` | none of the above | refuse (exit code 3 / HTTP 409) |
+
+Adoption is idempotent and resumable: the Baseline row is written only after the reconcile
+succeeds, so an interrupted run re-enters the legacy state and repeats it. `--no-adopt-legacy`
+turns the two legacy states into failures for operators who want to stage the upgrade by hand.
+
+#### **Upgrading a deployment**
+1. `scripts/db-backup.sh` dumps the base database and every tenant schema to a timestamped
+   file; this is the rollback path.
+2. `migrate --status`: every target should be `Managed` or one of the legacy states;
+   investigate `Unknown` before going on.
+3. Deploy. Startup migrates; or set `DB_MIGRATE_ON_STARTUP=false`, run `migrate --all` in a
+   maintenance window and start afterwards.
+4. `migrate --status` again: everything `Managed`, nothing pending.
+
+Rolling back one migration: `migrate --tenant <name> --target <previous id>` runs its
+`Down()`; the Baseline is the floor. Restoring data is `mysql < backup.sql` with the dump from
+step 1.
 
 ### Testing Strategy
 
@@ -688,7 +743,7 @@ dotnet test --filter "ClassName=UnitTest1"
 #### **Production Readiness**
 - **Error Recovery**: Limited retry logic for storage operations
 - **Monitoring**: Basic logging, no metrics collection
-- **Backup Strategy**: No automated backup procedures
+- **Backup Strategy**: `scripts/db-backup.sh` dumps every database on demand; nothing is scheduled
 - **High Availability**: Single-instance deployment only
 
 #### **Storage Backend Limitations**

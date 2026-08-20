@@ -31,8 +31,11 @@ cd tests/functional && npm install && npm test
 
 Fast, deterministic, no external dependencies. They use an in-memory EF Core provider and a mock
 storage service, so they cover logic and controller behavior but **not** anything that depends on
-a real database: identifier handling, collation, connection-string derivation, and migrations all
-need the functional suite or a targeted probe.
+a real database: identifier handling, collation, connection-string derivation, and applying
+migrations all need the functional suite or a targeted probe. Drift between the EF model and the
+committed migrations is the exception: `Migrations/MigrationModelDriftTests` catches it without a
+database, and `Migrations/SchemaMigratorTests` covers the migrator's state detection and
+adoption order against fakes.
 
 ```
 tests/XR50TrainingAssetRepo.Tests/
@@ -40,6 +43,7 @@ tests/XR50TrainingAssetRepo.Tests/
 ├── Factories/       # MaterialFactory and other test builders
 ├── Fixtures/        # WebApplicationFixture, HubAuthWebApplicationFixture, TestAuthHandler
 ├── Integration/     # in-process API tests through the fixtures
+├── Migrations/      # model-drift guard, migrator orchestration with fakes, migrate CLI
 ├── Services/        # service-level unit tests
 └── Smoke/           # health checks
 ```
@@ -85,7 +89,8 @@ tests/functional/
     ├── 06-hierarchy.test.js   # material relationships
     ├── 07-programs.test.js    # training programs
     ├── 08-users.test.js       # user management
-    └── 09-ai-assistant.test.js # AI Assistant material, both create modes
+    ├── 09-ai-assistant.test.js # AI Assistant material, both create modes
+    └── 10-migrations.test.js  # schema migration status and idempotence, system-admin only
 ```
 
 Each run provisions its own tenant (`test_<timestamp>`) in `setup.js` and deletes it in
@@ -106,6 +111,7 @@ npm run test:hierarchy   # 06
 npm run test:programs    # 07
 npm run test:users       # 08
 npm run test:ai-assistant # 09
+npm run test:migrations  # 10
 npm run test:verbose     # all suites, verbose
 ```
 
