@@ -371,7 +371,6 @@ Properties/launchSettings.json
 server.log
 nohup.out
 appsettings.json
-Migrations/
 app/
 .vscode/
 .localstack/

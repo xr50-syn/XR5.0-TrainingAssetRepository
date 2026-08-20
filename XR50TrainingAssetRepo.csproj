@@ -4,6 +4,9 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- The design-time host (dotnet ef) and local runs must work on machines that only have a
+         newer runtime installed; the container image ships the matching 8.0 runtime. -->
+    <RollForward>Major</RollForward>
   </PropertyGroup>
 
   <ItemGroup>

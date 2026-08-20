@@ -226,7 +226,7 @@ builder.Services.AddDbContext<XR50TrainingContext>((serviceProvider, options) =>
     
     // Default configuration - OnConfiguring will override this for tenant operations
     var baseConnectionString = configuration.GetConnectionString("DefaultConnection");
-    options.UseMySql(baseConnectionString, ServerVersion.AutoDetect(baseConnectionString));
+    options.UseMySql(baseConnectionString, XR50ServerVersion.Resolve(configuration));
     
     // Enable detailed logging in development
     if (configuration.GetValue<string>("Environment") == "Development")
@@ -676,7 +676,7 @@ public static class ServiceCollectionExtensions
         {
             var configuration = serviceProvider.GetService<IConfiguration>();
             var baseConnectionString = configuration.GetConnectionString("DefaultConnection");
-            options.UseMySql(baseConnectionString, ServerVersion.AutoDetect(baseConnectionString));
+            options.UseMySql(baseConnectionString, XR50ServerVersion.Resolve(configuration));
 
             if (configuration.GetValue<string>("Environment") == "Development")
             {
