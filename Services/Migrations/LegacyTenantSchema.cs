@@ -5,97 +5,30 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MySql.Data.MySqlClient;
 using XR50TrainingAssetRepo.Models;
-using XR50TrainingAssetRepo.Services;
 
-namespace XR50TrainingAssetRepo.Services
+namespace XR50TrainingAssetRepo.Services.Migrations
 {
-    public interface IXR50ManualTableCreator
-    {
-        Task<bool> CreateAllTablesAsync(string tenantName);
-        Task<bool> CreateTablesInDatabaseAsync(string databaseName);
-        Task<List<string>> GetExistingTablesAsync(string tenantName);
-        Task<bool> DropAllTablesAsync(string tenantName);
-        Task<bool> MigrateAssetTypeColumnAsync(string tenantName);
-        Task<bool> MigrateAssetContentHashAsync(string tenantName);
-        Task<bool> MigrateAnnotationsColumnsAsync(string tenantName);
-        Task<bool> MigrateSubcomponentMaterialRelationshipsTableAsync(string tenantName);
-        Task<bool> MigrateProgramAssignmentRanksAsync(string tenantName);
-        Task<bool> MigrateQuizAnswersTableAsync(string tenantName);
-        Task<bool> MigrateUserMaterialTablesAsync(string tenantName);
-        Task<bool> MigrateMaterialRelationshipRanksAsync(string tenantName);
-        Task<bool> MigrateUserMaterialProgramKeyAsync(string tenantName);
-        Task<bool> MigrateQuizEvaluationColumnsAsync(string tenantName);
-        Task<bool> MigrateAIAssistantCollectionColumnsAsync(string tenantName);
-        Task<bool> MigrateAIAssistantMaterialAssetJobsTableAsync(string tenantName);
-        Task<bool> MigrateInnovChatbotColumnsAsync(string tenantName);
-        Task<bool> MigrateInnovChatbotMaterialAssetJobsTableAsync(string tenantName);
-    }
-
-    public class XR50ManualTableCreator : IXR50ManualTableCreator
+    /// <summary>
+    /// FROZEN. The hand-written tenant DDL and the idempotent in-place migrations that existed
+    /// before EF Core migrations owned the schema, moved here verbatim from the former
+    /// XR50ManualTableCreator so that databases provisioned by that code can be brought to the
+    /// exact pre-Baseline shape before the Baseline migration is stamped on them
+    /// (see <see cref="LegacySchemaReconciler"/>). Methods take the database name directly.
+    ///
+    /// Do not add to or edit this file: schema changes are EF migrations now. Delete it once
+    /// every deployment reports every database as Managed.
+    /// </summary>
+    internal sealed class LegacyTenantSchema
     {
         private readonly IConfiguration _configuration;
-        private readonly ILogger<XR50ManualTableCreator> _logger;
-        private readonly IXR50TenantService _tenantService;
+        private readonly ILogger _logger;
 
-        public XR50ManualTableCreator(
-            IConfiguration configuration,
-            ILogger<XR50ManualTableCreator> logger,
-            IXR50TenantService tenantService)
+        public LegacyTenantSchema(IConfiguration configuration, ILogger logger)
         {
             _configuration = configuration;
             _logger = logger;
-            _tenantService = tenantService;
         }
 
-        public async Task<bool> CreateAllTablesAsync(string tenantName)
-        {
-            var tenantDbName = _tenantService.GetTenantSchema(tenantName);
-            var tablesCreated = await CreateTablesInDatabaseAsync(tenantDbName);
-            if (!tablesCreated)
-            {
-                return false;
-            }
-
-            var contentHashMigrated = await MigrateAssetContentHashAsync(tenantName);
-            if (!contentHashMigrated)
-            {
-                _logger.LogWarning("Tables created for tenant {TenantName} but asset content hash migration failed", tenantName);
-                return false;
-            }
-
-            // CREATE TABLE IF NOT EXISTS is a no-op against pre-existing tables, so
-            // columns added after the original schema (e.g. AIAssistantMaterial.CollectionName)
-            // need an explicit ALTER to land when the lab purges data without dropping tables.
-            var collectionColumnsMigrated = await MigrateAIAssistantCollectionColumnsAsync(tenantName);
-            if (!collectionColumnsMigrated)
-            {
-                _logger.LogWarning("Tables created for tenant {TenantName} but AI Assistant collection column migration failed", tenantName);
-                return false;
-            }
-
-            var jobsTableMigrated = await MigrateAIAssistantMaterialAssetJobsTableAsync(tenantName);
-            if (!jobsTableMigrated)
-            {
-                _logger.LogWarning("Tables created for tenant {TenantName} but AIAssistantMaterialAssetJobs table migration failed", tenantName);
-                return false;
-            }
-
-            var innovColumnsMigrated = await MigrateInnovChatbotColumnsAsync(tenantName);
-            if (!innovColumnsMigrated)
-            {
-                _logger.LogWarning("Tables created for tenant {TenantName} but INNOV chatbot column migration failed", tenantName);
-                return false;
-            }
-
-            var innovJobsTableMigrated = await MigrateInnovChatbotMaterialAssetJobsTableAsync(tenantName);
-            if (!innovJobsTableMigrated)
-            {
-                _logger.LogWarning("Tables created for tenant {TenantName} but InnovChatbotMaterialAssetJobs table migration failed", tenantName);
-                return false;
-            }
-
-            return true;
-        }
 
         public async Task<bool> CreateTablesInDatabaseAsync(string databaseName)
         {
@@ -182,12 +115,6 @@ namespace XR50TrainingAssetRepo.Services
             return "unknown";
         }
 
-        public async Task<List<string>> GetExistingTablesAsync(string tenantName)
-        {
-            var tenantDbName = _tenantService.GetTenantSchema(tenantName);
-            return await GetExistingTablesInDatabaseAsync(tenantDbName);
-        }
-
         private async Task<List<string>> GetExistingTablesInDatabaseAsync(string databaseName)
         {
             var tables = new List<string>();
@@ -250,42 +177,6 @@ namespace XR50TrainingAssetRepo.Services
             }
 
             return tables;
-        }
-
-        public async Task<bool> DropAllTablesAsync(string tenantName)
-        {
-            try
-            {
-                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
-                var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
-                var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
-                var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
-
-                _logger.LogInformation("Dropping all tables in tenant database: {TenantDatabase}", tenantDbName);
-
-                using var connection = new MySqlConnection(connectionString);
-                await connection.OpenAsync();
-
-                // Get all tables first
-                var tables = await GetExistingTablesInDatabaseAsync(tenantDbName);
-
-                // Drop all tables
-                foreach (var table in tables)
-                {
-                    var dropCommand = new MySqlCommand($"DROP TABLE IF EXISTS `{table}`", connection);
-                    await dropCommand.ExecuteNonQueryAsync();
-                }
-
-                _logger.LogInformation("Successfully dropped {TableCount} tables from tenant database: {TenantDatabase}", 
-                    tables.Count, tenantDbName);
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to drop tables for tenant: {TenantName}", tenantName);
-                return false;
-            }
         }
 
         private List<string> GetCreateTableStatements()
@@ -691,17 +582,17 @@ namespace XR50TrainingAssetRepo.Services
             };
         }
 
-        public async Task<bool> MigrateAssetTypeColumnAsync(string tenantName)
+        public async Task<bool> MigrateAssetTypeColumnAsync(string databaseName)
         {
             try
             {
-                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var tenantDbName = databaseName;
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
                 var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
-                _logger.LogInformation("=== Migrating Asset.Type column for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== Migrating Asset.Type column for tenant: {DatabaseName} ===", databaseName);
 
                 using var connection = new MySqlConnection(connectionString);
                 await connection.OpenAsync();
@@ -721,7 +612,7 @@ namespace XR50TrainingAssetRepo.Services
 
                     if (columnExists)
                     {
-                        _logger.LogInformation("Type column already exists in Assets table for tenant: {TenantName}", tenantName);
+                        _logger.LogInformation("Type column already exists in Assets table for tenant: {DatabaseName}", databaseName);
                         return true;
                     }
                 }
@@ -736,7 +627,7 @@ namespace XR50TrainingAssetRepo.Services
                 using (var alterCmd = new MySqlCommand(alterTableQuery, connection))
                 {
                     await alterCmd.ExecuteNonQueryAsync();
-                    _logger.LogInformation("Successfully added Type column to Assets table for tenant: {TenantName}", tenantName);
+                    _logger.LogInformation("Successfully added Type column to Assets table for tenant: {DatabaseName}", databaseName);
                 }
 
                 // Infer Type from Filetype for existing records
@@ -754,30 +645,30 @@ namespace XR50TrainingAssetRepo.Services
                 using (var updateCmd = new MySqlCommand(updateQuery, connection))
                 {
                     var rowsAffected = await updateCmd.ExecuteNonQueryAsync();
-                    _logger.LogInformation("Updated {RowCount} existing asset records with inferred Type values for tenant: {TenantName}",
-                        rowsAffected, tenantName);
+                    _logger.LogInformation("Updated {RowCount} existing asset records with inferred Type values for tenant: {DatabaseName}",
+                        rowsAffected, databaseName);
                 }
 
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error migrating Asset.Type column for tenant: {TenantName}", tenantName);
+                _logger.LogError(ex, "Error migrating Asset.Type column for tenant: {DatabaseName}", databaseName);
                 return false;
             }
         }
 
-        public async Task<bool> MigrateAnnotationsColumnsAsync(string tenantName)
+        public async Task<bool> MigrateAnnotationsColumnsAsync(string databaseName)
         {
             try
             {
-                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var tenantDbName = databaseName;
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
                 var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
-                _logger.LogInformation("=== Migrating Annotations columns for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== Migrating Annotations columns for tenant: {DatabaseName} ===", databaseName);
 
                 using var connection = new MySqlConnection(connectionString);
                 await connection.OpenAsync();
@@ -846,27 +737,27 @@ namespace XR50TrainingAssetRepo.Services
                     }
                 }
 
-                _logger.LogInformation("=== Migration completed for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== Migration completed for tenant: {DatabaseName} ===", databaseName);
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error migrating Annotations columns for tenant: {TenantName}", tenantName);
+                _logger.LogError(ex, "Error migrating Annotations columns for tenant: {DatabaseName}", databaseName);
                 return false;
             }
         }
 
-        public async Task<bool> MigrateSubcomponentMaterialRelationshipsTableAsync(string tenantName)
+        public async Task<bool> MigrateSubcomponentMaterialRelationshipsTableAsync(string databaseName)
         {
             try
             {
-                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var tenantDbName = databaseName;
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
                 var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
-                _logger.LogInformation("=== Migrating SubcomponentMaterialRelationships table for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== Migrating SubcomponentMaterialRelationships table for tenant: {DatabaseName} ===", databaseName);
 
                 using var connection = new MySqlConnection(connectionString);
                 await connection.OpenAsync();
@@ -885,7 +776,7 @@ namespace XR50TrainingAssetRepo.Services
 
                     if (tableExists)
                     {
-                        _logger.LogInformation("SubcomponentMaterialRelationships table already exists for tenant: {TenantName}", tenantName);
+                        _logger.LogInformation("SubcomponentMaterialRelationships table already exists for tenant: {DatabaseName}", databaseName);
                         return true;
                     }
                 }
@@ -909,29 +800,29 @@ namespace XR50TrainingAssetRepo.Services
                 using (var createCmd = new MySqlCommand(createTableQuery, connection))
                 {
                     await createCmd.ExecuteNonQueryAsync();
-                    _logger.LogInformation("Successfully created SubcomponentMaterialRelationships table for tenant: {TenantName}", tenantName);
+                    _logger.LogInformation("Successfully created SubcomponentMaterialRelationships table for tenant: {DatabaseName}", databaseName);
                 }
 
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error migrating SubcomponentMaterialRelationships table for tenant: {TenantName}", tenantName);
+                _logger.LogError(ex, "Error migrating SubcomponentMaterialRelationships table for tenant: {DatabaseName}", databaseName);
                 return false;
             }
         }
 
-        public async Task<bool> MigrateProgramAssignmentRanksAsync(string tenantName)
+        public async Task<bool> MigrateProgramAssignmentRanksAsync(string databaseName)
         {
             try
             {
-                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var tenantDbName = databaseName;
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
                 var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
-                _logger.LogInformation("=== Migrating Program Assignment Rank columns for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== Migrating Program Assignment Rank columns for tenant: {DatabaseName} ===", databaseName);
 
                 using var connection = new MySqlConnection(connectionString);
                 await connection.OpenAsync();
@@ -1008,12 +899,12 @@ namespace XR50TrainingAssetRepo.Services
                     }
                 }
 
-                _logger.LogInformation("=== Migration completed for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== Migration completed for tenant: {DatabaseName} ===", databaseName);
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error migrating Program Assignment Rank columns for tenant: {TenantName}", tenantName);
+                _logger.LogError(ex, "Error migrating Program Assignment Rank columns for tenant: {DatabaseName}", databaseName);
                 return false;
             }
         }
@@ -1023,17 +914,17 @@ namespace XR50TrainingAssetRepo.Services
         /// 1. Rename IsCorrect column to CorrectAnswer
         /// 2. Add Extra column (varchar 500, nullable)
         /// </summary>
-        public async Task<bool> MigrateQuizAnswersTableAsync(string tenantName)
+        public async Task<bool> MigrateQuizAnswersTableAsync(string databaseName)
         {
             try
             {
-                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var tenantDbName = databaseName;
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
                 var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
-                _logger.LogInformation("=== Migrating QuizAnswers table for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== Migrating QuizAnswers table for tenant: {DatabaseName} ===", databaseName);
 
                 using var connection = new MySqlConnection(connectionString);
                 await connection.OpenAsync();
@@ -1115,12 +1006,12 @@ namespace XR50TrainingAssetRepo.Services
                     }
                 }
 
-                _logger.LogInformation("=== QuizAnswers table migration completed for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== QuizAnswers table migration completed for tenant: {DatabaseName} ===", databaseName);
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error migrating QuizAnswers table for tenant: {TenantName}", tenantName);
+                _logger.LogError(ex, "Error migrating QuizAnswers table for tenant: {DatabaseName}", databaseName);
                 return false;
             }
         }
@@ -1128,17 +1019,17 @@ namespace XR50TrainingAssetRepo.Services
         /// <summary>
         /// Migrates existing databases to add AI Assistant Material and Asset AI processing columns.
         /// </summary>
-        public async Task<bool> MigrateAIAssistantAndAiColumnsAsync(string tenantName)
+        public async Task<bool> MigrateAIAssistantAndAiColumnsAsync(string databaseName)
         {
             try
             {
-                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var tenantDbName = databaseName;
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
                 var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
-                _logger.LogInformation("=== Starting AI Assistant/AI columns migration for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== Starting AI Assistant/AI columns migration for tenant: {DatabaseName} ===", databaseName);
 
                 using var connection = new MySqlConnection(connectionString);
                 await connection.OpenAsync();
@@ -1233,12 +1124,12 @@ namespace XR50TrainingAssetRepo.Services
                 // Create AIAssistantSessions table for session management
                 await CreateAIAssistantSessionsTableAsync(connection, tenantDbName);
 
-                _logger.LogInformation("=== AI Assistant/AI columns migration completed for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== AI Assistant/AI columns migration completed for tenant: {DatabaseName} ===", databaseName);
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error migrating AI Assistant/AI columns for tenant: {TenantName}", tenantName);
+                _logger.LogError(ex, "Error migrating AI Assistant/AI columns for tenant: {DatabaseName}", databaseName);
                 return false;
             }
         }
@@ -1287,17 +1178,17 @@ namespace XR50TrainingAssetRepo.Services
         /// <summary>
         /// Migrates existing databases to add UserMaterialData and UserMaterialScores tables.
         /// </summary>
-        public async Task<bool> MigrateUserMaterialTablesAsync(string tenantName)
+        public async Task<bool> MigrateUserMaterialTablesAsync(string databaseName)
         {
             try
             {
-                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var tenantDbName = databaseName;
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
                 var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
-                _logger.LogInformation("=== Migrating User Material tables for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== Migrating User Material tables for tenant: {DatabaseName} ===", databaseName);
 
                 using var connection = new MySqlConnection(connectionString);
                 await connection.OpenAsync();
@@ -1324,7 +1215,7 @@ namespace XR50TrainingAssetRepo.Services
                 using (var createCmd = new MySqlCommand(createUserMaterialDataQuery, connection))
                 {
                     await createCmd.ExecuteNonQueryAsync();
-                    _logger.LogInformation("Created/verified UserMaterialData table for tenant: {TenantName}", tenantName);
+                    _logger.LogInformation("Created/verified UserMaterialData table for tenant: {DatabaseName}", databaseName);
                 }
 
                 // Add LearningPathId column to UserMaterialData if it doesn't exist
@@ -1349,18 +1240,18 @@ namespace XR50TrainingAssetRepo.Services
                 using (var createCmd = new MySqlCommand(createUserMaterialScoresQuery, connection))
                 {
                     await createCmd.ExecuteNonQueryAsync();
-                    _logger.LogInformation("Created/verified UserMaterialScores table for tenant: {TenantName}", tenantName);
+                    _logger.LogInformation("Created/verified UserMaterialScores table for tenant: {DatabaseName}", databaseName);
                 }
 
                 // Add LearningPathId column to UserMaterialScores if it doesn't exist
                 await AddColumnIfNotExistsAsync(connection, "UserMaterialScores", "LearningPathId", "int DEFAULT NULL", "ProgramId");
 
-                _logger.LogInformation("=== User Material tables migration completed for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== User Material tables migration completed for tenant: {DatabaseName} ===", databaseName);
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error migrating User Material tables for tenant: {TenantName}", tenantName);
+                _logger.LogError(ex, "Error migrating User Material tables for tenant: {DatabaseName}", databaseName);
                 return false;
             }
         }
@@ -1368,17 +1259,17 @@ namespace XR50TrainingAssetRepo.Services
         /// <summary>
         /// Migrates existing databases to add rank columns to MaterialRelationships table.
         /// </summary>
-        public async Task<bool> MigrateMaterialRelationshipRanksAsync(string tenantName)
+        public async Task<bool> MigrateMaterialRelationshipRanksAsync(string databaseName)
         {
             try
             {
-                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var tenantDbName = databaseName;
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
                 var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
-                _logger.LogInformation("=== Migrating MaterialRelationships rank columns for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== Migrating MaterialRelationships rank columns for tenant: {DatabaseName} ===", databaseName);
 
                 using var connection = new MySqlConnection(connectionString);
                 await connection.OpenAsync();
@@ -1423,12 +1314,12 @@ namespace XR50TrainingAssetRepo.Services
                     }
                 }
 
-                _logger.LogInformation("=== MaterialRelationships rank columns migration completed for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== MaterialRelationships rank columns migration completed for tenant: {DatabaseName} ===", databaseName);
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error migrating MaterialRelationships rank columns for tenant: {TenantName}", tenantName);
+                _logger.LogError(ex, "Error migrating MaterialRelationships rank columns for tenant: {DatabaseName}", databaseName);
                 return false;
             }
         }
@@ -1437,17 +1328,17 @@ namespace XR50TrainingAssetRepo.Services
         /// Migrates existing databases to change UserMaterialData and UserMaterialScores keys to include ProgramId.
         /// This allows separate submissions per program for the same material.
         /// </summary>
-        public async Task<bool> MigrateUserMaterialProgramKeyAsync(string tenantName)
+        public async Task<bool> MigrateUserMaterialProgramKeyAsync(string databaseName)
         {
             try
             {
-                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var tenantDbName = databaseName;
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
                 var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
-                _logger.LogInformation("=== Migrating UserMaterial tables to include ProgramId in keys for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== Migrating UserMaterial tables to include ProgramId in keys for tenant: {DatabaseName} ===", databaseName);
 
                 using var connection = new MySqlConnection(connectionString);
                 await connection.OpenAsync();
@@ -1542,12 +1433,12 @@ namespace XR50TrainingAssetRepo.Services
                     _logger.LogWarning("Could not change UserMaterialScores PRIMARY KEY (may already be correct): {Message}", ex.Message);
                 }
 
-                _logger.LogInformation("=== UserMaterial program key migration completed for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== UserMaterial program key migration completed for tenant: {DatabaseName} ===", databaseName);
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error migrating UserMaterial program keys for tenant: {TenantName}", tenantName);
+                _logger.LogError(ex, "Error migrating UserMaterial program keys for tenant: {DatabaseName}", databaseName);
                 return false;
             }
         }
@@ -1556,17 +1447,17 @@ namespace XR50TrainingAssetRepo.Services
         /// Migrates existing tenant databases to add EvaluationMode and MinScore columns to the Materials table
         /// for QuizMaterial support.
         /// </summary>
-        public async Task<bool> MigrateQuizEvaluationColumnsAsync(string tenantName)
+        public async Task<bool> MigrateQuizEvaluationColumnsAsync(string databaseName)
         {
             try
             {
-                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var tenantDbName = databaseName;
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
                 var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
-                _logger.LogInformation("=== Migrating Quiz evaluation columns for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== Migrating Quiz evaluation columns for tenant: {DatabaseName} ===", databaseName);
 
                 using var connection = new MySqlConnection(connectionString);
                 await connection.OpenAsync();
@@ -1606,12 +1497,12 @@ namespace XR50TrainingAssetRepo.Services
                     }
                 }
 
-                _logger.LogInformation("=== Quiz evaluation columns migration completed for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== Quiz evaluation columns migration completed for tenant: {DatabaseName} ===", databaseName);
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error migrating Quiz evaluation columns for tenant: {TenantName}", tenantName);
+                _logger.LogError(ex, "Error migrating Quiz evaluation columns for tenant: {DatabaseName}", databaseName);
                 return false;
             }
         }
@@ -1620,17 +1511,17 @@ namespace XR50TrainingAssetRepo.Services
         /// Migrates existing tenant databases to add AI Assistant collection metadata columns
         /// required by newer queries over the Materials table.
         /// </summary>
-        public async Task<bool> MigrateAIAssistantCollectionColumnsAsync(string tenantName)
+        public async Task<bool> MigrateAIAssistantCollectionColumnsAsync(string databaseName)
         {
             try
             {
-                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var tenantDbName = databaseName;
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
                 var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
-                _logger.LogInformation("=== Migrating AI Assistant collection columns for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== Migrating AI Assistant collection columns for tenant: {DatabaseName} ===", databaseName);
 
                 using var connection = new MySqlConnection(connectionString);
                 await connection.OpenAsync();
@@ -1682,12 +1573,12 @@ namespace XR50TrainingAssetRepo.Services
                     _logger.LogInformation("Backfilled CollectionName for {UpdatedRows} AI Assistant materials", updatedRows);
                 }
 
-                _logger.LogInformation("=== AI Assistant collection columns migration completed for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== AI Assistant collection columns migration completed for tenant: {DatabaseName} ===", databaseName);
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error migrating AI Assistant collection columns for tenant: {TenantName}", tenantName);
+                _logger.LogError(ex, "Error migrating AI Assistant collection columns for tenant: {DatabaseName}", databaseName);
                 return false;
             }
         }
@@ -1697,17 +1588,17 @@ namespace XR50TrainingAssetRepo.Services
         /// Per-(material, asset) DataLens ingest tracking — supersedes the global
         /// Assets.AiAvailable / Assets.JobId fields for AI Assistant flows.
         /// </summary>
-        public async Task<bool> MigrateAIAssistantMaterialAssetJobsTableAsync(string tenantName)
+        public async Task<bool> MigrateAIAssistantMaterialAssetJobsTableAsync(string databaseName)
         {
             try
             {
-                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var tenantDbName = databaseName;
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
                 var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
-                _logger.LogInformation("=== Migrating AIAssistantMaterialAssetJobs table for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== Migrating AIAssistantMaterialAssetJobs table for tenant: {DatabaseName} ===", databaseName);
 
                 using var connection = new MySqlConnection(connectionString);
                 await connection.OpenAsync();
@@ -1724,7 +1615,7 @@ namespace XR50TrainingAssetRepo.Services
 
                 if (tableExists)
                 {
-                    _logger.LogInformation("AIAssistantMaterialAssetJobs table already exists for tenant: {TenantName}", tenantName);
+                    _logger.LogInformation("AIAssistantMaterialAssetJobs table already exists for tenant: {DatabaseName}", databaseName);
 
                     // Ensure columns added after the table's original schema are present on
                     // already-provisioned tenants (CREATE TABLE IF NOT EXISTS won't add them).
@@ -1741,7 +1632,7 @@ namespace XR50TrainingAssetRepo.Services
                                 "ALTER TABLE `AIAssistantMaterialAssetJobs` ADD COLUMN `DocumentName` varchar(255) DEFAULT NULL AFTER `JobId`",
                                 connection);
                             await addCmd.ExecuteNonQueryAsync();
-                            _logger.LogInformation("Added DocumentName column to AIAssistantMaterialAssetJobs for tenant: {TenantName}", tenantName);
+                            _logger.LogInformation("Added DocumentName column to AIAssistantMaterialAssetJobs for tenant: {DatabaseName}", databaseName);
                         }
                     }
 
@@ -1770,14 +1661,14 @@ namespace XR50TrainingAssetRepo.Services
                 using (var createCmd = new MySqlCommand(createSql, connection))
                 {
                     await createCmd.ExecuteNonQueryAsync();
-                    _logger.LogInformation("Successfully created AIAssistantMaterialAssetJobs table for tenant: {TenantName}", tenantName);
+                    _logger.LogInformation("Successfully created AIAssistantMaterialAssetJobs table for tenant: {DatabaseName}", databaseName);
                 }
 
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error migrating AIAssistantMaterialAssetJobs table for tenant: {TenantName}", tenantName);
+                _logger.LogError(ex, "Error migrating AIAssistantMaterialAssetJobs table for tenant: {DatabaseName}", databaseName);
                 return false;
             }
         }
@@ -1788,11 +1679,11 @@ namespace XR50TrainingAssetRepo.Services
         /// legacy and reference-only assets remain valid while newly hashed uploads are constrained
         /// to one row per tenant. Idempotent: each column and index is added only if missing.
         /// </summary>
-        public async Task<bool> MigrateAssetContentHashAsync(string tenantName)
+        public async Task<bool> MigrateAssetContentHashAsync(string databaseName)
         {
             try
             {
-                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var tenantDbName = databaseName;
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
@@ -1860,12 +1751,12 @@ namespace XR50TrainingAssetRepo.Services
                     }
                 }
 
-                _logger.LogInformation("Asset content hash schema is ready for tenant {TenantName}", tenantName);
+                _logger.LogInformation("Asset content hash schema is ready for tenant {DatabaseName}", databaseName);
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error migrating asset content hash schema for tenant {TenantName}", tenantName);
+                _logger.LogError(ex, "Error migrating asset content hash schema for tenant {DatabaseName}", databaseName);
                 return false;
             }
         }
@@ -1874,17 +1765,17 @@ namespace XR50TrainingAssetRepo.Services
         /// Migrates existing tenant databases to add INNOV chatbot material columns to the
         /// Materials table. Idempotent: each column is added only if missing.
         /// </summary>
-        public async Task<bool> MigrateInnovChatbotColumnsAsync(string tenantName)
+        public async Task<bool> MigrateInnovChatbotColumnsAsync(string databaseName)
         {
             try
             {
-                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var tenantDbName = databaseName;
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
                 var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
-                _logger.LogInformation("=== Migrating INNOV chatbot columns for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== Migrating INNOV chatbot columns for tenant: {DatabaseName} ===", databaseName);
 
                 using var connection = new MySqlConnection(connectionString);
                 await connection.OpenAsync();
@@ -1926,12 +1817,12 @@ namespace XR50TrainingAssetRepo.Services
                     }
                 }
 
-                _logger.LogInformation("=== INNOV chatbot columns migration completed for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== INNOV chatbot columns migration completed for tenant: {DatabaseName} ===", databaseName);
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error migrating INNOV chatbot columns for tenant: {TenantName}", tenantName);
+                _logger.LogError(ex, "Error migrating INNOV chatbot columns for tenant: {DatabaseName}", databaseName);
                 return false;
             }
         }
@@ -1940,17 +1831,17 @@ namespace XR50TrainingAssetRepo.Services
         /// Creates the InnovChatbotMaterialAssetJobs table on existing tenant DBs.
         /// Per-(material, asset) INNOV ingest tracking.
         /// </summary>
-        public async Task<bool> MigrateInnovChatbotMaterialAssetJobsTableAsync(string tenantName)
+        public async Task<bool> MigrateInnovChatbotMaterialAssetJobsTableAsync(string databaseName)
         {
             try
             {
-                var tenantDbName = _tenantService.GetTenantSchema(tenantName);
+                var tenantDbName = databaseName;
                 var baseConnectionString = _configuration.GetConnectionString("DefaultConnection");
                 var baseDatabaseName = _configuration["BaseDatabaseName"] ?? "magical_library";
 
                 var connectionString = TenantConnectionString.ForDatabase(baseConnectionString, tenantDbName);
 
-                _logger.LogInformation("=== Migrating InnovChatbotMaterialAssetJobs table for tenant: {TenantName} ===", tenantName);
+                _logger.LogInformation("=== Migrating InnovChatbotMaterialAssetJobs table for tenant: {DatabaseName} ===", databaseName);
 
                 using var connection = new MySqlConnection(connectionString);
                 await connection.OpenAsync();
@@ -1967,7 +1858,7 @@ namespace XR50TrainingAssetRepo.Services
 
                 if (tableExists)
                 {
-                    _logger.LogInformation("InnovChatbotMaterialAssetJobs table already exists for tenant: {TenantName}", tenantName);
+                    _logger.LogInformation("InnovChatbotMaterialAssetJobs table already exists for tenant: {DatabaseName}", databaseName);
                     return true;
                 }
 
@@ -1992,143 +1883,16 @@ namespace XR50TrainingAssetRepo.Services
                 using (var createCmd = new MySqlCommand(createSql, connection))
                 {
                     await createCmd.ExecuteNonQueryAsync();
-                    _logger.LogInformation("Successfully created InnovChatbotMaterialAssetJobs table for tenant: {TenantName}", tenantName);
+                    _logger.LogInformation("Successfully created InnovChatbotMaterialAssetJobs table for tenant: {DatabaseName}", databaseName);
                 }
 
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error migrating InnovChatbotMaterialAssetJobs table for tenant: {TenantName}", tenantName);
+                _logger.LogError(ex, "Error migrating InnovChatbotMaterialAssetJobs table for tenant: {DatabaseName}", databaseName);
                 return false;
             }
-        }
-
-        private string GetCreateTablesScript()
-        {
-            return @"
-CREATE TABLE IF NOT EXISTS `Users` (
-    `UserName` varchar(50) NOT NULL,
-    `FullName` varchar(100) NOT NULL,
-    `UserEmail` varchar(255) DEFAULT NULL,
-    `Password` varchar(50) DEFAULT NULL,
-    `admin` tinyint(1) NOT NULL DEFAULT 0,
-    PRIMARY KEY (`UserName`)
-)
-
-CREATE TABLE IF NOT EXISTS `TrainingPrograms` (
-    `Id` int NOT NULL AUTOICREMENT,
-    `Name` varchar(255) NOT NULL,
-    `Description` varchar(1000) DEFAULT NULL,
-    `Requirements` varchar(1000) DEFAULT NULL,
-    `Objectives` varchar(1000) DEFAULT NULL,
-    PRIMARY KEY (`TrainingProgramId`)
-)
-
-CREATE TABLE IF NOT EXISTS `LearningPaths` (
-    `LearningPathId` varchar(50) NOT NULL,
-    `PathName` varchar(255) NOT NULL,
-    `Description` varchar(1000) DEFAULT NULL,
-    PRIMARY KEY (`LearningPathId`)
-)
-
-CREATE TABLE IF NOT EXISTS `Materials` (
-    `MaterialId` varchar(50) NOT NULL,
-    `MaterialName` varchar(255) NOT NULL,
-    `MaterialType` varchar(50) DEFAULT NULL,
-    `Description` varchar(1000) DEFAULT NULL,
-    `Discriminator` varchar(255) NOT NULL,
-    `VideoPath` varchar(500) DEFAULT NULL,
-    `ImagePath` varchar(500) DEFAULT NULL,
-    PRIMARY KEY (`MaterialId`)
-)
-
-CREATE TABLE IF NOT EXISTS `Assets` (
-    `Id` int NOT NULL AUTO_INCREMENT,
-    `Description` varchar(1000) DEFAULT NULL,
-    `Url` varchar(2000) DEFAULT NULL,
-    `Src` varchar(500) DEFAULT NULL,
-    `Filetype` varchar(100) DEFAULT NULL,
-    `Type` int NOT NULL DEFAULT 0 COMMENT 'AssetType enum: 0=Image, 1=PDF, 2=Video, 3=Unity',
-    `Filename` varchar(255) NOT NULL,
-    `ContentHash` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
-    UNIQUE KEY `ux_assets_content_hash` (`ContentHash`),
-    PRIMARY KEY (`Id`)
-)
-
-CREATE TABLE IF NOT EXISTS `Shares` (
-    `ShareId` varchar(50) NOT NULL,
-    `ShareType` varchar(50) DEFAULT NULL,
-    PRIMARY KEY (`ShareId`)
-)
-
-// Updated table creation statements with proper foreign keys
-CREATE TABLE IF NOT EXISTS `Timestamps` (
-    `id` int NOT NULL AUTO_INCREMENT,
-    `Title` varchar(255) NOT NULL,
-    `startTime` varchar(50) NOT NULL,
-    `endTime` varchar(50) DEFAULT NULL,
-    `Duration` int DEFAULT NULL,
-    `Description` varchar(1000) DEFAULT NULL,
-    `type` varchar(255) DEFAULT NULL,
-    `VideoMaterialId` int NOT NULL,
-    PRIMARY KEY (`id`),
-    INDEX `idx_video_material` (`VideoMaterialId`)
-)
-
-CREATE TABLE IF NOT EXISTS `Entries` (
-    `ChecklistEntryId` int NOT NULL AUTO_INCREMENT,
-    `Text` varchar(1000) NOT NULL,
-    `Description` varchar(1000) DEFAULT NULL,
-    `ChecklistMaterialId` int NOT NULL,
-    PRIMARY KEY (`ChecklistEntryId`),
-    INDEX `idx_checklist_material` (`ChecklistMaterialId`)
-)
-
-CREATE TABLE IF NOT EXISTS `QuizQuestions` (
-    `QuizQuestionId` int NOT NULL AUTO_INCREMENT,
-    `QuestionNumber` int NOT NULL,
-    `QuestionType` varchar(50) NOT NULL DEFAULT 'text',
-    `Text` varchar(2000) NOT NULL,
-    `Description` varchar(2000) DEFAULT NULL,
-    `Score` decimal(10,2) DEFAULT NULL,
-    `HelpText` varchar(1000) DEFAULT NULL,
-    `AllowMultiple` tinyint(1) NOT NULL DEFAULT 0,
-    `ScaleConfig` varchar(500) DEFAULT NULL,
-    `QuizMaterialId` int DEFAULT NULL,
-    PRIMARY KEY (`QuizQuestionId`),
-    INDEX `idx_quiz_material` (`QuizMaterialId`)
-)
-
-CREATE TABLE IF NOT EXISTS `QuizAnswers` (
-    `QuizAnswerId` int NOT NULL AUTO_INCREMENT,
-    `Text` varchar(1000) NOT NULL,
-    `CorrectAnswer` tinyint(1) NOT NULL DEFAULT 0,
-    `DisplayOrder` int DEFAULT NULL,
-    `Extra` varchar(500) DEFAULT NULL,
-    `QuizQuestionId` int DEFAULT NULL,
-    PRIMARY KEY (`QuizAnswerId`),
-    INDEX `idx_quiz_question` (`QuizQuestionId`)
-)
-
-CREATE TABLE IF NOT EXISTS `WorkflowSteps` (
-    `Id` int NOT NULL AUTO_INCREMENT,
-    `Title` varchar(255) NOT NULL,
-    `Content` text DEFAULT NULL,
-    `WorkflowMaterialId` int NOT NULL,
-    PRIMARY KEY (`Id`),
-    INDEX `idx_workflow_material` (`WorkflowMaterialId`)
-)
-
-CREATE TABLE IF NOT EXISTS `Tenants` (
-    `TenantName` varchar(100) NOT NULL,
-    `TenantGroup` varchar(100) DEFAULT NULL,
-    `Description` varchar(500) DEFAULT NULL,
-    `TenantDirectory` varchar(500) DEFAULT NULL,
-    `OwnerName` varchar(255) DEFAULT NULL,
-    `TenantSchema` varchar(255) DEFAULT NULL,
-    PRIMARY KEY (`TenantName`)
-)";
         }
 
         /// <summary>
@@ -2182,5 +1946,6 @@ CREATE TABLE IF NOT EXISTS `Tenants` (
                 throw;
             }
         }
+
     }
 }

@@ -113,6 +113,48 @@ baseline  -> run probe -> delete created resources -> assert (final == baseline)
 **5. Report what ran.** Give counts, name what was skipped and why, and state which findings
 are pre-existing rather than caused by the change under test.
 
+## Verifying a schema migration
+
+A migration reaches every tenant database, so the whole ladder plus a probe is the minimum.
+Before rebuilding the stack, record what you are about to change:
+
+```bash
+scripts/db-backup.sh
+docker compose --profile sandbox run --rm --no-deps training-repo migrate --status
+```
+
+Then `./scripts/verify-e2e.sh --up` and read the startup log
+(`docker compose logs training-repo | grep "Migration target"`): every database reports the
+state it was found in and what was applied. Afterwards check:
+
+- `migrate --status` reports every target as `Managed` with nothing pending, and a container
+  restart reports `Managed` again without any "Adopting" line.
+- Two tenants provisioned through different paths (one adopted, one created fresh) have
+  identical schemas: dump both with the queries below and diff the output. Only
+  `__EFMigrationsHistory` and the legacy-only `TenantDirectories` table may differ.
+- The pre-existing tenant still answers `GET /api/{tenant}/materials`.
+- A tenant with a mixed-case name (`Probe_Mixed`) appears in `SCHEMATA` as
+  `xr50_tenant_Probe_Mixed` and in `migration-status`; database names keep their case.
+
+```sql
+SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, EXTRA, CHARACTER_SET_NAME, COLLATION_NAME
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE BINARY TABLE_SCHEMA = '<db>' AND TABLE_NAME NOT IN ('__EFMigrationsHistory', 'TenantDirectories')
+ORDER BY TABLE_NAME, COLUMN_NAME;
+
+SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) AS cols
+FROM INFORMATION_SCHEMA.STATISTICS
+WHERE BINARY TABLE_SCHEMA = '<db>' AND TABLE_NAME NOT IN ('__EFMigrationsHistory', 'TenantDirectories')
+GROUP BY TABLE_NAME, INDEX_NAME, NON_UNIQUE ORDER BY 1, 2;
+
+SELECT tc.TABLE_NAME, tc.CONSTRAINT_NAME, tc.CONSTRAINT_TYPE, rc.REFERENCED_TABLE_NAME, rc.DELETE_RULE
+FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+LEFT JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+  ON rc.CONSTRAINT_SCHEMA = tc.TABLE_SCHEMA AND rc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME AND rc.TABLE_NAME = tc.TABLE_NAME
+WHERE BINARY tc.TABLE_SCHEMA = '<db>' AND tc.TABLE_NAME NOT IN ('__EFMigrationsHistory', 'TenantDirectories')
+ORDER BY 1, 2;
+```
+
 ## Interpreting failures
 
 - **Failed for the control too** — your assertion is wrong, not the code.

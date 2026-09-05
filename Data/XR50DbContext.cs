@@ -4,7 +4,7 @@ using XR50TrainingAssetRepo.Services;
 
 namespace XR50TrainingAssetRepo.Data
 {
-    public class XR50TrainingContext : DbContext
+    public partial class XR50TrainingContext : DbContext
     {
         private readonly IXR50TenantService? _tenantService;
         private readonly IConfiguration? _configuration;
@@ -470,9 +470,6 @@ namespace XR50TrainingAssetRepo.Data
                 .HasKey(ums => new { ums.UserId, ums.MaterialId, ums.ProgramId });
 
             modelBuilder.Entity<UserMaterialScore>()
-                .HasIndex(ums => ums.UserId);
-
-            modelBuilder.Entity<UserMaterialScore>()
                 .HasIndex(ums => ums.ProgramId);
 
             modelBuilder.Entity<UserMaterialScore>()
@@ -498,7 +495,11 @@ namespace XR50TrainingAssetRepo.Data
                 .WithMany()
                 .HasForeignKey(ums => ums.MaterialId)
                 .OnDelete(DeleteBehavior.Cascade);
-}
+
+            // Deployed column shapes, index and constraint names (XR50TrainingContext.Schema.cs).
+            // Applied last so they win over the conventions above.
+            ApplyDeployedSchemaShapes(modelBuilder);
+        }
 
         
         public override int SaveChanges()

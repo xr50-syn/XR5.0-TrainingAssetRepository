@@ -2,7 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-08-05
+## [Unreleased] - 2026-08-20
+
+### Changed - Database schema is owned by EF Core migrations
+
+#### Summary
+The schema used to come from three places that never agreed: an EF `InitialCreate` generated at container boot into a gitignored folder (base database only), the hand-written `CREATE TABLE` script plus sixteen ad-hoc `Migrate*Async` routines in `XR50ManualTableCreator` (tenant databases, no history table, most routines reachable only through per-feature troubleshooting endpoints), and an `EnsureCreated` fallback in `repair`. Migrations are now committed under `Migrations/Training` (`XR50TrainingContext`, every tenant database and the base database's "default" tenant) and `Migrations/Registry` (`XR50RegistryContext`, the central `XR50TenantRegistry`), each with its own history table. The EF model was made to describe the deployed tenant schema exactly (`Data/XR50TrainingContext.Schema.cs`); the Baseline migration generated from it was verified by diffing `INFORMATION_SCHEMA` of a database built from it against a real tenant, and is hand-trimmed only of the foreign keys deployed databases never had. A hermetic test fails when the model changes without a migration.
+
+`IXR50SchemaMigrator` applies the migrations at startup (base database, then every registered tenant, before the server listens; `Database:MigrateOnStartup`), on tenant creation, through the new `migrate` CLI verb (`dotnet XR50TrainingAssetRepo.dll migrate --status | --all | --central | --tenant <name> ...`), and through `GET /api/troubleshooting/migration-status[/{tenant}]`, `POST migrate/{tenant}` and `POST migrate-all`. **Existing deployments are adopted in place**: a database built by the old script is reconciled (frozen copy of that script and its routines, then the nullability fixes the routines never made) and the Baseline is stamped; the base database's empty EF-convention tables are dropped and rebuilt; anything with data in an unexpected shape is refused with exit code 3 / HTTP 409 rather than guessed at. A per-database advisory lock serialises concurrent runs; one tenant's failure never stops the others; tenant schemas with no registry row are reported as orphans and left alone.
+
+Migration adoption is rollback-safe and portable across MySQL identifier modes: only the pre-migration boot-generated `<timestamp>_InitialCreate` history id can enter the empty EF-convention rebuild path, while any other foreign id is refused without changing tables or history. Schema discovery, table comparison and advisory-lock keys honor `lower_case_table_names`. Registry adoption restores every historically added registry field before stamping its Baseline, including the default AI collection, INNOV chatbot settings and Hub tenant id.
+
+The container now runs a published build on `aspnet:8.0` with no SDK and no `dotnet-ef` (`ENTRYPOINT ["dotnet","XR50TrainingAssetRepo.dll"]`, which also means `ASPNETCORE_ENVIRONMENT` from the environment is finally honoured instead of launchSettings forcing Development); `run-migrations.sh`, `scripts/entrypoint.sh` and the `db_migrations` volume are gone. `dotnet-ef` 8.0.21 is pinned through `.config/dotnet-tools.json`; `RollForward=Major` lets the net8 design-time host run where only a newer runtime is installed; the design-time factories and the DI registrations pin the server version instead of `AutoDetect` (which opened a detection connection per scope and made offline authoring impossible).
+
+**Runtime**: the application now targets .NET 10 (LTS, supported to November 2028) and runs on `aspnet:10.0`; .NET 8 leaves support in November 2026. ASP.NET Core packages and Swashbuckle (9.0.x) moved with it. EF Core stays on the 8.x line (8.0.30, Pomelo 8.0.3) because Pomelo has no stable EF Core 10 provider yet and its 9.0 line tracks the already out-of-support EF Core 9; moving to EF Core 10 is a follow-up once that provider ships.
+
+**Removed endpoints**: `POST /api/troubleshooting/create-tables/{tenant}`, `migrate-annotations`, `migrate-quiz-answers`, `migrate-quiz-evaluation`, `migrate-ai-assistant-collections`, `migrate-asset-content-hash`, `migrate-ai-assistant-material-asset-jobs` - `POST migrate/{tenant}` covers all of them. **Removed code**: `XR50ManualTableCreator`, `XR50DatabaseInitializer`, the duplicated registry DDL in `XR50TenantManagementService`/`XR50MigrationService`, the `EnsureCreated` fallback, dead startup helpers in `Program.cs`. **New config**: `Database:MigrateOnStartup` (default true), `Database:TolerateTenantMigrationFailures` (default false), `Database:ServerVersion` (default `10.11.0-mariadb`), `Database:LockTimeoutSeconds` (default 120); compose exposes the first two as `DB_MIGRATE_ON_STARTUP` / `DB_TOLERATE_TENANT_MIGRATION_FAILURES`. **Operators**: run `scripts/db-backup.sh` before upgrading, then `migrate --status` before and after; procedure in `docs/architecture.md` "Database Migrations".
+
+#### Affected files
+- `Migrations/Training/*`, `Migrations/Registry/*` (new), `Data/XR50TrainingContext.Schema.cs`, `Data/XR50RegistryContext.cs`, `Data/XR50ServerVersion.cs`, `Data/XR50TrainingContextFactory.cs`, `Data/XR50DbContext.cs`, `Models/XR50TenantRegistryEntry.cs`, `Models/Asset.cs` (`Share.Type` mapped)
+- `Services/Migrations/*` (new: `XR50SchemaMigrator`, `MySqlSchemaInspector`, `EfMigrationTarget`, `LegacySchemaReconciler`, `LegacyTenantSchema`, `MigrateCli`), `Services/XR50DatabaseSettings.cs`, `Services/XR50MigrationService.cs`, `Services/XR50TenantManagementService.cs`, `Services/XR50TroubleshootingService.cs`, `Controllers/XR50TroubleshootingController.cs`, `Program.cs`
+- `Dockerfile`, `.dockerignore`, `docker-compose.yaml`, `.env*.example`, `.config/dotnet-tools.json`, `XR50TrainingAssetRepo.csproj`, `.gitignore`, `scripts/db-backup.sh` (new), `scripts/authz-probe.sh`
+- Tests: `Migrations/MigrationModelDriftTests.cs`, `Migrations/SchemaMigratorTests.cs`, `Migrations/MigrateCliTests.cs` (new), `Fixtures/WebApplicationFixture.cs`, `tests/functional/suites/10-migrations.test.js` (new)
+- Docs: `AGENTS.md`, `docs/architecture.md`, `docs/guides/verification-workflow.md`, `docs/guides/testing.md`
+
+## [2026-08-05]
 
 ### Fixed - Content-lifecycle authorization: members own their progress, nothing else
 

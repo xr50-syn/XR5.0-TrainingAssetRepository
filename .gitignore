@@ -371,7 +371,6 @@ Properties/launchSettings.json
 server.log
 nohup.out
 appsettings.json
-Migrations/
 app/
 .vscode/
 .localstack/
@@ -387,3 +386,4 @@ app/
 .codex/settings.local.json
 XR50-Training-Programs-Authoring-Tool-Vite/
 TODO.md
+backups/

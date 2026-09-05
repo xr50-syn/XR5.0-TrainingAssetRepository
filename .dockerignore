@@ -1,0 +1,17 @@
+# Build outputs (the image builds from source; nested bin/obj would be copied as content)
+bin/
+obj/
+**/bin/
+**/obj/
+
+# Test tooling and local state
+tests/functional/node_modules/
+tests/functional/.test-state.json
+
+# Repository metadata and local secrets
+.git/
+.env
+.env.*
+!.env.example
+
+# Migrations/ is intentionally NOT excluded: the committed migrations are the schema.

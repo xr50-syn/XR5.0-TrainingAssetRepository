@@ -9,9 +9,9 @@ must not replace or contradict it.
 XR5.0 Training Asset Repository is a multi-tenant ASP.NET Core service for XR
 training assets, materials, programs, learning paths, users, and progress.
 
-- Application target: .NET 8
-- Test target: .NET 10
-- Persistence: EF Core 8 with Pomelo MySQL/MariaDB
+- Application and test target: .NET 10 (LTS)
+- Persistence: EF Core 8 with Pomelo MySQL/MariaDB (EF stays on 8.x until Pomelo ships a
+  stable EF Core 10 provider)
 - Tenant model: one database per tenant
 - Storage: S3-compatible storage or OwnCloud through `IStorageService`
 - API documentation: Swagger/OpenAPI
@@ -59,13 +59,35 @@ Adding a material type usually requires coordinated updates to:
 - `Services/Materials/MaterialService.cs`
 - the type-specific service interface and implementation
 - every relevant dispatch point in `Controllers/XR50MaterialsController.cs`
-- `Services/XR50ManualTableCreator.cs` and `Services/XR50MigrationService.cs`
+- a new EF Core migration (see "Schema migrations" below)
 - dependency injection in `Program.cs`
 - the material test factory and focused tests
 
-Tenant schema changes are implemented through the manual table creator and its
-idempotent migrations, not only through EF migrations. Keep MySQL's identifier
-length limits in mind when naming indexes and constraints.
+## Schema migrations
+
+The committed EF Core migrations under `Migrations/` are the schema. `XR50TrainingContext`
+(`Migrations/Training`) describes every tenant database and the "default" tenant in the base
+database; `XR50RegistryContext` (`Migrations/Registry`) owns the central `XR50TenantRegistry`.
+To change the schema: change the model, run `dotnet tool restore && dotnet build`, then
+`dotnet ef migrations add <Name> --context XR50TrainingContext --output-dir Migrations/Training --no-build`
+(or `--context XR50RegistryContext --output-dir Migrations/Registry`), review the generated
+migration and commit it together with the snapshot. Never write DDL inline in a service; the
+hermetic `MigrationModelDriftTests` fails when the model and the snapshot disagree. The Baseline
+is the only hand-edited migration (its `Up()` omits the foreign keys deployed databases never
+had); do not edit generated migrations otherwise. The `Material.Type` enum stays append-only,
+and index and constraint names must stay under MySQL's 64-character limit.
+
+Migrations run at startup against the base database and every registered tenant
+(`Database:MigrateOnStartup`, default true), on tenant creation, through
+`dotnet XR50TrainingAssetRepo.dll migrate ...`, and through the system-admin endpoints
+`GET /api/troubleshooting/migration-status`, `POST migrate/{tenant}` and `POST migrate-all`.
+Databases provisioned before migrations existed are adopted automatically. The full model,
+states and upgrade procedure are in `docs/architecture.md` under "Database Migrations".
+Legacy EF adoption is limited to the pre-migration boot-generated `<timestamp>_InitialCreate` id;
+any other foreign history id is refused so an older application cannot dismantle a schema from
+a newer release. Schema discovery and migration lock keys must follow the server's
+`lower_case_table_names` mode. Registry adoption must add every historically introduced registry
+column before stamping the Baseline.
 
 ## Verification
 
@@ -79,6 +101,8 @@ the test scope.
    `tests/functional`.
 4. For a narrow live API behavior not covered by tests, use a focused `curl`
    probe and report the request, expected result, actual result, and cleanup.
+5. For a schema migration: `scripts/db-backup.sh` first, `migrate --status` before and
+   after, and the schema-parity probe described in the verification guide.
 
 `./scripts/verify-e2e.sh` runs rungs 1-3 in order and can start the sandbox stack
 with `--up`; `--help` lists the rungs and flags. The full procedure, including how
@@ -99,6 +123,7 @@ Functional test routing:
 | Programs and learning paths | `npm run test:programs` and `npm run test:hierarchy` |
 | Users | `npm run test:users` |
 | Authentication | `npm run test:auth` and `npm run test:health` |
+| Schema migrations | `npm run test:migrations` |
 | Cross-cutting startup or middleware | `npm run test:health` |
 
 The functional suite requires a running stack. If the health endpoint is not

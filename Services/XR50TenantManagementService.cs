@@ -13,7 +13,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
-using Newtonsoft.Json.Linq;
 using MySql.Data.MySqlClient;
 using XR50TrainingAssetRepo.Models;
 
@@ -60,33 +59,6 @@ namespace XR50TrainingAssetRepo.Services
             using var connection = new MySqlConnection(connectionString);
             await connection.OpenAsync();
 
-            // FIXED: CREATE TABLE with S3 columns (same as above)
-            var createTableSql = @"
-                CREATE TABLE IF NOT EXISTS `XR50TenantRegistry` (
-                    `TenantName` varchar(100) NOT NULL PRIMARY KEY,
-                    `TenantGroup` varchar(100) NULL,
-                    `Description` varchar(500) NULL,
-                    `StorageType` varchar(50) NOT NULL DEFAULT 'OwnCloud',
-                    `TenantDirectory` varchar(500) NULL,
-                    `S3BucketName` varchar(255) NULL,
-                    `S3BucketRegion` varchar(50) NULL,
-                    `S3BucketArn` varchar(255) NULL,
-                    `StorageEndpoint` varchar(255) NULL,
-                    `OwnerName` varchar(255) NULL,
-                    `DefaultAICollection` varchar(255) NULL,
-                    `InnovChatbotBaseUrl` varchar(500) NULL,
-                    `InnovChatbotApiToken` varchar(1000) NULL,
-                    `InnovChatbotDefaultPilot` varchar(255) NULL,
-                    `HubTenantId` char(36) NULL,
-                    `DatabaseName` varchar(100) NOT NULL,
-                    `CreatedAt` datetime NOT NULL,
-                    `IsActive` boolean NOT NULL DEFAULT 1,
-                    UNIQUE KEY `ux_registry_hub_tenant` (`HubTenantId`)
-                )";
-
-            using var createCommand = new MySqlCommand(createTableSql, connection);
-            await createCommand.ExecuteNonQueryAsync();
-            await EnsureHubTenantIdColumnAsync(connection);
 
             // FIXED: SELECT with S3 fields
             var sql = @"
@@ -137,7 +109,6 @@ namespace XR50TrainingAssetRepo.Services
             var connectionString = _configuration.GetConnectionString("DefaultConnection");
             using var connection = new MySqlConnection(connectionString);
             await connection.OpenAsync();
-            await EnsureHubTenantIdColumnAsync(connection);
 
             // FIXED: SELECT with S3 fields
             var sql = @"
@@ -186,7 +157,6 @@ namespace XR50TrainingAssetRepo.Services
             var connectionString = _configuration.GetConnectionString("DefaultConnection");
             using var connection = new MySqlConnection(connectionString);
             await connection.OpenAsync();
-            await EnsureHubTenantIdColumnAsync(connection);
 
             var sql = @"
                 SELECT TenantName, TenantGroup, Description, StorageType, TenantDirectory,
@@ -228,52 +198,6 @@ namespace XR50TrainingAssetRepo.Services
             return null;
         }
 
-        // The registry evolves through idempotent in-place migrations (see XR50ManualTableCreator
-        // for the tenant-DB equivalent): CREATE TABLE IF NOT EXISTS does not add new columns to
-        // existing deployments, so the column and its unique index are added here on first touch.
-        private static bool _hubTenantIdColumnEnsured;
-
-        private async Task EnsureHubTenantIdColumnAsync(MySqlConnection connection)
-        {
-            if (_hubTenantIdColumnEnsured)
-            {
-                return;
-            }
-
-            var columnCheckSql = @"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'XR50TenantRegistry'
-                AND COLUMN_NAME = 'HubTenantId'";
-
-            using (var checkCommand = new MySqlCommand(columnCheckSql, connection))
-            {
-                if (Convert.ToInt32(await checkCommand.ExecuteScalarAsync()) == 0)
-                {
-                    _logger.LogInformation("Adding HubTenantId column to XR50TenantRegistry");
-                    using var alterCommand = new MySqlCommand(
-                        "ALTER TABLE `XR50TenantRegistry` ADD COLUMN `HubTenantId` char(36) NULL", connection);
-                    await alterCommand.ExecuteNonQueryAsync();
-                }
-            }
-
-            var indexCheckSql = @"SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'XR50TenantRegistry'
-                AND INDEX_NAME = 'ux_registry_hub_tenant'";
-
-            using (var checkCommand = new MySqlCommand(indexCheckSql, connection))
-            {
-                if (Convert.ToInt32(await checkCommand.ExecuteScalarAsync()) == 0)
-                {
-                    _logger.LogInformation("Adding unique index on XR50TenantRegistry.HubTenantId");
-                    using var indexCommand = new MySqlCommand(
-                        "ALTER TABLE `XR50TenantRegistry` ADD UNIQUE INDEX `ux_registry_hub_tenant` (`HubTenantId`)", connection);
-                    await indexCommand.ExecuteNonQueryAsync();
-                }
-            }
-
-            _hubTenantIdColumnEnsured = true;
-        }
 
         public async Task<User> GetOwnerUserAsync(string ownerName, string tenantDatabaseName)
         {
@@ -385,7 +309,6 @@ namespace XR50TrainingAssetRepo.Services
             var connectionString = _configuration.GetConnectionString("DefaultConnection");
             using var connection = new MySqlConnection(connectionString);
             await connection.OpenAsync();
-            await EnsureHubTenantIdColumnAsync(connection);
 
             // FIXED: UPDATE with S3 fields
             var sql = @"

@@ -123,6 +123,7 @@ ROWS=(
 "TenantCreator   |POST  |/xr50/trainingAssetRepository/Tenants                         |401      |403      |403      |authz-ok"
 "SystemAdmin     |DELETE|/xr50/trainingAssetRepository/Tenants/nonexistent_probe       |401      |403      |403      |authz-ok"
 "SystemAdmin     |GET   |/api/troubleshooting/health-check                            |401      |403      |403      |authz-ok"
+"SystemAdmin     |GET   |/api/troubleshooting/migration-status                        |401      |403      |403      |authz-ok"
 "cross-tenant    |GET   |/api/OTHER/materials                                         |401      |403      |403      |authz-ok"
 )
 

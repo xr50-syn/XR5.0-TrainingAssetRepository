@@ -28,8 +28,12 @@ using Amazon.S3.Model;
 using XR50TrainingAssetRepo.Infrastructure.ErrorHandling;
 using XR50TrainingAssetRepo.Infrastructure.Auth;
 using Microsoft.AspNetCore.Authorization;
+using XR50TrainingAssetRepo.Services.Migrations;
 
-var builder = WebApplication.CreateBuilder(args);
+// `dotnet XR50TrainingAssetRepo.dll migrate ...` runs the schema migrator instead of serving.
+// Its arguments are kept away from the configuration builder so `--tenant x` is not read as a setting.
+var (isMigrateVerb, migrateArgs) = MigrateCli.Split(args);
+var builder = WebApplication.CreateBuilder(isMigrateVerb ? Array.Empty<string>() : args);
 
 // Ensure environment variables override appsettings.json (important for Docker)
 builder.Configuration.AddEnvironmentVariables();
@@ -212,21 +216,13 @@ builder.Services.AddAuthorization(options =>
 });
 
 builder.Services.AddXR50MultitenancyWithDynamicDb(builder.Configuration);
-/*builder.Services.AddScoped<IXR50TenantService, XR50TenantService>();
-builder.Services.AddScoped<IXR50TenantManagementService, XR50TenantManagementService>();
-builder.Services.AddScoped<XR50MigrationService>();
-*/
-/*string connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<XR50TrainingContext>(opt =>
-    opt.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
-*/
 builder.Services.AddDbContext<XR50TrainingContext>((serviceProvider, options) =>
 {
     var configuration = serviceProvider.GetService<IConfiguration>();
     
     // Default configuration - OnConfiguring will override this for tenant operations
     var baseConnectionString = configuration.GetConnectionString("DefaultConnection");
-    options.UseMySql(baseConnectionString, ServerVersion.AutoDetect(baseConnectionString));
+    options.UseMySql(baseConnectionString, XR50ServerVersion.Resolve(configuration));
     
     // Enable detailed logging in development
     if (configuration.GetValue<string>("Environment") == "Development")
@@ -502,6 +498,32 @@ builder.Services.AddCors(options =>
 });
 var app = builder.Build();
 
+if (isMigrateVerb)
+{
+    return await MigrateCli.RunAsync(
+        app.Services.GetRequiredService<IXR50SchemaMigrator>(), migrateArgs, Console.Out, CancellationToken.None);
+}
+
+// Bring the base database and every registered tenant to the committed schema before anything
+// can touch them: Kestrel is not listening yet and hosted services (AiStatusSyncService) only
+// start inside app.Run(). A failed migration keeps the application down rather than serving a
+// schema the code does not expect.
+if (builder.Configuration.GetValue(XR50SchemaMigrator.MigrateOnStartupKey, true))
+{
+    var startupMigrator = app.Services.GetRequiredService<IXR50SchemaMigrator>();
+    var migrationReport = await startupMigrator.MigrateAllAsync(new MigrateOptions
+    {
+        TolerateTenantFailures = builder.Configuration.GetValue(XR50SchemaMigrator.TolerateTenantFailuresKey, false)
+    });
+
+    if (!migrationReport.Succeeded)
+    {
+        throw new InvalidOperationException(
+            "Database schema migration failed; the application will not start. " +
+            "Run `dotnet XR50TrainingAssetRepo.dll migrate --status` for details.");
+    }
+}
+
 // Outside Development the Hub integration is the only auth path; a missing secret or a
 // non-TLS decrypt endpoint means every request will fail closed, so say why at startup.
 if (!app.Environment.IsDevelopment())
@@ -583,6 +605,8 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
 
 app.Run();
 
+return 0;
+
 public class HierarchicalOrderDocumentFilter : IDocumentFilter
 {
     public void Apply(OpenApiDocument swaggerDoc, DocumentFilterContext context)
@@ -629,10 +653,15 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITrainingProgramService, TrainingProgramService>();
         services.AddScoped<IXR50TenantManagementService, XR50TenantManagementService>();
         services.AddScoped<XR50MigrationService>();
-        services.AddScoped<IXR50DatabaseInitializer, XR50DatabaseInitializer>();
         services.AddScoped<IXR50TenantTroubleshootingService, XR50TenantTroubleshootingService>();
-        services.AddScoped<IXR50ManualTableCreator, XR50ManualTableCreator>();
         services.AddScoped<IXR50TenantDbContextFactory, XR50TenantDbContextFactory>();
+
+        // Schema migrations: one code path for startup, the migrate CLI verb, tenant creation
+        // and the troubleshooting endpoints.
+        services.AddSingleton<ISchemaInspector, MySqlSchemaInspector>();
+        services.AddSingleton<IMigrationTargetFactory, EfMigrationTargetFactory>();
+        services.AddSingleton<ILegacySchemaReconciler, LegacySchemaReconciler>();
+        services.AddSingleton<IXR50SchemaMigrator, XR50SchemaMigrator>();
         services.AddScoped<ILearningPathService, LearningPathService>();
         services.AddScoped<IAssetService, AssetService>();
 
@@ -670,43 +699,10 @@ public static class ServiceCollectionExtensions
         // Background service for AI status synchronization (database-driven, adaptive polling)
         services.AddHostedService<AiStatusSyncService>();
 
-        // Keep the original DbContext registration for admin operations
-        
-        services.AddDbContext<XR50TrainingContext>((serviceProvider, options) =>
-        {
-            var configuration = serviceProvider.GetService<IConfiguration>();
-            var baseConnectionString = configuration.GetConnectionString("DefaultConnection");
-            options.UseMySql(baseConnectionString, ServerVersion.AutoDetect(baseConnectionString));
-
-            if (configuration.GetValue<string>("Environment") == "Development")
-            {
-                options.EnableSensitiveDataLogging();
-                options.EnableDetailedErrors();
-            }
-        });
-
+        // The XR50TrainingContext registration lives in Program.cs (top-level statements).
         return services;
     }
 
-    // Extension method to initialize databases
-    public static async Task<IApplicationBuilder> InitializeXR50DatabasesAsync(this IApplicationBuilder app)
-    {
-        using var scope = app.ApplicationServices.CreateScope();
-        var initializer = scope.ServiceProvider.GetRequiredService<IXR50DatabaseInitializer>();
-
-        try
-        {
-            await initializer.InitializeAsync();
-        }
-        catch (Exception ex)
-        {
-            var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-            logger.LogError(ex, "Failed to initialize databases during startup");
-            throw;
-        }
-
-        return app;
-    }
 }
 public class S3Settings
 {
@@ -717,40 +713,6 @@ public class S3Settings
     public string Region { get; set; } = "us-east-1";
     public string BaseBucketPrefix { get; set; } = "xr50";
     public bool ForcePathStyle { get; set; } = true;
-}
-public static class TenantDebuggingExtensions
-{
-    public static async Task<IApplicationBuilder> DebugTenantSetupAsync(this IApplicationBuilder app)
-    {
-        using var scope = app.ApplicationServices.CreateScope();
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-
-        var baseConnectionString = configuration.GetConnectionString("DefaultConnection");
-        var baseDatabaseName = configuration.GetValue<string>("BaseDatabaseName") ?? "magical_library";
-
-        logger.LogInformation("=== TENANT SETUP DEBUG INFO ===");
-        logger.LogInformation("Base Database Name: {BaseDatabaseName}", baseDatabaseName);
-        logger.LogInformation("Base Connection String: {ConnectionString}",
-            baseConnectionString?.Replace("Password=", "Password=***"));
-
-        // Test main database connection
-        try
-        {
-            using var scope2 = app.ApplicationServices.CreateScope();
-            var context = scope2.ServiceProvider.GetRequiredService<XR50TrainingContext>();
-            var canConnect = await context.Database.CanConnectAsync();
-            logger.LogInformation("Can connect to main database: {CanConnect}", canConnect);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Cannot connect to main database");
-        }
-
-        logger.LogInformation("=== END TENANT DEBUG INFO ===");
-
-        return app;
-    }
 }
 
 // JSON Converters for ID serialization

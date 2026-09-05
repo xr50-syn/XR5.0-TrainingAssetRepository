@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -16,7 +16,6 @@ namespace XR50TrainingAssetRepo.Models
         [Key]
         public string ShareId { get; set; }
         public string? FileId { get; set; }
-        [NotMapped]
         public ShareType Type { get; set;}
         public string Target {get; set;}
         public Share()
