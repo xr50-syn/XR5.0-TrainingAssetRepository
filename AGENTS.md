@@ -83,6 +83,11 @@ Migrations run at startup against the base database and every registered tenant
 `GET /api/troubleshooting/migration-status`, `POST migrate/{tenant}` and `POST migrate-all`.
 Databases provisioned before migrations existed are adopted automatically. The full model,
 states and upgrade procedure are in `docs/architecture.md` under "Database Migrations".
+Legacy EF adoption is limited to the pre-migration boot-generated `<timestamp>_InitialCreate` id;
+any other foreign history id is refused so an older application cannot dismantle a schema from
+a newer release. Schema discovery and migration lock keys must follow the server's
+`lower_case_table_names` mode. Registry adoption must add every historically introduced registry
+column before stamping the Baseline.
 
 ## Verification
 

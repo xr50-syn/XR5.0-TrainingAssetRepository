@@ -11,7 +11,7 @@ namespace XR50TrainingAssetRepo.Services.Migrations
         /// <summary>Tenant schema: the frozen CREATE TABLE pass, every legacy in-place migration, then the finishing touches.</summary>
         Task ReconcileTrainingAsync(string databaseName, CancellationToken cancellationToken = default);
 
-        /// <summary>Central registry: the one in-place evolution it ever had (HubTenantId and its unique index).</summary>
+        /// <summary>Central registry: add every field introduced after the original table and the Hub tenant index.</summary>
         Task ReconcileRegistryAsync(string databaseName, CancellationToken cancellationToken = default);
     }
 
@@ -66,13 +66,25 @@ namespace XR50TrainingAssetRepo.Services.Migrations
         {
             await using var connection = await OpenAsync(databaseName, cancellationToken);
 
-            if (!await ColumnExistsAsync(connection, databaseName, "XR50TenantRegistry", "HubTenantId", cancellationToken))
+            var columns = new (string Name, string Definition)[]
             {
-                _logger.LogInformation("Adding HubTenantId column to XR50TenantRegistry in {Database}", databaseName);
-                await ExecuteAsync(connection, "ALTER TABLE `XR50TenantRegistry` ADD COLUMN `HubTenantId` char(36) NULL", cancellationToken);
+                ("DefaultAICollection", "varchar(255) NULL"),
+                ("InnovChatbotBaseUrl", "varchar(500) NULL"),
+                ("InnovChatbotApiToken", "varchar(1000) NULL"),
+                ("InnovChatbotDefaultPilot", "varchar(255) NULL"),
+                ("HubTenantId", "char(36) NULL")
+            };
+
+            foreach (var (name, definition) in columns)
+            {
+                if (!await ColumnExistsAsync(connection, "XR50TenantRegistry", name, cancellationToken))
+                {
+                    _logger.LogInformation("Adding {Column} column to XR50TenantRegistry in {Database}", name, databaseName);
+                    await ExecuteAsync(connection, $"ALTER TABLE `XR50TenantRegistry` ADD COLUMN `{name}` {definition}", cancellationToken);
+                }
             }
 
-            if (!await IndexExistsAsync(connection, databaseName, "XR50TenantRegistry", "ux_registry_hub_tenant", cancellationToken))
+            if (!await IndexExistsAsync(connection, "XR50TenantRegistry", "ux_registry_hub_tenant", cancellationToken))
             {
                 _logger.LogInformation("Adding unique index ux_registry_hub_tenant to XR50TenantRegistry in {Database}", databaseName);
                 await ExecuteAsync(connection, "ALTER TABLE `XR50TenantRegistry` ADD UNIQUE INDEX `ux_registry_hub_tenant` (`HubTenantId`)", cancellationToken);
@@ -97,7 +109,7 @@ namespace XR50TrainingAssetRepo.Services.Migrations
             await TightenAsync(connection, databaseName, "UserMaterialData", "Data", "json NOT NULL", backfill: "'{}'", cancellationToken);
 
             // Quiz-only column of the Materials TPH table: EF maps subtype columns as nullable.
-            if (await IsNullableAsync(connection, databaseName, "Materials", "EvaluationMode", cancellationToken) == false)
+            if (await IsNullableAsync(connection, "Materials", "EvaluationMode", cancellationToken) == false)
             {
                 _logger.LogInformation("Relaxing Materials.EvaluationMode to NULL DEFAULT 0 in {Database}", databaseName);
                 await ExecuteAsync(connection, "ALTER TABLE `Materials` MODIFY `EvaluationMode` tinyint(1) NULL DEFAULT 0", cancellationToken);
@@ -106,7 +118,7 @@ namespace XR50TrainingAssetRepo.Services.Migrations
 
         private async Task TightenAsync(MySqlConnection connection, string databaseName, string table, string column, string definition, string? backfill, CancellationToken cancellationToken)
         {
-            if (await IsNullableAsync(connection, databaseName, table, column, cancellationToken) != true)
+            if (await IsNullableAsync(connection, table, column, cancellationToken) != true)
             {
                 return;
             }
@@ -157,27 +169,25 @@ namespace XR50TrainingAssetRepo.Services.Migrations
         }
 
         /// <returns><c>true</c>/<c>false</c> for the column's nullability, <c>null</c> when the column does not exist.</returns>
-        private static async Task<bool?> IsNullableAsync(MySqlConnection connection, string databaseName, string table, string column, CancellationToken cancellationToken)
+        private static async Task<bool?> IsNullableAsync(MySqlConnection connection, string table, string column, CancellationToken cancellationToken)
         {
             await using var command = new MySqlCommand(
                 @"SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
-                  WHERE BINARY TABLE_SCHEMA = @db AND TABLE_NAME = @table AND COLUMN_NAME = @column", connection);
-            command.Parameters.AddWithValue("@db", databaseName);
+                  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = @table AND COLUMN_NAME = @column", connection);
             command.Parameters.AddWithValue("@table", table);
             command.Parameters.AddWithValue("@column", column);
             var value = await command.ExecuteScalarAsync(cancellationToken);
             return value is null or DBNull ? null : string.Equals(Convert.ToString(value), "YES", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static async Task<bool> ColumnExistsAsync(MySqlConnection connection, string databaseName, string table, string column, CancellationToken cancellationToken) =>
-            await IsNullableAsync(connection, databaseName, table, column, cancellationToken) is not null;
+        private static async Task<bool> ColumnExistsAsync(MySqlConnection connection, string table, string column, CancellationToken cancellationToken) =>
+            await IsNullableAsync(connection, table, column, cancellationToken) is not null;
 
-        private static async Task<bool> IndexExistsAsync(MySqlConnection connection, string databaseName, string table, string index, CancellationToken cancellationToken)
+        private static async Task<bool> IndexExistsAsync(MySqlConnection connection, string table, string index, CancellationToken cancellationToken)
         {
             await using var command = new MySqlCommand(
                 @"SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
-                  WHERE BINARY TABLE_SCHEMA = @db AND TABLE_NAME = @table AND INDEX_NAME = @index", connection);
-            command.Parameters.AddWithValue("@db", databaseName);
+                  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = @table AND INDEX_NAME = @index", connection);
             command.Parameters.AddWithValue("@table", table);
             command.Parameters.AddWithValue("@index", index);
             return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken)) > 0;

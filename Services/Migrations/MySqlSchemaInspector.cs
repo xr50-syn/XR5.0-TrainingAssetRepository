@@ -20,8 +20,11 @@ namespace XR50TrainingAssetRepo.Services.Migrations
         public async Task<bool> DatabaseExistsAsync(string database, CancellationToken cancellationToken = default)
         {
             await using var connection = await OpenBaseAsync(cancellationToken);
+            var schemaPredicate = await UsesFoldedIdentifiersAsync(connection, cancellationToken)
+                ? "LOWER(SCHEMA_NAME) = LOWER(@db)"
+                : "BINARY SCHEMA_NAME = @db";
             await using var command = new MySqlCommand(
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA WHERE BINARY SCHEMA_NAME = @db", connection);
+                $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA WHERE {schemaPredicate}", connection);
             command.Parameters.AddWithValue("@db", database);
             return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken)) > 0;
         }
@@ -29,10 +32,13 @@ namespace XR50TrainingAssetRepo.Services.Migrations
         public async Task<IReadOnlyList<string>> ListTablesAsync(string database, CancellationToken cancellationToken = default)
         {
             await using var connection = await OpenBaseAsync(cancellationToken);
+            var schemaPredicate = await UsesFoldedIdentifiersAsync(connection, cancellationToken)
+                ? "LOWER(TABLE_SCHEMA) = LOWER(@db)"
+                : "BINARY TABLE_SCHEMA = @db";
             await using var command = new MySqlCommand(
-                @"SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
-                  WHERE BINARY TABLE_SCHEMA = @db AND TABLE_TYPE = 'BASE TABLE'
-                  ORDER BY TABLE_NAME", connection);
+                $@"SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+                   WHERE {schemaPredicate} AND TABLE_TYPE = 'BASE TABLE'
+                   ORDER BY TABLE_NAME", connection);
             command.Parameters.AddWithValue("@db", database);
             return await ReadStringsAsync(command, cancellationToken);
         }
@@ -71,9 +77,12 @@ namespace XR50TrainingAssetRepo.Services.Migrations
         public async Task<string?> GetColumnTypeAsync(string database, string table, string column, CancellationToken cancellationToken = default)
         {
             await using var connection = await OpenBaseAsync(cancellationToken);
+            var schemaPredicate = await UsesFoldedIdentifiersAsync(connection, cancellationToken)
+                ? "LOWER(TABLE_SCHEMA) = LOWER(@db)"
+                : "BINARY TABLE_SCHEMA = @db";
             await using var command = new MySqlCommand(
-                @"SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
-                  WHERE BINARY TABLE_SCHEMA = @db AND TABLE_NAME = @table AND COLUMN_NAME = @column", connection);
+                $@"SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE {schemaPredicate} AND TABLE_NAME = @table AND COLUMN_NAME = @column", connection);
             command.Parameters.AddWithValue("@db", database);
             command.Parameters.AddWithValue("@table", table);
             command.Parameters.AddWithValue("@column", column);
@@ -84,18 +93,22 @@ namespace XR50TrainingAssetRepo.Services.Migrations
         public async Task<bool> LowerCaseTableNamesAsync(CancellationToken cancellationToken = default)
         {
             await using var connection = await OpenBaseAsync(cancellationToken);
-            await using var command = new MySqlCommand("SELECT @@lower_case_table_names", connection);
-            return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) != 0;
+            return await UsesFoldedIdentifiersAsync(connection, cancellationToken);
         }
 
         public async Task<IAsyncDisposable> AcquireLockAsync(string database, TimeSpan timeout, CancellationToken cancellationToken = default)
         {
             // GET_LOCK names are capped at 64 characters and database names alone may reach that,
-            // so lock on a digest. The lock lives on this connection and dies with it.
-            var lockName = "xr50mig:" + Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(database))).ToLowerInvariant();
+            // so lock on a digest. Fold the input when the server folds database identifiers, or
+            // two spellings of the same physical schema would receive different locks. The lock
+            // lives on this connection and dies with it.
             var connection = await OpenBaseAsync(cancellationToken);
             try
             {
+                var lockDatabase = await UsesFoldedIdentifiersAsync(connection, cancellationToken)
+                    ? database.ToLowerInvariant()
+                    : database;
+                var lockName = "xr50mig:" + Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(lockDatabase))).ToLowerInvariant();
                 await using var command = new MySqlCommand("SELECT GET_LOCK(@name, @timeout)", connection);
                 command.Parameters.AddWithValue("@name", lockName);
                 command.Parameters.AddWithValue("@timeout", (int)timeout.TotalSeconds);
@@ -189,6 +202,12 @@ namespace XR50TrainingAssetRepo.Services.Migrations
             }
 
             return values;
+        }
+
+        private static async Task<bool> UsesFoldedIdentifiersAsync(MySqlConnection connection, CancellationToken cancellationToken)
+        {
+            await using var command = new MySqlCommand("SELECT @@lower_case_table_names", connection);
+            return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) != 0;
         }
 
         private static string Quote(string identifier) => "`" + identifier.Replace("`", "``") + "`";

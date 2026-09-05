@@ -627,7 +627,10 @@ migration stops halfway and has to be repaired by hand.
   `POST /api/troubleshooting/migrate-all`. `POST repair/{tenant}` creates a missing database
   and migrates it.
 
-A server-side advisory lock (`GET_LOCK`) per database serialises concurrent appliers.
+A server-side advisory lock (`GET_LOCK`) per database serialises concurrent appliers. On a server
+with `lower_case_table_names` enabled, discovery, table matching and lock keys all use folded
+identifiers so different spellings of one physical schema cannot be inspected or locked as if
+they were different databases.
 
 #### **States and adoption**
 Each database is classified before anything is done to it:
@@ -637,12 +640,15 @@ Each database is classified before anything is done to it:
 | `Empty` | no model tables, no history | apply every migration |
 | `Managed` | history holds the Baseline | apply pending migrations |
 | `LegacyRawDdl` | built by the pre-migration CREATE TABLE script; no history | reconcile (the frozen legacy script and routines, then the finishing ALTERs), stamp the Baseline, apply the rest |
-| `LegacyEfConvention` | built by the old boot-time `InitialCreate` or `EnsureCreated` | if every table is empty, drop them and rebuild from the Baseline; otherwise refuse |
-| `Unknown` | none of the above | refuse (exit code 3 / HTTP 409) |
+| `LegacyEfConvention` | built by the old boot-time `<timestamp>_InitialCreate` (generated per deployment), or recognizable by its EF-convention shape with no history | if every table is empty, drop them and rebuild from the Baseline; otherwise refuse |
+| `Unknown` | none of the above, including an unrecognized migration-history id from a potentially newer release | refuse without changing schema or history (exit code 3 / HTTP 409) |
 
 Adoption is idempotent and resumable: the Baseline row is written only after the reconcile
 succeeds, so an interrupted run re-enters the legacy state and repeats it. `--no-adopt-legacy`
 turns the two legacy states into failures for operators who want to stage the upgrade by hand.
+Registry adoption also restores columns that older application versions introduced only in
+their `CREATE TABLE` statement (`DefaultAICollection`, the three INNOV chatbot settings and
+`HubTenantId`) before it stamps the Registry Baseline.
 
 #### **Upgrading a deployment**
 1. `scripts/db-backup.sh` dumps the base database and every tenant schema to a timestamped

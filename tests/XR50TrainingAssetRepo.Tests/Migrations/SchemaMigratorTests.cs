@@ -182,6 +182,22 @@ namespace XR50TrainingAssetRepo.Tests.Migrations
         }
 
         [Fact]
+        public async Task LegacyEfConvention_BootGeneratedInitialCreate_IsRecognizedByNameNotTimestamp()
+        {
+            // run-migrations.sh generated InitialCreate at container boot, so the timestamp differs per deployment.
+            _inspector.Add("xr50_tenant_old")
+                .WithTables("Users", "Group", "Materials")
+                .WithHistory(TrainingHistory, "20260905083244_InitialCreate")
+                .WithColumn("Materials", "Description", "longtext");
+
+            var result = await CreateMigrator().MigrateTenantAsync("old");
+
+            result.Succeeded.Should().BeTrue();
+            result.StateBefore.Should().Be(SchemaState.LegacyEfConvention);
+            result.Adopted.Should().BeTrue();
+        }
+
+        [Fact]
         public async Task LegacyEfConvention_WithData_IsRefusedWithoutDropping()
         {
             _inspector.Add("xr50_tenant_old")
@@ -196,6 +212,43 @@ namespace XR50TrainingAssetRepo.Tests.Migrations
             result.Error.Should().Contain("Materials");
             _inspector.Dropped.Should().BeEmpty();
             _targets.Target("xr50_tenant_old", TrainingHistory)!.HistoryCleared.Should().Be(0);
+        }
+
+        [Fact]
+        public async Task UnknownFutureMigration_IsRefusedWithoutChangingSchemaOrHistory()
+        {
+            _inspector.Add("xr50_tenant_future")
+                .WithTables(FakeTargetFactory.TrainingModelTables)
+                .WithHistory(TrainingHistory, "20270101000000_FutureMigration");
+
+            var result = await CreateMigrator().MigrateTenantAsync("future");
+
+            result.Succeeded.Should().BeFalse();
+            result.StateBefore.Should().Be(SchemaState.Unknown);
+            result.ManualInterventionRequired.Should().BeTrue();
+            result.Error.Should().Contain("FutureMigration");
+            _inspector.Dropped.Should().BeEmpty();
+            var target = _targets.Target("xr50_tenant_future", TrainingHistory)!;
+            target.HistoryCleared.Should().Be(0);
+            target.Migrated.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task FoldedIdentifierServer_AdoptsMixedCaseTenantWithLowercaseLegacyTables()
+        {
+            _inspector.LowerCaseTableNames = true;
+            _inspector.Add("xr50_tenant_acme_corp")
+                .WithTables("users", "groups", "materials", "assets", "tenantdirectories")
+                .WithColumn("materials", "discriminator", "varchar(50)")
+                .WithColumn("assets", "description", "varchar(1000)");
+
+            var result = await CreateMigrator().MigrateTenantAsync("Acme_Corp");
+
+            result.Succeeded.Should().BeTrue();
+            result.StateBefore.Should().Be(SchemaState.LegacyRawDdl);
+            result.DatabaseName.Should().Be("xr50_tenant_Acme_Corp");
+            _inspector.Locked.Should().Equal("xr50_tenant_acme_corp");
+            _inspector.Released.Should().Equal("xr50_tenant_acme_corp");
         }
 
         [Fact]

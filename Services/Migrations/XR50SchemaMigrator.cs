@@ -6,6 +6,11 @@ namespace XR50TrainingAssetRepo.Services.Migrations
         public const string TolerateTenantFailuresKey = "Database:TolerateTenantMigrationFailures";
         public const string LockTimeoutKey = "Database:LockTimeoutSeconds";
         private const string TenantSchemaLikePattern = "xr50\\_tenant\\_%";
+        // The pre-migration image generated its migration at container boot
+        // (`dotnet ef migrations add InitialCreate` in run-migrations.sh), so every deployment
+        // carries its own timestamp; only the name is stable. Nothing else ever produced this name.
+        private static readonly System.Text.RegularExpressions.Regex LegacyBootMigrationId =
+            new(@"^\d{14}_Init(ial)?Create$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
         // Table name EF convention gave the Group entity before the model followed the deployed
         // schema; only ever present in EF-convention databases.
@@ -227,7 +232,7 @@ namespace XR50TrainingAssetRepo.Services.Migrations
                 await _reconciler.ReconcileTrainingAsync(target.DatabaseName, cancellationToken);
             }
 
-            var tables = (await _inspector.ListTablesAsync(target.DatabaseName, cancellationToken)).ToHashSet(StringComparer.Ordinal);
+            var tables = (await _inspector.ListTablesAsync(target.DatabaseName, cancellationToken)).ToHashSet(classification.IdentifierComparer);
             var missing = target.ModelTables.Where(t => !tables.Contains(t)).ToList();
             if (missing.Count > 0)
             {
@@ -252,9 +257,11 @@ namespace XR50TrainingAssetRepo.Services.Migrations
                     manualInterventionRequired: true);
             }
 
+            var modelTables = target.ModelTables.ToHashSet(classification.IdentifierComparer);
             var present = classification.Tables
-                .Where(t => target.ModelTables.Contains(t) || t == EfConventionGroupTable)
+                .Where(t => modelTables.Contains(t) || classification.IdentifierComparer.Equals(t, EfConventionGroupTable))
                 .ToList();
+            var presentSet = present.ToHashSet(classification.IdentifierComparer);
 
             var populated = new List<string>();
             foreach (var table in present)
@@ -274,7 +281,9 @@ namespace XR50TrainingAssetRepo.Services.Migrations
             }
 
             var foreign = classification.Tables
-                .Where(t => !present.Contains(t) && t != target.HistoryTable && !IsOtherContextTable(kind, t))
+                .Where(t => !presentSet.Contains(t)
+                    && !classification.IdentifierComparer.Equals(t, target.HistoryTable)
+                    && !IsOtherContextTable(kind, t, classification.IdentifierComparer))
                 .ToList();
             if (foreign.Count > 0)
             {
@@ -286,15 +295,23 @@ namespace XR50TrainingAssetRepo.Services.Migrations
             await target.ClearHistoryAsync(cancellationToken);
         }
 
-        private static bool IsOtherContextTable(TargetKind kind, string table) =>
-            kind == TargetKind.Training && (table == Data.XR50RegistryContext.TableName || table == Data.XR50RegistryContext.HistoryTable);
+        private static bool IsOtherContextTable(TargetKind kind, string table, StringComparer comparer) =>
+            kind == TargetKind.Training
+            && (comparer.Equals(table, Data.XR50RegistryContext.TableName)
+                || comparer.Equals(table, Data.XR50RegistryContext.HistoryTable));
 
-        private sealed record Classification(SchemaState State, string Detail, IReadOnlyCollection<string> Tables, IReadOnlyList<string>? History);
+        private sealed record Classification(
+            SchemaState State,
+            string Detail,
+            IReadOnlyCollection<string> Tables,
+            IReadOnlyList<string>? History,
+            StringComparer IdentifierComparer);
 
         private async Task<Classification> ClassifyAsync(TargetKind kind, IMigrationTarget target, CancellationToken cancellationToken)
         {
             var database = target.DatabaseName;
-            var tables = (await _inspector.ListTablesAsync(database, cancellationToken)).ToHashSet(StringComparer.Ordinal);
+            var identifierComparer = await IdentifierComparerAsync(cancellationToken);
+            var tables = (await _inspector.ListTablesAsync(database, cancellationToken)).ToHashSet(identifierComparer);
             var history = await _inspector.ReadHistoryAsync(database, target.HistoryTable, cancellationToken);
             var modelPresent = target.ModelTables.Where(tables.Contains).ToList();
 
@@ -303,23 +320,31 @@ namespace XR50TrainingAssetRepo.Services.Migrations
                 var unknown = history.Where(id => !target.KnownMigrationIds.Contains(id)).ToList();
                 if (unknown.Count > 0)
                 {
-                    var state = kind == TargetKind.Training ? SchemaState.LegacyEfConvention : SchemaState.Unknown;
-                    return new Classification(state, $"history holds unknown migration(s) {string.Join(", ", unknown)}", tables, history);
+                    // The old boot-time InitialCreate is the only foreign history known to be
+                    // safe to rebuild when empty. Any other id may belong to a newer release;
+                    // treating it as legacy would turn a rollback into destructive adoption.
+                    var recognizedLegacy = kind == TargetKind.Training
+                        && history.All(id => LegacyBootMigrationId.IsMatch(id));
+                    var state = recognizedLegacy ? SchemaState.LegacyEfConvention : SchemaState.Unknown;
+                    var detail = recognizedLegacy
+                        ? $"history holds the boot-time legacy migration {string.Join(", ", history)}"
+                        : $"history holds unknown migration(s) {string.Join(", ", unknown)}";
+                    return new Classification(state, detail, tables, history, identifierComparer);
                 }
 
                 return history.Contains(target.BaselineMigrationId)
-                    ? new Classification(SchemaState.Managed, "history holds the Baseline", tables, history)
-                    : new Classification(SchemaState.Unknown, "history has known ids but no Baseline", tables, history);
+                    ? new Classification(SchemaState.Managed, "history holds the Baseline", tables, history, identifierComparer)
+                    : new Classification(SchemaState.Unknown, "history has known ids but no Baseline", tables, history, identifierComparer);
             }
 
             if (modelPresent.Count == 0)
             {
-                return new Classification(SchemaState.Empty, "no model tables", tables, history);
+                return new Classification(SchemaState.Empty, "no model tables", tables, history, identifierComparer);
             }
 
             if (kind == TargetKind.Registry)
             {
-                return new Classification(SchemaState.LegacyRawDdl, "registry table exists without history", tables, history);
+                return new Classification(SchemaState.LegacyRawDdl, "registry table exists without history", tables, history, identifierComparer);
             }
 
             var efConvention = tables.Contains(EfConventionGroupTable)
@@ -331,15 +356,15 @@ namespace XR50TrainingAssetRepo.Services.Migrations
 
             if (rawDdl && !efConvention)
             {
-                return new Classification(SchemaState.LegacyRawDdl, "hand-written DDL fingerprint", tables, history);
+                return new Classification(SchemaState.LegacyRawDdl, "hand-written DDL fingerprint", tables, history, identifierComparer);
             }
 
             if (efConvention && !rawDdl)
             {
-                return new Classification(SchemaState.LegacyEfConvention, "EF-convention fingerprint without history", tables, history);
+                return new Classification(SchemaState.LegacyEfConvention, "EF-convention fingerprint without history", tables, history, identifierComparer);
             }
 
-            return new Classification(SchemaState.Unknown, $"{modelPresent.Count} model tables present, fingerprint inconclusive", tables, history);
+            return new Classification(SchemaState.Unknown, $"{modelPresent.Count} model tables present, fingerprint inconclusive", tables, history, identifierComparer);
         }
 
         private async Task<bool> ColumnIsAsync(string database, string table, string column, string type, CancellationToken cancellationToken) =>
@@ -377,11 +402,14 @@ namespace XR50TrainingAssetRepo.Services.Migrations
         private async Task<IReadOnlyList<string>> FindOrphanSchemasAsync(IReadOnlyCollection<string> expected, CancellationToken cancellationToken)
         {
             var schemas = await _inspector.ListSchemasLikeAsync(TenantSchemaLikePattern, cancellationToken);
-            var comparer = await _inspector.LowerCaseTableNamesAsync(cancellationToken)
-                ? StringComparer.OrdinalIgnoreCase
-                : StringComparer.Ordinal;
+            var comparer = await IdentifierComparerAsync(cancellationToken);
             var known = new HashSet<string>(expected, comparer);
             return schemas.Where(s => !known.Contains(s)).ToList();
         }
+
+        private async Task<StringComparer> IdentifierComparerAsync(CancellationToken cancellationToken) =>
+            await _inspector.LowerCaseTableNamesAsync(cancellationToken)
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
     }
 }

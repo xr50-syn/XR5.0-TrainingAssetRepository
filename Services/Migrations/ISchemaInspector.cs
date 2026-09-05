@@ -5,8 +5,9 @@ namespace XR50TrainingAssetRepo.Services.Migrations
     /// <summary>
     /// Everything the migrator needs to know about the server that EF Core does not tell it:
     /// which databases and tables exist, what shape a column has, the contents of a history
-    /// table, and a server-side advisory lock. All lookups compare schema names exactly
-    /// (<c>BINARY</c>), because tenant database names keep their case.
+    /// table, and a server-side advisory lock. Identifier lookups and lock keys follow the
+    /// server's <c>lower_case_table_names</c> mode: exact when names are distinct, folded when
+    /// MySQL maps differently-cased names onto one physical schema.
     /// </summary>
     public interface ISchemaInspector
     {

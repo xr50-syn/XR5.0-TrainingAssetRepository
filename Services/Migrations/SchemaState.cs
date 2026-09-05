@@ -22,8 +22,9 @@ namespace XR50TrainingAssetRepo.Services.Migrations
 
         /// <summary>
         /// Tables created by the old boot-time EF migration or EnsureCreated (EF-convention
-        /// shape), recognisable by a foreign history id or longtext columns. Adopted by
-        /// dropping them only if every one is empty.
+        /// shape), recognisable by the explicitly supported InitialCreate history id or by
+        /// fingerprints when no history exists. Adopted by dropping them only if every one is
+        /// empty; other foreign history ids are Unknown.
         /// </summary>
         LegacyEfConvention,
 

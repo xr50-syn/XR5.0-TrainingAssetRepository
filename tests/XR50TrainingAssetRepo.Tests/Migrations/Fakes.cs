@@ -21,35 +21,43 @@ namespace XR50TrainingAssetRepo.Tests.Migrations
         }
 
         public Task<bool> DatabaseExistsAsync(string database, CancellationToken ct = default) =>
-            Task.FromResult(Databases.ContainsKey(database));
+            Task.FromResult(Databases.Keys.Any(name => IdentifierComparer.Equals(name, database)));
 
         public Task<IReadOnlyList<string>> ListTablesAsync(string database, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<string>>(Databases[database].Tables.OrderBy(t => t, StringComparer.Ordinal).ToList());
+            Task.FromResult<IReadOnlyList<string>>(Database(database).Tables.OrderBy(t => t, IdentifierComparer).ToList());
 
         public Task<IReadOnlyList<string>> ListSchemasLikeAsync(string likePattern, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<string>>(Databases.Keys.Where(k => k.StartsWith("xr50_tenant_", StringComparison.Ordinal)).ToList());
+            Task.FromResult<IReadOnlyList<string>>(Databases.Keys.Where(k => k.StartsWith("xr50_tenant_",
+                LowerCaseTableNames ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)).ToList());
 
         public Task<IReadOnlyList<string>?> ReadHistoryAsync(string database, string historyTable, CancellationToken ct = default)
         {
-            var db = Databases[database];
-            return Task.FromResult(db.Tables.Contains(historyTable)
-                ? (IReadOnlyList<string>?)db.Histories.GetValueOrDefault(historyTable, new List<string>()).ToList()
-                : null);
+            var db = Database(database);
+            var actualHistoryTable = db.Tables.FirstOrDefault(table => IdentifierComparer.Equals(table, historyTable));
+            if (actualHistoryTable is null)
+            {
+                return Task.FromResult<IReadOnlyList<string>?>(null);
+            }
+
+            var history = db.Histories.FirstOrDefault(pair => IdentifierComparer.Equals(pair.Key, actualHistoryTable)).Value;
+            return Task.FromResult<IReadOnlyList<string>?>((history ?? new List<string>()).ToList());
         }
 
         public Task<long> CountRowsAsync(string database, string table, CancellationToken ct = default) =>
-            Task.FromResult(Databases[database].RowCounts.GetValueOrDefault(table));
+            Task.FromResult(Database(database).RowCounts.FirstOrDefault(pair => IdentifierComparer.Equals(pair.Key, table)).Value);
 
         public Task<string?> GetColumnTypeAsync(string database, string table, string column, CancellationToken ct = default) =>
-            Task.FromResult(Databases[database].ColumnTypes.GetValueOrDefault((table, column)));
+            Task.FromResult(Database(database).ColumnTypes.FirstOrDefault(pair =>
+                IdentifierComparer.Equals(pair.Key.Table, table) && IdentifierComparer.Equals(pair.Key.Column, column)).Value);
 
         public Task<bool> LowerCaseTableNamesAsync(CancellationToken ct = default) => Task.FromResult(LowerCaseTableNames);
 
         public Task<IAsyncDisposable> AcquireLockAsync(string database, TimeSpan timeout, CancellationToken ct = default)
         {
-            Locked.Add(database);
-            Log.Add($"lock:{database}");
-            return Task.FromResult<IAsyncDisposable>(new Handle(() => { Released.Add(database); Log.Add($"unlock:{database}"); }));
+            var lockDatabase = LowerCaseTableNames ? database.ToLowerInvariant() : database;
+            Locked.Add(lockDatabase);
+            Log.Add($"lock:{lockDatabase}");
+            return Task.FromResult<IAsyncDisposable>(new Handle(() => { Released.Add(lockDatabase); Log.Add($"unlock:{lockDatabase}"); }));
         }
 
         public Task DropTablesAsync(string database, IReadOnlyCollection<string> tables, CancellationToken ct = default)
@@ -57,7 +65,7 @@ namespace XR50TrainingAssetRepo.Tests.Migrations
             foreach (var table in tables)
             {
                 Dropped.Add((database, table));
-                Databases[database].Tables.Remove(table);
+                Database(database).Tables.Remove(table);
             }
 
             Log.Add($"drop:{database}:{string.Join("+", tables)}");
@@ -66,6 +74,12 @@ namespace XR50TrainingAssetRepo.Tests.Migrations
 
         public Task<IReadOnlyList<RegisteredTenant>> ListRegisteredTenantsAsync(CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<RegisteredTenant>>(Registry.ToList());
+
+        internal FakeDatabase Database(string name) =>
+            Databases.First(pair => IdentifierComparer.Equals(pair.Key, name)).Value;
+
+        internal StringComparer IdentifierComparer =>
+            LowerCaseTableNames ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
         private sealed class Handle : IAsyncDisposable
         {
@@ -143,8 +157,11 @@ namespace XR50TrainingAssetRepo.Tests.Migrations
         {
             get
             {
-                var db = _factory.Inspector.Databases[DatabaseName];
-                if (!db.Histories.TryGetValue(HistoryTable, out var rows))
+                var db = _factory.Inspector.Database(DatabaseName);
+                var existing = db.Histories.FirstOrDefault(pair =>
+                    _factory.Inspector.IdentifierComparer.Equals(pair.Key, HistoryTable));
+                var rows = existing.Value;
+                if (rows is null)
                 {
                     rows = new List<string>();
                     db.Histories[HistoryTable] = rows;
@@ -170,7 +187,7 @@ namespace XR50TrainingAssetRepo.Tests.Migrations
 
             Migrated.Add(targetMigration);
             _factory.Inspector.Log.Add($"migrate:{DatabaseName}:{HistoryTable}");
-            var db = _factory.Inspector.Databases[DatabaseName];
+            var db = _factory.Inspector.Database(DatabaseName);
             db.Tables.Add(HistoryTable);
             foreach (var id in KnownMigrationIds.Where(id => targetMigration is null || string.CompareOrdinal(id, targetMigration) <= 0))
             {
@@ -185,7 +202,7 @@ namespace XR50TrainingAssetRepo.Tests.Migrations
         {
             Stamped.Add(migrationId);
             _factory.Inspector.Log.Add($"stamp:{DatabaseName}:{migrationId}");
-            _factory.Inspector.Databases[DatabaseName].Tables.Add(HistoryTable);
+            _factory.Inspector.Database(DatabaseName).Tables.Add(HistoryTable);
             History.Add(migrationId);
             return Task.CompletedTask;
         }
@@ -216,7 +233,7 @@ namespace XR50TrainingAssetRepo.Tests.Migrations
             _inspector.Log.Add($"reconcile:{databaseName}");
             if (Failure is not null) throw Failure;
             // The real reconciler's CREATE TABLE pass leaves every model table in place.
-            foreach (var table in FakeTargetFactory.TrainingModelTables) _inspector.Databases[databaseName].Tables.Add(table);
+            foreach (var table in FakeTargetFactory.TrainingModelTables) _inspector.Database(databaseName).Tables.Add(table);
             return Task.CompletedTask;
         }
 
