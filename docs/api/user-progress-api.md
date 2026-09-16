@@ -245,8 +245,15 @@ progress = 100
 #### Material within a program
 
 ```text
-progress = (answered materials / total materials in program) * 100
+progress = (completed learning-path materials / total learning-path materials in program) * 100
 ```
+
+Only materials reachable through the program's learning paths count. Materials assigned
+directly to the program (support materials) can be completed and are recorded, but they
+are excluded from both the numerator and the denominator. A program with no learning-path
+materials reports 0%.
+
+Learning-path progress is a separate value computed over that path's own materials.
 
 Program completion is:
 

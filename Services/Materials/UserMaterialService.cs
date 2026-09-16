@@ -279,8 +279,13 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     }
                 }
 
-                var totalMaterials = materialScores.Count;
-                var completedMaterials = materialScores.Count(m => m.completed);
+                // The materials list keeps every program material (support materials included)
+                // so completions remain visible, but the percentage covers learning-path
+                // materials only.
+                var learningPathMaterialIds = await GetProgramLearningPathMaterialIdsAsync(context, program.id);
+                var totalMaterials = learningPathMaterialIds.Count;
+                var completedMaterials = learningPathMaterialIds
+                    .Count(id => programScores.Any(s => s.MaterialId == id));
                 var programProgress = totalMaterials > 0
                     ? (int)Math.Round((double)completedMaterials / totalMaterials * 100)
                     : 0;
@@ -785,19 +790,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                 throw new KeyNotFoundException($"Program {programId} not found");
             }
 
-            // 2. Get all materials in this program
-            var programMaterials = await context.ProgramMaterials
-                .Where(pm => pm.TrainingProgramId == programId)
-                .Join(context.Materials,
-                    pm => pm.MaterialId,
-                    m => m.id,
-                    (pm, m) => new { pm.MaterialId, m.Name, Type = m.Type.ToString() })
-                .ToListAsync();
-
-            var programMaterialIds = programMaterials.Select(pm => pm.MaterialId).ToList();
-            var totalMaterials = programMaterials.Count;
-
-            // 3. Get learning path mappings for this program
+            // 2. Get learning path mappings for this program
             var programLearningPathIds = await context.Set<ProgramLearningPath>()
                 .Where(plp => plp.TrainingProgramId == programId)
                 .Select(plp => plp.LearningPathId)
@@ -820,6 +813,24 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     }
                 }
             }
+
+            // 3. Get all materials in this program: learning-path materials plus the directly
+            // assigned support materials. The listing shows both; the counters and percentage
+            // below cover learning-path materials only.
+            var directMaterialIds = await context.ProgramMaterials
+                .Where(pm => pm.TrainingProgramId == programId)
+                .Select(pm => pm.MaterialId)
+                .ToListAsync();
+
+            var learningPathMaterialIds = materialToLearningPath.Keys.ToList();
+            var programMaterialIds = learningPathMaterialIds.Union(directMaterialIds).ToList();
+
+            var programMaterials = await context.Materials
+                .Where(m => programMaterialIds.Contains(m.id))
+                .Select(m => new { MaterialId = m.id, m.Name, Type = m.Type.ToString() })
+                .ToListAsync();
+
+            var totalMaterials = learningPathMaterialIds.Count;
 
             // 4. Build query for user scores - filter by user if not admin
             var scoresQuery = context.UserMaterialScores
@@ -858,7 +869,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     completed_at = userScores.FirstOrDefault(s => s.MaterialId == pm.MaterialId)?.UpdatedAt
                 }).ToList();
 
-                var completedCount = completedMaterialIds.Count;
+                var completedCount = learningPathMaterialIds.Count(completedMaterialIds.Contains);
                 var progress = totalMaterials > 0
                     ? (int)Math.Round((double)completedCount / totalMaterials * 100)
                     : 0;
@@ -923,46 +934,50 @@ namespace XR50TrainingAssetRepo.Services.Materials
 
         #region Private Helper Methods
 
+        /// <summary>
+        /// Distinct IDs of the materials reachable through the program's learning paths. This is
+        /// the set program progress is measured over; directly assigned (support) materials are
+        /// deliberately not part of it.
+        /// </summary>
+        private static async Task<List<int>> GetProgramLearningPathMaterialIdsAsync(
+            XR50TrainingContext context,
+            int programId)
+        {
+            var learningPathIds = await context.Set<ProgramLearningPath>()
+                .Where(plp => plp.TrainingProgramId == programId)
+                .Select(plp => plp.LearningPathId.ToString())
+                .ToListAsync();
+
+            if (learningPathIds.Count == 0)
+            {
+                return new List<int>();
+            }
+
+            return await context.MaterialRelationships
+                .Where(mr =>
+                    mr.RelatedEntityType == "LearningPath" &&
+                    learningPathIds.Contains(mr.RelatedEntityId))
+                .Select(mr => mr.MaterialId)
+                .Distinct()
+                .ToListAsync();
+        }
+
         private async Task<int> CalculateProgramProgressInternalAsync(
             XR50TrainingContext context,
             string userId,
             int programId,
             int? newlyCompletedMaterialId = null)
         {
-            // Get direct material IDs in program
-            var directMaterialIds = await context.ProgramMaterials
-                .Where(pm => pm.TrainingProgramId == programId)
-                .Select(pm => pm.MaterialId)
-                .ToListAsync();
-
-            // Get learning paths in this program
-            var programLearningPathIds = await context.Set<ProgramLearningPath>()
-                .Where(plp => plp.TrainingProgramId == programId)
-                .Select(plp => plp.LearningPathId)
-                .ToListAsync();
-
-            // Get materials from learning paths
-            var learningPathMaterialIds = new List<int>();
-            if (programLearningPathIds.Any())
-            {
-                learningPathMaterialIds = await context.MaterialRelationships
-                    .Where(mr =>
-                        mr.RelatedEntityType == "LearningPath" &&
-                        programLearningPathIds.Select(id => id.ToString()).Contains(mr.RelatedEntityId))
-                    .Select(mr => mr.MaterialId)
-                    .ToListAsync();
-            }
-
-            // Combine direct and learning path materials (no duplicates)
-            var allProgramMaterialIds = directMaterialIds
-                .Union(learningPathMaterialIds)
-                .ToList();
+            // Program progress is measured over the learning-path materials only. Materials
+            // assigned directly to the program (support materials) can still be completed and
+            // recorded, but they neither add to the total nor count as completed here.
+            var allProgramMaterialIds = await GetProgramLearningPathMaterialIdsAsync(context, programId);
 
             var totalMaterials = allProgramMaterialIds.Count;
 
             if (totalMaterials == 0)
             {
-                return 0; // No materials = 0% progress, not 100%
+                return 0; // No learning-path materials = 0% progress, not 100%
             }
 
             // Get completed materials (those with scores)
