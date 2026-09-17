@@ -4,6 +4,7 @@ using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Services;
 using XR50TrainingAssetRepo.Services.Chatbot;
 using XR50TrainingAssetRepo.Services.Materials;
+using XR50TrainingAssetRepo.Tests.Fixtures;
 
 namespace XR50TrainingAssetRepo.Tests.Services;
 
@@ -28,6 +29,7 @@ public class InnovChatbotMaterialTests
             new IChatbotProvider[] { provider },
             tenantService,
             tenantManagementService,
+            new AssetContentReader(new MockStorageService(), tenantService, NullLogger<AssetContentReader>.Instance),
             NullLogger<InnovChatbotMaterialService>.Instance);
 
         var updated = new InnovChatbotMaterial
@@ -89,6 +91,7 @@ public class InnovChatbotMaterialTests
             new IChatbotProvider[] { provider },
             new StubTenantService("test_tenant"),
             new StubTenantManagementService("test_tenant", "https://innov.test", "pilot-default"),
+            new AssetContentReader(new MockStorageService(), new StubTenantService("test_tenant"), NullLogger<AssetContentReader>.Instance),
             NullLogger<InnovChatbotMaterialService>.Instance);
 
         var response = await service.ChatAsync(20, "What is the procedure?", "expert");
@@ -96,6 +99,44 @@ public class InnovChatbotMaterialTests
         response.Text.Should().Be("answer for pilot-7");
         response.Pilot.Should().Be("pilot-7");
         provider.LastExpertiseLevel.Should().Be("expert");
+    }
+
+    [Fact]
+    public async Task Submit_StoredAsset_IsIngestedInline_WithoutItsUrl()
+    {
+        var options = new DbContextOptionsBuilder<XR50TrainingContext>()
+            .UseInMemoryDatabase($"innov-chatbot-stored-{Guid.NewGuid()}")
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        var factory = new NewContextFactory(options);
+
+        var storage = new MockStorageService();
+        var storedBytes = "%PDF-1.4 stored"u8.ToArray();
+        await storage.UploadFileAsync("test_tenant", "hash-1", new FormFile(new MemoryStream(storedBytes), 0, storedBytes.Length, "file", "stored.pdf"));
+
+        using (var context = factory.CreateDbContext())
+        {
+            context.Assets.Add(new Asset { Id = 1, Filename = "stored.pdf", Filetype = "pdf", Type = AssetType.PDF, StorageKey = "hash-1", URL = "http://localhost:10000/bucket/hash-1" });
+            var material = new InnovChatbotMaterial { id = 30, Name = "Stored content", Pilot = "pilot-1", InnovStatus = "notready" };
+            material.SetAssetIdsList(new List<int> { 1 });
+            context.Materials.Add(material);
+            await context.SaveChangesAsync();
+        }
+
+        var provider = new FakeInnovProvider();
+        var tenantService = new StubTenantService("test_tenant");
+        var service = new InnovChatbotMaterialService(
+            factory,
+            new IChatbotProvider[] { provider },
+            tenantService,
+            new StubTenantManagementService("test_tenant", "https://innov.test", "pilot-1"),
+            new AssetContentReader(storage, tenantService, NullLogger<AssetContentReader>.Instance),
+            NullLogger<InnovChatbotMaterialService>.Instance);
+
+        await service.SubmitForProcessingAsync(30);
+
+        provider.IngestedContent.Should().ContainSingle().Which.Should().Equal(storedBytes);
+        provider.IngestedSourceUrls.Should().Equal(new string?[] { null });
     }
 
     private static async Task SeedMaterialWithCompletedAssetJobsAsync(IXR50TenantDbContextFactory factory)
@@ -162,6 +203,8 @@ public class InnovChatbotMaterialTests
     private sealed class FakeInnovProvider : IChatbotIngestionProvider, IChatbotChatProvider
     {
         public List<string> IngestedFileNames { get; } = new();
+        public List<byte[]?> IngestedContent { get; } = new();
+        public List<string?> IngestedSourceUrls { get; } = new();
         public string? LastExpertiseLevel { get; private set; }
 
         public string ProviderKey => "innov";
@@ -170,14 +213,21 @@ public class InnovChatbotMaterialTests
 
         public Task<bool> EnsureGroupingAsync(ChatbotConnection connection, string grouping) => Task.FromResult(true);
 
-        public Task<ChatbotIngestResult> IngestDocumentAsync(ChatbotIngestRequest request)
+        public async Task<ChatbotIngestResult> IngestDocumentAsync(ChatbotIngestRequest request)
         {
             IngestedFileNames.Add(request.FileName);
-            return Task.FromResult(new ChatbotIngestResult
+            IngestedSourceUrls.Add(request.SourceUrl);
+            if (request.Content != null)
+            {
+                using var buffer = new MemoryStream();
+                await request.Content.CopyToAsync(buffer);
+                IngestedContent.Add(buffer.ToArray());
+            }
+            return new ChatbotIngestResult
             {
                 Status = "completed",
                 CollectionName = "innov_col"
-            });
+            };
         }
 
         public Task<ChatbotIngestStatus> GetIngestStatusAsync(ChatbotConnection connection, string grouping, ChatbotDocumentRef document)

@@ -83,6 +83,7 @@ namespace XR50TrainingAssetRepo.Services
         private readonly IXR50TenantManagementService _tenantManagementService;
         private readonly IStorageService _storageService; // Unified storage interface
         private readonly IChatbotApiService _chatbotApiService;
+        private readonly IAssetContentReader _assetContentReader;
         private readonly ILogger<AssetService> _logger;
 
         public AssetService(
@@ -95,6 +96,7 @@ namespace XR50TrainingAssetRepo.Services
             IXR50TenantManagementService tenantManagementService,
             IStorageService storageService,
             IChatbotApiService chatbotApiService,
+            IAssetContentReader assetContentReader,
             ILogger<AssetService> logger)
         {
             _configuration = configuration;
@@ -106,6 +108,7 @@ namespace XR50TrainingAssetRepo.Services
             _tenantManagementService = tenantManagementService;
             _storageService = storageService;
             _chatbotApiService = chatbotApiService;
+            _assetContentReader = assetContentReader;
             _logger = logger;
         }
 
@@ -1345,11 +1348,6 @@ namespace XR50TrainingAssetRepo.Services
                 throw new KeyNotFoundException($"Asset {assetId} not found");
             }
 
-            if (string.IsNullOrEmpty(asset.URL))
-            {
-                throw new InvalidOperationException($"Asset {assetId} has no URL for processing");
-            }
-
             if (asset.AiAvailable == "process")
             {
                 _logger.LogInformation("Asset {AssetId} is already being processed", assetId);
@@ -1373,8 +1371,26 @@ namespace XR50TrainingAssetRepo.Services
                 // yet, so this submit would 502 on a cold gateway. Ensure it exists first.
                 await _chatbotApiService.EnsureCollectionExistsAsync(collectionName);
 
-                var jobId = await _chatbotApiService.SubmitDocumentAsync(
-                    assetId, asset.URL, asset.Filetype ?? "pdf", collectionName, asset.Filename);
+                // A stored file is read through storage; only a reference-only asset is fetched
+                // from its URL (see IAssetContentReader for why).
+                string jobId;
+                await using (var storedContent = await _assetContentReader.OpenStoredContentAsync(asset))
+                {
+                    if (storedContent != null)
+                    {
+                        jobId = await _chatbotApiService.SubmitDocumentContentAsync(
+                            assetId, storedContent, asset.Filetype ?? "pdf", collectionName, asset.Filename);
+                    }
+                    else if (!string.IsNullOrEmpty(asset.URL))
+                    {
+                        jobId = await _chatbotApiService.SubmitDocumentAsync(
+                            assetId, asset.URL, asset.Filetype ?? "pdf", collectionName, asset.Filename);
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException($"Asset {assetId} has no stored file and no URL for processing");
+                    }
+                }
                 asset.JobId = jobId;
                 asset.AiAvailable = "process";
 

@@ -14,15 +14,18 @@ namespace XR50TrainingAssetRepo.Services.Materials
     {
         private readonly IXR50TenantDbContextFactory _dbContextFactory;
         private readonly IChatbotApiService _chatbotApiService;
+        private readonly IAssetContentReader _assetContentReader;
         private readonly ILogger<AIAssistantMaterialService> _logger;
 
         public AIAssistantMaterialService(
             IXR50TenantDbContextFactory dbContextFactory,
             IChatbotApiService chatbotApiService,
+            IAssetContentReader assetContentReader,
             ILogger<AIAssistantMaterialService> logger)
         {
             _dbContextFactory = dbContextFactory;
             _chatbotApiService = chatbotApiService;
+            _assetContentReader = assetContentReader;
             _logger = logger;
         }
 
@@ -395,16 +398,29 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     continue;
                 }
 
-                if (string.IsNullOrEmpty(asset.URL))
-                {
-                    failedAssets.Add((asset.Id, "asset has no URL"));
-                    continue;
-                }
-
                 try
                 {
-                    var jobId = await _chatbotApiService.SubmitDocumentAsync(
-                        asset.Id, asset.URL, asset.Filetype ?? "pdf", collectionName, asset.Filename);
+                    // A stored file is read through storage; only a reference-only asset is
+                    // fetched from its URL (see IAssetContentReader for why).
+                    string jobId;
+                    await using (var storedContent = await _assetContentReader.OpenStoredContentAsync(asset))
+                    {
+                        if (storedContent != null)
+                        {
+                            jobId = await _chatbotApiService.SubmitDocumentContentAsync(
+                                asset.Id, storedContent, asset.Filetype ?? "pdf", collectionName, asset.Filename);
+                        }
+                        else if (!string.IsNullOrEmpty(asset.URL))
+                        {
+                            jobId = await _chatbotApiService.SubmitDocumentAsync(
+                                asset.Id, asset.URL, asset.Filetype ?? "pdf", collectionName, asset.Filename);
+                        }
+                        else
+                        {
+                            failedAssets.Add((asset.Id, "asset has no stored file and no URL"));
+                            continue;
+                        }
+                    }
 
                     if (existingJob == null)
                     {
@@ -434,7 +450,9 @@ namespace XR50TrainingAssetRepo.Services.Materials
 
                     successCount++;
                 }
-                catch (ChatbotApiException ex)
+                // Not only ChatbotApiException: reading the stored file can fail in storage, and one
+                // asset's failure must not abort the rest of the batch.
+                catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Failed to submit asset {AssetId} for material {AIAssistantId}", asset.Id, aiAssistantId);
                     failedAssets.Add((asset.Id, ex.Message));

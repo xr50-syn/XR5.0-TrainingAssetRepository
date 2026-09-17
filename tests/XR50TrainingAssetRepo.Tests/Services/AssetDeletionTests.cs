@@ -268,6 +268,9 @@ public class AssetDeletionTests : IClassFixture<AssetDeletionTests.RecordingChat
         public Task<string> SubmitDocumentAsync(int assetId, string assetUrl, string filetype, string collectionName, string documentName)
             => Task.FromResult($"job-{assetId}");
 
+        public Task<string> SubmitDocumentContentAsync(int assetId, Stream content, string filetype, string collectionName, string documentName)
+            => Task.FromResult($"job-{assetId}");
+
         public Task<ChatbotJobStatus> GetJobStatusAsync(string jobId, string collectionName)
             => Task.FromResult(new ChatbotJobStatus { JobId = jobId, CollectionName = collectionName, Status = "completed" });
 

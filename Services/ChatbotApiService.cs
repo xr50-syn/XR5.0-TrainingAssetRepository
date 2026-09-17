@@ -45,14 +45,44 @@ namespace XR50TrainingAssetRepo.Services
 
         public async Task<string> SubmitDocumentAsync(int assetId, string assetUrl, string filetype, string collectionName, string documentName)
         {
+            byte[] fileBytes;
+            try
+            {
+                _logger.LogInformation("Downloading asset {AssetId} from its URL for submission to collection {CollectionName}",
+                    assetId, collectionName);
+
+                using var downloadClient = new HttpClient();
+                fileBytes = await downloadClient.GetByteArrayAsync(assetUrl);
+            }
+            catch (HttpRequestException ex)
+            {
+                // Reported separately from DataLens errors: the URL fetch is ours, and conflating
+                // the two sent diagnosis toward DataLens when the asset URL was unreachable.
+                _logger.LogError(ex, "Could not download asset {AssetId} from its URL", assetId);
+                throw new ChatbotApiException($"Could not download asset {assetId} from its URL: {ex.Message}", ex);
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogError(ex, "Timed out downloading asset {AssetId} from its URL", assetId);
+                throw new ChatbotApiException($"Timed out downloading asset {assetId} from its URL", ex);
+            }
+
+            return await SubmitDocumentBytesAsync(assetId, fileBytes, filetype, collectionName, documentName);
+        }
+
+        public async Task<string> SubmitDocumentContentAsync(int assetId, Stream content, string filetype, string collectionName, string documentName)
+        {
+            using var buffer = new MemoryStream();
+            await content.CopyToAsync(buffer);
+            return await SubmitDocumentBytesAsync(assetId, buffer.ToArray(), filetype, collectionName, documentName);
+        }
+
+        private async Task<string> SubmitDocumentBytesAsync(int assetId, byte[] fileBytes, string filetype, string collectionName, string documentName)
+        {
             try
             {
                 _logger.LogInformation("Submitting asset {AssetId} to collection {CollectionName} for processing",
                     assetId, collectionName);
-
-                // Download the file from the asset URL
-                using var downloadClient = new HttpClient();
-                var fileBytes = await downloadClient.GetByteArrayAsync(assetUrl);
 
                 var contentType = GetContentTypeFromFiletype(filetype);
 

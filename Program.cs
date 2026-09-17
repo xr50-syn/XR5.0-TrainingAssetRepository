@@ -664,6 +664,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IXR50SchemaMigrator, XR50SchemaMigrator>();
         services.AddScoped<ILearningPathService, LearningPathService>();
         services.AddScoped<IAssetService, AssetService>();
+        services.AddScoped<IAssetContentReader, AssetContentReader>();
 
         // New specialized material services
         services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IMaterialServiceBase, XR50TrainingAssetRepo.Services.Materials.MaterialServiceBase>();
