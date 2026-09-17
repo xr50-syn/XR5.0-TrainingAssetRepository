@@ -6,29 +6,20 @@ const config = require('../config');
  * S3 Storage Operations Tests
  *
  * Verifies file upload, download, and management via S3.
+ *
+ * Tests that depend on an earlier upload fail when it is missing instead of returning early:
+ * an early return counts as a pass, which hid broken paths behind a green run.
  */
 
 describe('S3 Storage Operations', () => {
   let uploadedAssetId;
 
   beforeAll(async () => {
-    // Authenticate
-    try {
-      await apiClient.authenticate(config.ADMIN_USER, config.ADMIN_PASSWORD);
-    } catch (error) {
-      await apiClient.authenticate(config.TEST_USER, config.TEST_PASSWORD);
-    }
+    await apiClient.authenticate(config.ADMIN_USER, config.ADMIN_PASSWORD);
   });
 
   afterAll(async () => {
-    // Cleanup uploaded assets
-    if (uploadedAssetId && !config.SKIP_CLEANUP) {
-      try {
-        await apiClient.deleteAsset(uploadedAssetId);
-      } catch (error) {
-        // Ignore cleanup errors
-      }
-    }
+    expect(await apiClient.cleanupTracked()).toEqual([]);
   });
 
   describe('File Upload', () => {
@@ -45,9 +36,6 @@ describe('S3 Storage Operations', () => {
         }
       );
 
-      // Accept success, auth issues, or server errors (storage misconfiguration)
-      expect([200, 201]).toContain(response.status);
-
       if (response.status >= 400) {
         console.log('\n--- TEXT FILE UPLOAD FAILED ---');
         console.log('URL:', `${config.ASSETS_API_URL}`);
@@ -57,13 +45,9 @@ describe('S3 Storage Operations', () => {
         console.log('---\n');
       }
 
-      if (response.status === 200 || response.status === 201) {
-        expect(response.data).toHaveProperty('id');
-        uploadedAssetId = response.data.id;
-
-        // Track for cleanup
-        global.__TEST_CONFIG__?.createdResources?.assets?.push(uploadedAssetId);
-      }
+      expect([200, 201]).toContain(response.status);
+      expect(response.data).toHaveProperty('id');
+      uploadedAssetId = apiClient.track('assets', response.data.id);
     });
 
     test('can upload image file', async () => {
@@ -79,9 +63,6 @@ describe('S3 Storage Operations', () => {
         }
       );
 
-      // Accept success, auth issues, or server errors (storage misconfiguration)
-      expect([200, 201]).toContain(response.status);
-
       if (response.status >= 400) {
         console.log('\n--- IMAGE UPLOAD FAILED ---');
         console.log('URL:', `${config.ASSETS_API_URL}`);
@@ -91,10 +72,8 @@ describe('S3 Storage Operations', () => {
         console.log('---\n');
       }
 
-      if (response.status === 200 || response.status === 201) {
-        const imageAssetId = response.data.id;
-        global.__TEST_CONFIG__?.createdResources?.assets?.push(imageAssetId);
-      }
+      expect([200, 201]).toContain(response.status);
+      apiClient.track('assets', response.data.id);
     });
   });
 
@@ -102,18 +81,12 @@ describe('S3 Storage Operations', () => {
     test('can list assets', async () => {
       const response = await apiClient.listAssets();
 
-      expect([200]).toContain(response.status);
-
-      if (response.status === 200) {
-        expect(Array.isArray(response.data)).toBe(true);
-      }
+      expect(response.status).toBe(200);
+      expect(Array.isArray(response.data)).toBe(true);
     });
 
     test('can get asset metadata', async () => {
-      if (!uploadedAssetId) {
-        console.log('Skipping: No asset uploaded');
-        return;
-      }
+      expect(uploadedAssetId).toBeDefined();
 
       const response = await apiClient.getAsset(uploadedAssetId);
 
@@ -123,28 +96,19 @@ describe('S3 Storage Operations', () => {
     });
 
     test('can get file info from S3', async () => {
-      if (!uploadedAssetId) {
-        console.log('Skipping: No asset uploaded');
-        return;
-      }
+      expect(uploadedAssetId).toBeDefined();
 
       const response = await apiClient.getAssetFileInfo(uploadedAssetId);
 
-      expect([200, 404]).toContain(response.status);
-
-      if (response.status === 200) {
-        expect(response.data).toHaveProperty('fileExists');
-        expect(response.data).toHaveProperty('fileSize');
-      }
+      expect(response.status).toBe(200);
+      expect(response.data).toHaveProperty('fileExists');
+      expect(response.data).toHaveProperty('fileSize');
     });
   });
 
   describe('File Download', () => {
     test('can download uploaded file', async () => {
-      if (!uploadedAssetId) {
-        console.log('Skipping: No asset uploaded');
-        return;
-      }
+      expect(uploadedAssetId).toBeDefined();
 
       const response = await apiClient.downloadAsset(uploadedAssetId);
 
@@ -169,13 +133,8 @@ describe('S3 Storage Operations', () => {
         { description: 'Content verification test' }
       );
 
-      if (uploadResponse.status !== 200 && uploadResponse.status !== 201) {
-        console.log('Skipping: Could not upload file');
-        return;
-      }
-
-      const assetId = uploadResponse.data.id;
-      global.__TEST_CONFIG__?.createdResources?.assets?.push(assetId);
+      expect([200, 201]).toContain(uploadResponse.status);
+      const assetId = apiClient.track('assets', uploadResponse.data.id);
 
       // GET /assets/{id}/download returns a presigned download URL (JSON), not the raw bytes.
       // (The URL points at the storage backend's internal host, so the byte round-trip is not
@@ -204,12 +163,9 @@ describe('S3 Storage Operations', () => {
         { description: 'Delete test' }
       );
 
-      if (uploadResponse.status !== 200 && uploadResponse.status !== 201) {
-        console.log('Skipping: Could not upload file');
-        return;
-      }
-
-      const assetId = uploadResponse.data.id;
+      expect([200, 201]).toContain(uploadResponse.status);
+      // Tracked so a failed delete below still gets cleaned up.
+      const assetId = apiClient.track('assets', uploadResponse.data.id);
 
       // Delete it
       const deleteResponse = await apiClient.deleteAsset(assetId);

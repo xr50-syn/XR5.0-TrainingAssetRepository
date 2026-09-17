@@ -129,6 +129,11 @@ const config = {
     return `${this.API_BASE_URL}/api/${tenant}/programs`;
   },
 
+  get LEARNING_PATHS_API_URL() {
+    const tenant = this.EXISTING_TENANT || this.TEST_TENANT;
+    return `${this.API_BASE_URL}/api/${tenant}/learningpaths`;
+  },
+
   get USERS_API_URL() {
     const tenant = this.EXISTING_TENANT || this.TEST_TENANT;
     return `${this.API_BASE_URL}/api/${tenant}/users`;

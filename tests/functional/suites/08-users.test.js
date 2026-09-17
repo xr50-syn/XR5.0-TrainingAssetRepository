@@ -6,38 +6,35 @@ const config = require('../config');
  * User Management Tests
  *
  * Verifies user CRUD operations.
+ *
+ * The suite authenticates as ADMIN_USER, which must be a tenant admin at least, so a 401/403
+ * on ordinary user management is a failure. The one role-dependent rule is creating a
+ * system administrator: only a system admin may, so that expectation follows the caller's
+ * identity as reported by /api/auth/me.
  */
 
 describe('User Management', () => {
   let createdUserName;
+  let callerIsSystemAdmin;
 
   beforeAll(async () => {
-    try {
-      await apiClient.authenticate(config.ADMIN_USER, config.ADMIN_PASSWORD);
-    } catch (error) {
-      await apiClient.authenticate(config.TEST_USER, config.TEST_PASSWORD);
-    }
+    await apiClient.authenticate(config.ADMIN_USER, config.ADMIN_PASSWORD);
+
+    // NO_AUTH runs rely on the development bypass, which grants every policy.
+    const me = await apiClient.get(`${config.API_BASE_URL}/api/auth/me`);
+    callerIsSystemAdmin = config.NO_AUTH || (me.status === 200 && me.data.isSystemAdmin === true);
   });
 
   afterAll(async () => {
-    if (createdUserName && !config.SKIP_CLEANUP) {
-      try {
-        await apiClient.deleteUser(createdUserName);
-      } catch (error) {
-        // Ignore
-      }
-    }
+    expect(await apiClient.cleanupTracked()).toEqual([]);
   });
 
   describe('List Users', () => {
     test('can list users', async () => {
       const response = await apiClient.listUsers();
 
-      expect([200, 401, 403]).toContain(response.status);
-
-      if (response.status === 200) {
-        expect(Array.isArray(response.data)).toBe(true);
-      }
+      expect(response.status).toBe(200);
+      expect(Array.isArray(response.data)).toBe(true);
     });
   });
 
@@ -57,33 +54,29 @@ describe('User Management', () => {
       const response = await apiClient.createUser(user);
 
       logUserFailure(user, response, 'CREATE USER');
-      expect([200, 201, 401, 403, 500]).toContain(response.status);
-
-      if (response.status === 200 || response.status === 201) {
-        expect(response.data).toHaveProperty('userName', user.userName);
-        createdUserName = user.userName;
-        global.__TEST_CONFIG__?.createdResources?.users?.push(createdUserName);
-      }
+      expect([200, 201]).toContain(response.status);
+      expect(response.data).toHaveProperty('userName', user.userName);
+      createdUserName = apiClient.track('users', user.userName);
     });
 
-    test('can create admin user', async () => {
+    test('creating a system admin user requires a system administrator', async () => {
       const user = testData.createAdminUser();
       const response = await apiClient.createUser(user);
 
-      logUserFailure(user, response, 'CREATE ADMIN USER');
-      expect([200, 201, 401, 403, 500]).toContain(response.status);
-
-      if (response.status === 200 || response.status === 201) {
+      if (callerIsSystemAdmin) {
+        logUserFailure(user, response, 'CREATE ADMIN USER');
+        expect([200, 201]).toContain(response.status);
         expect(response.data).toHaveProperty('admin', true);
-        global.__TEST_CONFIG__?.createdResources?.users?.push(user.userName);
+        apiClient.track('users', user.userName);
+      } else {
+        expect(response.status).toBe(403);
+        const getResponse = await apiClient.getUser(user.userName);
+        expect(getResponse.status).toBe(404);
       }
     });
 
     test('rejects duplicate username', async () => {
-      if (!createdUserName) {
-        console.log('Skipping: No user created');
-        return;
-      }
+      expect(createdUserName).toBeDefined();
 
       const user = testData.createTestUser();
       user.userName = createdUserName;
@@ -91,17 +84,13 @@ describe('User Management', () => {
       const response = await apiClient.createUser(user);
 
       logUserFailure(user, response, 'DUPLICATE USER');
-      // API may return 400/409 (conflict) or 200 (if it updates instead of rejects) or 500
-      expect([200, 400, 409, 500]).toContain(response.status);
+      expect(response.status).toBe(409);
     });
   });
 
   describe('Read Users', () => {
     test('can get user by username', async () => {
-      if (!createdUserName) {
-        console.log('Skipping: No user created');
-        return;
-      }
+      expect(createdUserName).toBeDefined();
 
       const response = await apiClient.getUser(createdUserName);
 
@@ -117,52 +106,37 @@ describe('User Management', () => {
   });
 
   describe('Update Users', () => {
+    // PUT on a user is a partial update: fields left out of the body are kept.
     test('can update user full name', async () => {
-      if (!createdUserName) {
-        console.log('Skipping: No user created');
-        return;
-      }
+      expect(createdUserName).toBeDefined();
 
       const newFullName = `Updated User ${Date.now()}`;
-      const updateData = { fullName: newFullName };
-      const response = await apiClient.updateUser(createdUserName, updateData);
+      const response = await apiClient.updateUser(createdUserName, { fullName: newFullName });
 
-      console.log('\n--- UPDATE USER FULL NAME ---');
-      console.log('Username:', createdUserName);
-      console.log('Update data:', JSON.stringify(updateData, null, 2));
-      apiClient.logResponse(response, 'UPDATE');
-      console.log('---\n');
-
-      // Accept 200, 204 (success), 400/404/500 (various failures)
-      expect([200, 204, 400, 404, 500]).toContain(response.status);
-
-      if (response.status === 200 || response.status === 204) {
-        // Verify the update
-        const getResponse = await apiClient.getUser(createdUserName);
-        if (getResponse.status === 200) {
-          expect(getResponse.data.fullName).toBe(newFullName);
-        }
+      if (response.status >= 400) {
+        apiClient.logResponse(response, 'UPDATE FULL NAME');
       }
+      expect([200, 204]).toContain(response.status);
+
+      const getResponse = await apiClient.getUser(createdUserName);
+      expect(getResponse.status).toBe(200);
+      expect(getResponse.data.fullName).toBe(newFullName);
     });
 
     test('can update user email', async () => {
-      if (!createdUserName) {
-        console.log('Skipping: No user created');
-        return;
-      }
+      expect(createdUserName).toBeDefined();
 
       const newEmail = `updated-${Date.now()}@test.local`;
-      const updateData = { userEmail: newEmail };
-      const response = await apiClient.updateUser(createdUserName, updateData);
+      const response = await apiClient.updateUser(createdUserName, { userEmail: newEmail });
 
-      console.log('\n--- UPDATE USER EMAIL ---');
-      console.log('Username:', createdUserName);
-      console.log('Update data:', JSON.stringify(updateData, null, 2));
-      apiClient.logResponse(response, 'UPDATE');
-      console.log('---\n');
+      if (response.status >= 400) {
+        apiClient.logResponse(response, 'UPDATE EMAIL');
+      }
+      expect([200, 204]).toContain(response.status);
 
-      // Accept 200, 204 (success), 400/404/500 (various failures)
-      expect([200, 204, 400, 404, 500]).toContain(response.status);
+      const getResponse = await apiClient.getUser(createdUserName);
+      expect(getResponse.status).toBe(200);
+      expect(getResponse.data.userEmail).toBe(newEmail);
     });
   });
 
@@ -172,10 +146,9 @@ describe('User Management', () => {
       const user = testData.createTestUser('delete-test');
       const createResponse = await apiClient.createUser(user);
 
-      if (createResponse.status !== 200 && createResponse.status !== 201) {
-        console.log('Skipping: Could not create user');
-        return;
-      }
+      expect([200, 201]).toContain(createResponse.status);
+      // Tracked so a failed delete below still gets cleaned up.
+      apiClient.track('users', user.userName);
 
       // Delete it
       const deleteResponse = await apiClient.deleteUser(user.userName);
@@ -196,16 +169,12 @@ describe('User Management', () => {
       };
       const response = await apiClient.createUser(userData);
 
-      console.log('\n--- VALIDATION: NO USERNAME ---');
-      console.log('Request:', JSON.stringify(userData, null, 2));
-      apiClient.logResponse(response, 'VALIDATION');
-      console.log('---\n');
-
-      // API may validate (400/422) or accept with generated username (200/201) or fail (500)
-      expect([200, 201, 400, 422, 500]).toContain(response.status);
+      expect(response.status).toBe(400);
     });
 
-    test('rejects user without email', async () => {
+    // Identities the XR5.0 Hub authenticates, service accounts in particular, are provisioned
+    // by their Hub user id and may carry no e-mail, so a missing e-mail is accepted.
+    test('accepts user without email', async () => {
       const userData = {
         userName: `noEmail${Date.now()}`,
         fullName: 'No Email User',
@@ -213,16 +182,13 @@ describe('User Management', () => {
       };
       const response = await apiClient.createUser(userData);
 
-      console.log('\n--- VALIDATION: NO EMAIL ---');
-      console.log('Request:', JSON.stringify(userData, null, 2));
-      apiClient.logResponse(response, 'VALIDATION');
-      console.log('---\n');
-
-      // API may validate (400/422) or accept without email (200/201) or fail (500)
-      expect([200, 201, 400, 422, 500]).toContain(response.status);
+      expect([200, 201]).toContain(response.status);
+      apiClient.track('users', userData.userName);
     });
 
-    test('rejects user without password', async () => {
+    // A password only matters where storage mirrors users into its own account store
+    // (OwnCloud). Everywhere else authentication is the identity provider's job.
+    test('requires a password only for OwnCloud storage', async () => {
       const userData = {
         userName: `noPassword${Date.now()}`,
         fullName: 'No Password User',
@@ -230,13 +196,12 @@ describe('User Management', () => {
       };
       const response = await apiClient.createUser(userData);
 
-      console.log('\n--- VALIDATION: NO PASSWORD ---');
-      console.log('Request:', JSON.stringify(userData, null, 2));
-      apiClient.logResponse(response, 'VALIDATION');
-      console.log('---\n');
-
-      // API may validate (400/422) or accept without password (200/201) or fail (500)
-      expect([200, 201, 400, 422, 500]).toContain(response.status);
+      if (testData.STORAGE_TYPE.toLowerCase() === 'owncloud') {
+        expect(response.status).toBe(400);
+      } else {
+        expect([200, 201]).toContain(response.status);
+        apiClient.track('users', userData.userName);
+      }
     });
   });
 });

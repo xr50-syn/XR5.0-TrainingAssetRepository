@@ -30,11 +30,7 @@ describe('AI Assistant Material', () => {
   let fixtureAssetId = null;
 
   beforeAll(async () => {
-    try {
-      await apiClient.authenticate(config.ADMIN_USER, config.ADMIN_PASSWORD);
-    } catch (_) {
-      await apiClient.authenticate(config.TEST_USER, config.TEST_PASSWORD);
-    }
+    await apiClient.authenticate(config.ADMIN_USER, config.ADMIN_PASSWORD);
 
     // Try to surface an existing asset id from the tenant so Mode A tests have
     // something real to attach. If the tenant is empty, skip the Mode A tests.
@@ -196,7 +192,8 @@ describe('AI Assistant Material', () => {
         type: 'ai_assistant',
         description: 'missing name'
       });
-      expect([400, 422, 500]).toContain(response.status);
+      // Name validation runs before any DataLens call, so no 500 tolerance is needed here.
+      expect([400, 422]).toContain(response.status);
     });
   });
 });

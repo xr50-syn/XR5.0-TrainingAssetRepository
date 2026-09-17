@@ -103,7 +103,7 @@ function createSimpleMaterial(suffix = '') {
   return {
     name: `Test Material ${suffix || timestamp}`,
     description: 'A simple test material for verification',
-    type: 'Simple'
+    type: 'Default'
   };
 }
 
@@ -219,10 +219,11 @@ function createWorkflowMaterial(suffix = '') {
  * Generate a composite material (parent)
  */
 function createCompositeMaterial(suffix = '') {
+  // There is no dedicated composite type: any material can hold children.
   return {
     name: `Test Composite ${suffix || timestamp}`,
     description: 'A composite material that can contain children',
-    type: 'Composite'
+    type: 'Default'
   };
 }
 

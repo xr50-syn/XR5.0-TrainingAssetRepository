@@ -6,39 +6,30 @@ const config = require('../config');
  * Material CRUD Tests
  *
  * Verifies material creation, retrieval, update, and deletion.
+ *
+ * The suite authenticates as ADMIN_USER, which must be allowed to author content, so a
+ * 401/403/500 is a failure rather than an accepted outcome. Tests that depend on an earlier
+ * create fail when it is missing instead of returning early: an early return counts as a pass,
+ * which hid these paths behind a green run.
  */
 
 describe('Material Operations', () => {
   let createdMaterialId;
 
   beforeAll(async () => {
-    try {
-      await apiClient.authenticate(config.ADMIN_USER, config.ADMIN_PASSWORD);
-    } catch (error) {
-      await apiClient.authenticate(config.TEST_USER, config.TEST_PASSWORD);
-    }
+    await apiClient.authenticate(config.ADMIN_USER, config.ADMIN_PASSWORD);
   });
 
   afterAll(async () => {
-    // Cleanup
-    if (createdMaterialId && !config.SKIP_CLEANUP) {
-      try {
-        await apiClient.deleteMaterial(createdMaterialId);
-      } catch (error) {
-        // Ignore
-      }
-    }
+    expect(await apiClient.cleanupTracked()).toEqual([]);
   });
 
   describe('List Materials', () => {
     test('can list materials', async () => {
       const response = await apiClient.listMaterials();
 
-      expect([200, 401, 403]).toContain(response.status);
-
-      if (response.status === 200) {
-        expect(Array.isArray(response.data)).toBe(true);
-      }
+      expect(response.status).toBe(200);
+      expect(Array.isArray(response.data)).toBe(true);
     });
   });
 
@@ -59,12 +50,9 @@ describe('Material Operations', () => {
       const response = await apiClient.createMaterial(material);
 
       logMaterialFailure(material, response, 'CREATE VIDEO');
-      expect([200, 201, 401, 403, 500]).toContain(response.status);
-
-      if (response.status === 200 || response.status === 201) {
-        expect(response.data).toHaveProperty('type', 'video');
-        global.__TEST_CONFIG__?.createdResources?.materials?.push(response.data.id);
-      }
+      expect([200, 201]).toContain(response.status);
+      expect(response.data).toHaveProperty('type', 'video');
+      createdMaterialId = apiClient.track('materials', response.data.id);
     });
 
     test('can create checklist material', async () => {
@@ -72,12 +60,9 @@ describe('Material Operations', () => {
       const response = await apiClient.createMaterial(material);
 
       logMaterialFailure(material, response, 'CREATE CHECKLIST');
-      expect([200, 201, 401, 403, 500]).toContain(response.status);
-
-      if (response.status === 200 || response.status === 201) {
-        expect(response.data).toHaveProperty('type', 'checklist');
-        global.__TEST_CONFIG__?.createdResources?.materials?.push(response.data.id);
-      }
+      expect([200, 201]).toContain(response.status);
+      expect(response.data).toHaveProperty('type', 'checklist');
+      apiClient.track('materials', response.data.id);
     });
 
     test('can create workflow material', async () => {
@@ -85,12 +70,9 @@ describe('Material Operations', () => {
       const response = await apiClient.createMaterial(material);
 
       logMaterialFailure(material, response, 'CREATE WORKFLOW');
-      expect([200, 201, 401, 403, 500]).toContain(response.status);
-
-      if (response.status === 200 || response.status === 201) {
-        expect(response.data).toHaveProperty('type', 'workflow');
-        global.__TEST_CONFIG__?.createdResources?.materials?.push(response.data.id);
-      }
+      expect([200, 201]).toContain(response.status);
+      expect(response.data).toHaveProperty('type', 'workflow');
+      apiClient.track('materials', response.data.id);
     });
 
     test('can create chatbot material', async () => {
@@ -98,21 +80,15 @@ describe('Material Operations', () => {
       const response = await apiClient.createMaterial(material);
 
       logMaterialFailure(material, response, 'CREATE CHATBOT');
-      expect([200, 201, 401, 403, 500]).toContain(response.status);
-
-      if (response.status === 200 || response.status === 201) {
-        expect(response.data).toHaveProperty('type', 'chatbot');
-        global.__TEST_CONFIG__?.createdResources?.materials?.push(response.data.id);
-      }
+      expect([200, 201]).toContain(response.status);
+      expect(response.data).toHaveProperty('type', 'chatbot');
+      apiClient.track('materials', response.data.id);
     });
   });
 
   describe('Read Materials', () => {
     test('can get material by ID', async () => {
-      if (!createdMaterialId) {
-        console.log('Skipping: No material created');
-        return;
-      }
+      expect(createdMaterialId).toBeDefined();
 
       const response = await apiClient.getMaterial(createdMaterialId);
 
@@ -121,10 +97,7 @@ describe('Material Operations', () => {
     });
 
     test('can get material detail', async () => {
-      if (!createdMaterialId) {
-        console.log('Skipping: No material created');
-        return;
-      }
+      expect(createdMaterialId).toBeDefined();
 
       const response = await apiClient.getMaterialDetail(createdMaterialId);
 
@@ -140,36 +113,50 @@ describe('Material Operations', () => {
   });
 
   describe('Update Materials', () => {
+    // PUT replaces the material, so every update sends the full object.
     test('can update material name', async () => {
-      if (!createdMaterialId) {
-        console.log('Skipping: No material created');
-        return;
-      }
+      expect(createdMaterialId).toBeDefined();
 
       const newName = `Updated Material ${Date.now()}`;
       const response = await apiClient.updateMaterial(createdMaterialId, {
+        ...testData.createVideoMaterial(),
         name: newName
       });
 
       expect([200, 204]).toContain(response.status);
 
-      // Verify the update
       const getResponse = await apiClient.getMaterial(createdMaterialId);
       expect(getResponse.data.name).toBe(newName);
     });
 
     test('can update material description', async () => {
-      if (!createdMaterialId) {
-        console.log('Skipping: No material created');
-        return;
-      }
+      expect(createdMaterialId).toBeDefined();
 
       const newDescription = 'Updated description for verification';
       const response = await apiClient.updateMaterial(createdMaterialId, {
+        ...testData.createVideoMaterial(),
         description: newDescription
       });
 
       expect([200, 204]).toContain(response.status);
+
+      const getResponse = await apiClient.getMaterial(createdMaterialId);
+      expect(getResponse.data.description).toBe(newDescription);
+    });
+
+    test('rejects update without name and keeps the stored name', async () => {
+      expect(createdMaterialId).toBeDefined();
+
+      const before = await apiClient.getMaterial(createdMaterialId);
+      const response = await apiClient.updateMaterial(createdMaterialId, {
+        description: 'Description only',
+        type: 'Video'
+      });
+
+      expect(response.status).toBe(400);
+
+      const after = await apiClient.getMaterial(createdMaterialId);
+      expect(after.data.name).toBe(before.data.name);
     });
   });
 
@@ -179,12 +166,9 @@ describe('Material Operations', () => {
       const material = testData.createSimpleMaterial('delete-test');
       const createResponse = await apiClient.createMaterial(material);
 
-      if (createResponse.status !== 200 && createResponse.status !== 201) {
-        console.log('Skipping: Could not create material');
-        return;
-      }
-
-      const materialId = createResponse.data.id;
+      expect([200, 201]).toContain(createResponse.status);
+      // Tracked so a failed delete below still gets cleaned up.
+      const materialId = apiClient.track('materials', createResponse.data.id);
 
       // Delete it
       const deleteResponse = await apiClient.deleteMaterial(materialId);
