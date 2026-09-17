@@ -21,7 +21,8 @@ public sealed class ApiExceptionHandler(
             httpContext.Request.Method,
             httpContext.Request.Path);
 
-        var mapping = MapException(exception, environment.IsDevelopment());
+        var mapping = UnknownTenantMapping(httpContext, exception)
+            ?? MapException(exception, environment.IsDevelopment());
 
         httpContext.Response.StatusCode = mapping.StatusCode;
 
@@ -39,6 +40,44 @@ public sealed class ApiExceptionHandler(
             ProblemDetails = problemDetails,
             Exception = exception
         });
+    }
+
+    /// <summary>
+    /// A tenant route names its database directly, so a request for a tenant that was never
+    /// provisioned fails when the connection opens with MySQL "Unknown database". That is a
+    /// missing resource, not a server fault. Only requests that carry a tenantName route value
+    /// are mapped; the same error anywhere else is still a 500.
+    /// </summary>
+    private static ExceptionMapping? UnknownTenantMapping(HttpContext httpContext, Exception exception)
+    {
+        // The exception handler middleware clears the request's route values before handlers
+        // run; the originals are preserved on the exception handler feature.
+        var routeValues = httpContext.Features.Get<IExceptionHandlerFeature>()?.RouteValues;
+        if (routeValues?["tenantName"] is not string tenantName || !IsUnknownDatabase(exception))
+        {
+            return null;
+        }
+
+        return new ExceptionMapping(
+            StatusCodes.Status404NotFound,
+            "Tenant not found",
+            $"Tenant '{tenantName}' not found.",
+            "https://api.xr50/errors/resource-not-found",
+            "tenant_not_found");
+    }
+
+    // EF Core may wrap the provider exception, so walk the whole inner-exception chain.
+    private static bool IsUnknownDatabase(Exception? exception)
+    {
+        for (var current = exception; current != null; current = current.InnerException)
+        {
+            if (current is MySqlConnector.MySqlException { ErrorCode: MySqlConnector.MySqlErrorCode.UnknownDatabase })
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static ExceptionMapping MapException(Exception exception, bool includeExceptionDetails)

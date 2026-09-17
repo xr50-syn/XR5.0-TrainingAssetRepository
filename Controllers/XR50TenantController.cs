@@ -257,7 +257,7 @@ namespace XR50TrainingAssetRepo.Controllers
             {
                 _logger.LogInformation("Getting tenant: {TenantName}", tenantName);
                 
-                var tenant = await _tenantManagementService.GetTenantAsync(tenantName);
+                var tenant = await FindTenantAsync(tenantName);
                 if (tenant == null)
                 {
                     _logger.LogWarning("Tenant not found: {TenantName}", tenantName);
@@ -324,6 +324,15 @@ namespace XR50TrainingAssetRepo.Controllers
         {
             try
             {
+                // A tenant counts as present if it has an active registry row or a database. The
+                // database check keeps a half-provisioned tenant (database, no registry row)
+                // deletable; with neither, there is nothing to delete and the caller gets a 404.
+                if (await FindTenantAsync(tenantName) == null && !await _tenantService.TenantExistsAsync(tenantName))
+                {
+                    _logger.LogWarning("Delete requested for unknown tenant: {TenantName}", tenantName);
+                    return this.ProblemNotFound($"Tenant '{tenantName}' not found.");
+                }
+
                 _logger.LogWarning("Deleting tenant: {TenantName}", tenantName);
                 
                 await _tenantManagementService.DeleteTenantAsync(tenantName);
@@ -354,7 +363,7 @@ namespace XR50TrainingAssetRepo.Controllers
             {
                 _logger.LogInformation("Validating storage for tenant: {TenantName}", tenantName);
                 
-                var tenant = await _tenantManagementService.GetTenantAsync(tenantName);
+                var tenant = await FindTenantAsync(tenantName);
                 if (tenant == null)
                 {
                     return this.ProblemNotFound($"Tenant '{tenantName}' not found.");
@@ -528,6 +537,21 @@ namespace XR50TrainingAssetRepo.Controllers
             };
 
             return Ok(examples);
+        }
+
+        // GetTenantAsync signals a missing tenant by throwing ArgumentException rather than
+        // returning null. Catching it here, around the lookup alone, keeps an unrelated
+        // ArgumentException later in an action from being reported as "tenant not found".
+        private async Task<XR50Tenant?> FindTenantAsync(string tenantName)
+        {
+            try
+            {
+                return await _tenantManagementService.GetTenantAsync(tenantName);
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
         }
     }
 }

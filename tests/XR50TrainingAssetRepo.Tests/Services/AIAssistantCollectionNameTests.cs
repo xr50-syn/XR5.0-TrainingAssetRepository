@@ -112,6 +112,7 @@ public class AIAssistantCollectionNameTests : IClassFixture<WebApplicationFixtur
         var put = await _client.PutAsJsonAsync($"{MaterialsUrl}/{created!.id}", new
         {
             type = "ai_assistant",
+            name = "Repoint me",
             collectionName = "second_collection"
         });
         put.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.NoContent);
