@@ -625,8 +625,11 @@ namespace XR50TrainingAssetRepo.Services
                     return result;
                 }
 
-                // AI Assistant owners: drop the whole collection if this was the last asset,
-                // otherwise drop just this asset's document from the assistant's collection.
+                // AI Assistant owners: drop the whole collection if this was the last asset and the
+                // collection is the one the repository generated for this material; otherwise drop
+                // just this asset's document. A legacy "aiassist_{id}" binding can be shared with a
+                // same-numbered material of another tenant, and an explicit collection name can be
+                // shared on purpose, so neither is deleted as a whole.
                 foreach (var owner in deps.AiAssistants)
                 {
                     var job = await context.AIAssistantMaterialAssetJobs
@@ -637,7 +640,8 @@ namespace XR50TrainingAssetRepo.Services
                         continue;
                     }
 
-                    if (owner.GetAssetIdsList().Count <= 1)
+                    if (owner.GetAssetIdsList().Count <= 1
+                        && AIAssistantCollections.IsOwnCollection(collection, tenantName, owner.id))
                     {
                         collectionTargets.Add(collection);
                     }

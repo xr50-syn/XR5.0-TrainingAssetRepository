@@ -243,13 +243,13 @@ function createChatbotMaterial(suffix = '', endpoint = 'https://test.xr50.work')
 
 /**
  * Generate an AI Assistant material in Mode B (empty assets).
- * The server gives the material its own collection (aiassist_{id}) unless an
+ * The server gives the material its own collection (aiassist_{id}_{tenant}) unless an
  * explicit collectionName is supplied. Materials never share a collection by default.
  */
 function createAIAssistantMaterialEmpty(suffix = '') {
   return {
     name: `Test AI Assistant Empty ${suffix || timestamp}`,
-    description: 'Mode B: no assets, material gets its own aiassist_{id} collection',
+    description: 'Mode B: no assets, material gets its own aiassist_{id}_{tenant} collection',
     type: 'ai_assistant',
     unique_id: Math.floor(Math.random() * 100000),
     related: [],

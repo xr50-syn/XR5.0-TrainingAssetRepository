@@ -41,6 +41,7 @@ public class AIAssistantMaterialUpdateTests
             factory,
             chatbotApi,
             NoStoredFiles(),
+            new StubTenantService("test_tenant"),
             NullLogger<AIAssistantMaterialService>.Instance);
 
         await aiAssistantService.SubmitForProcessingAsync(10);
@@ -103,6 +104,7 @@ public class AIAssistantMaterialUpdateTests
             factory,
             new RecordingChatbotApiService(),
             NoStoredFiles(),
+            new StubTenantService("test_tenant"),
             NullLogger<AIAssistantMaterialService>.Instance);
 
         var service = new AIAssistantService(
@@ -161,6 +163,7 @@ public class AIAssistantMaterialUpdateTests
             factory,
             chatbotApi,
             new AssetContentReader(storage, new StubTenantService("test_tenant"), NullLogger<AssetContentReader>.Instance),
+            new StubTenantService("test_tenant"),
             NullLogger<AIAssistantMaterialService>.Instance);
 
         await service.SubmitForProcessingAsync(30);

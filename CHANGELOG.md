@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-20
 
+### Fixed - DataLens ingestion and tenant isolation of AI Assistant collections
+
+- **Collections are tenant-scoped.** Every tenant reaches DataLens through the one `ChatbotApi` connection, and material ids restart in each tenant database, so the default per-material collection `aiassist_{id}` was the same collection for material 10 of every tenant: an assistant could answer from another tenant's documents, and deleting an asset could drop another tenant's collection. New materials bind to `aiassist_{id}_{tenant}` (`Services/Materials/AIAssistantCollections.cs`). Existing bindings are not renamed.
+- **Asset deletion only drops collections the material owns.** When the last asset of an AI Assistant is deleted, the collection is removed only if it is the material's own tenant-scoped one; for a legacy `aiassist_{id}` or an explicitly supplied `collectionName` only the document is removed. Legacy per-material collections are therefore left in DataLens as possibly-shared data.
+- **Stored assets are ingested from storage.** AI Assistant, standalone asset and INNOV ingestion read an uploaded file through `IStorageService` (`IAssetContentReader`) instead of downloading `asset.URL`, which is built for clients from `S3Settings:PublicEndpoint`, may not resolve inside the container, and is unsigned against a private bucket. Only reference-only assets are still fetched by URL.
+- Per-tenant DataLens credentials (as INNOV already has) are pending agreement with the DataLens operators.
+
 ### Changed - Database schema is owned by EF Core migrations
 
 #### Summary

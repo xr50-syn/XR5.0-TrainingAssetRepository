@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
+using XR50TrainingAssetRepo.Services.Materials;
 using XR50TrainingAssetRepo.Tests.Fixtures;
 
 namespace XR50TrainingAssetRepo.Tests.Services;
@@ -202,8 +203,9 @@ public class AssetDeletionTests : IClassFixture<AssetDeletionTests.RecordingChat
     }
 
     [Fact]
-    public async Task Delete_AiAssistantLastAsset_DeletesMaterialAndCollection()
+    public async Task Delete_AiAssistantLastAsset_DeletesMaterialAndItsOwnCollection()
     {
+        var ownCollection = AIAssistantCollections.OwnCollectionFor(TenantName, 2005);
         Seed(ctx =>
         {
             ctx.Assets.Add(NewAsset(1006));
@@ -212,7 +214,7 @@ public class AssetDeletionTests : IClassFixture<AssetDeletionTests.RecordingChat
             {
                 id = 2005,
                 Name = "AI Assistant 2005",
-                CollectionName = "aiassist_2005",
+                CollectionName = ownCollection,
                 AIAssistantStatus = "ready"
             };
             ai.SetAssetIdsList(new List<int> { 1006 });
@@ -225,7 +227,42 @@ public class AssetDeletionTests : IClassFixture<AssetDeletionTests.RecordingChat
 
         Query(ctx => ctx.Assets.Any(a => a.Id == 1006)).Should().BeFalse();
         Query(ctx => ctx.Materials.Any(m => m.id == 2005)).Should().BeFalse();
-        _factory.Chatbot.DeletedCollections.Should().Contain("aiassist_2005");
+        _factory.Chatbot.DeletedCollections.Should().Contain(ownCollection);
+    }
+
+    /// <summary>
+    /// A collection the repository did not generate for this material in this tenant - the legacy
+    /// tenant-less "aiassist_{id}" name, or an explicitly supplied shared name - may hold another
+    /// tenant's or another assistant's documents. Deleting the last asset removes only its document.
+    /// </summary>
+    [Theory]
+    [InlineData(2008, 1008, "aiassist_2008")]
+    [InlineData(2009, 1009, "shared_engineering_manuals")]
+    public async Task Delete_AiAssistantLastAsset_InCollectionItDoesNotOwn_KeepsCollection(
+        int materialId, int assetId, string collection)
+    {
+        Seed(ctx =>
+        {
+            ctx.Assets.Add(NewAsset(assetId));
+
+            var ai = new AIAssistantMaterial
+            {
+                id = materialId,
+                Name = $"AI Assistant {materialId}",
+                CollectionName = collection,
+                AIAssistantStatus = "ready"
+            };
+            ai.SetAssetIdsList(new List<int> { assetId });
+            ctx.Materials.Add(ai);
+        });
+
+        var response = await _client.DeleteAsync($"/api/{TenantName}/assets/{assetId}?force=true");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        Query(ctx => ctx.Materials.Any(m => m.id == materialId)).Should().BeFalse();
+        _factory.Chatbot.DeletedCollections.Should().NotContain(collection);
+        _factory.Chatbot.DeletedDocuments.Should().Contain(d => d.Collection == collection);
     }
 
     /// <summary>

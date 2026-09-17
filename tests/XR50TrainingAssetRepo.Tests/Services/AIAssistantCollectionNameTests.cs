@@ -1,4 +1,5 @@
 using XR50TrainingAssetRepo.Models.DTOs;
+using XR50TrainingAssetRepo.Services.Materials;
 using XR50TrainingAssetRepo.Tests.Fixtures;
 
 namespace XR50TrainingAssetRepo.Tests.Services;
@@ -9,10 +10,10 @@ namespace XR50TrainingAssetRepo.Tests.Services;
 ///
 /// Motivation: a tenant may keep separate document sets (different document types) in distinct
 /// DataLens collections and want an assistant to ingest into / chat against a chosen one rather than
-/// the auto-assigned per-material collection (aiassist_{id}).
+/// the auto-assigned per-material collection (aiassist_{id}_{tenant}).
 ///
 /// These cases use Mode B (no assets): the create path then calls CreateAsync, which honors a
-/// pre-set CollectionName and never auto-assigns aiassist_{id} or calls DataLens — keeping the
+/// pre-set CollectionName and never auto-assigns its own collection or calls DataLens — keeping the
 /// test free of external dependencies.
 /// </summary>
 public class AIAssistantCollectionNameTests : IClassFixture<WebApplicationFixture>
@@ -56,6 +57,45 @@ public class AIAssistantCollectionNameTests : IClassFixture<WebApplicationFixtur
         var material = await GetMaterialFromDbAsync(body.id);
         material.CollectionName.Should().Be("engineering_manuals",
             "the persisted material must keep the explicit collection, not the tenant default");
+    }
+
+    [Fact]
+    public async Task Create_WithoutCollectionName_BindsToTenantScopedOwnCollection()
+    {
+        var response = await _client.PostAsJsonAsync(MaterialsUrl, new
+        {
+            name = "Default collection assistant",
+            type = "ai_assistant"
+        });
+
+        response.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.Created);
+
+        var body = await response.Content.ReadFromJsonAsync<CreateMaterialResponse>();
+        var expected = AIAssistantCollections.OwnCollectionFor(WebApplicationFixture.TestTenant, body!.id);
+        body.CollectionName.Should().Be(expected);
+        (await GetMaterialFromDbAsync(body.id)).CollectionName.Should().Be(expected);
+    }
+
+    /// <summary>
+    /// Material ids restart in every tenant database, so the owned name must differ per tenant and
+    /// must never coincide with a tenant default collection or a legacy tenant-less name.
+    /// </summary>
+    [Fact]
+    public void OwnCollectionName_IsTenantScoped_AndCannotCollideWithOtherShapes()
+    {
+        AIAssistantCollections.OwnCollectionFor("tenant_a", 10)
+            .Should().NotBe(AIAssistantCollections.OwnCollectionFor("tenant_b", 10));
+
+        AIAssistantCollections.OwnCollectionFor("Acme-Corp", 7).Should().Be("aiassist_7_acme_corp");
+
+        // A tenant called "default" cannot produce another tenant's default collection name.
+        AIAssistantCollections.OwnCollectionFor("default", 5).Should().NotBe("aiassist_default_5");
+
+        // Nor the legacy per-material name.
+        AIAssistantCollections.OwnCollectionFor("x", 12).Should().NotBe("aiassist_12");
+
+        AIAssistantCollections.IsOwnCollection("aiassist_7_acme_corp", "Acme-Corp", 7).Should().BeTrue();
+        AIAssistantCollections.IsOwnCollection("aiassist_7", "Acme-Corp", 7).Should().BeFalse();
     }
 
     [Fact]

@@ -6,7 +6,7 @@ const config = require('../config');
  * AI Assistant Material Tests
  *
  * Smoke coverage for the AI Assistant create flow:
- *  - Mode B (empty assets) → material gets its own aiassist_{id} DataLens collection,
+ *  - Mode B (empty assets) → material gets its own aiassist_{id}_{tenant} DataLens collection,
  *    no upload happens, status stays "notready" until something triggers processing.
  *  - Mode A (assets present, multiple accepted payload shapes) → assets persisted to
  *    AIAssistantAssetIds, DataLens collection ensured, submit attempted.
@@ -27,15 +27,14 @@ const config = require('../config');
 
 const OK_STATUSES = [200, 201];
 
-// DataLens is shared with other deployments, and collections are named aiassist_{materialId}
-// by default, so a test material can land on a collection another tenant already uses. Every
-// Mode A material therefore names its own collection, unique to this run: the tests never write
-// into, or (through the forced asset delete in afterAll) remove, a collection they did not create.
-const RUN_ID = Date.now();
-const withOwnCollection = (payload, testCase) => ({
-  ...payload,
-  collectionName: `functest_${RUN_ID}_${testCase.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`
-});
+// Mode A materials bind to their default collection, aiassist_{id}_{tenant}. The forced asset
+// delete in afterAll removes a collection only when it is the material's own tenant-scoped one,
+// so each create asserts that binding: the cleanup can then never remove a collection the suite
+// did not get from its own tenant. (Residual risk while DataLens is shared: another deployment
+// with a tenant of the same name and a material of the same id. Per-tenant DataLens credentials
+// would remove it.)
+const ownCollectionFor = (materialId) =>
+  `aiassist_${materialId}_${config.getEffectiveTenant().replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase()}`;
 
 describe('AI Assistant Material', () => {
   let fixtureAssetId;
@@ -52,10 +51,7 @@ describe('AI Assistant Material', () => {
     expect(reachableStatuses()).toContain(response.status);
     if (OK_STATUSES.includes(response.status)) {
       apiClient.track('materials', response.data.id);
-      if (payload.collectionName) {
-        // The cleanup is only safe if the material really is bound to the run-unique collection.
-        expect(response.data.collectionName).toBe(payload.collectionName);
-      }
+      expect(response.data.collectionName).toBe(ownCollectionFor(response.data.id));
     }
     return response;
   };
@@ -124,7 +120,7 @@ describe('AI Assistant Material', () => {
   describe('Mode A — assets provided', () => {
     test('accepts config.assets[].id with numeric-string id', async () => {
       const response = await createTracked(
-        withOwnCollection(testData.createAIAssistantMaterialWithConfigAssets(fixtureAssetId, 'config'), 'config'));
+        testData.createAIAssistantMaterialWithConfigAssets(fixtureAssetId, 'config'));
       if (!OK_STATUSES.includes(response.status)) return;
 
       expect(response.data).toHaveProperty('type', 'ai_assistant');
@@ -134,7 +130,7 @@ describe('AI Assistant Material', () => {
 
     test('accepts top-level assets[].id with numeric-string id', async () => {
       const response = await createTracked(
-        withOwnCollection(testData.createAIAssistantMaterialWithTopLevelAssets(fixtureAssetId, 'toplevel'), 'toplevel'));
+        testData.createAIAssistantMaterialWithTopLevelAssets(fixtureAssetId, 'toplevel'));
       if (!OK_STATUSES.includes(response.status)) return;
 
       expect(response.data.assetIds).toEqual([String(fixtureAssetId)]);
@@ -142,7 +138,7 @@ describe('AI Assistant Material', () => {
 
     test('accepts legacy assetIds[] flat number array', async () => {
       const response = await createTracked(
-        withOwnCollection(testData.createAIAssistantMaterialWithLegacyIds(fixtureAssetId, 'legacy'), 'legacy'));
+        testData.createAIAssistantMaterialWithLegacyIds(fixtureAssetId, 'legacy'));
       if (!OK_STATUSES.includes(response.status)) return;
 
       expect(response.data.assetIds).toEqual([String(fixtureAssetId)]);
@@ -150,7 +146,7 @@ describe('AI Assistant Material', () => {
 
     test('GET after Mode A create exposes the linked asset', async () => {
       const createResponse = await createTracked(
-        withOwnCollection(testData.createAIAssistantMaterialWithConfigAssets(fixtureAssetId, 'config-read'), 'config-read'));
+        testData.createAIAssistantMaterialWithConfigAssets(fixtureAssetId, 'config-read'));
       if (!OK_STATUSES.includes(createResponse.status)) return;
 
       const detail = await apiClient.getMaterialDetail(createResponse.data.id);
@@ -171,7 +167,7 @@ describe('AI Assistant Material', () => {
     // information needed for a deploy smoke to fail loudly.
     test('response shape carries Warnings and "partial" status when chatbot side breaks', async () => {
       const response = await createTracked(
-        withOwnCollection(testData.createAIAssistantMaterialWithConfigAssets(fixtureAssetId, 'failure-shape'), 'failure-shape'));
+        testData.createAIAssistantMaterialWithConfigAssets(fixtureAssetId, 'failure-shape'));
       if (!OK_STATUSES.includes(response.status)) return;
 
       // status must be one of the documented values

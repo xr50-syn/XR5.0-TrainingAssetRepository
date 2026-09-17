@@ -30,7 +30,7 @@ namespace XR50TrainingAssetRepo.Models
         // AI Assistant Configuration
         // Per-tenant DataLens collection for the generic Chat API and the default (material-less)
         // AI assistant endpoint, and the fallback collection for asset-level AI status sync.
-        // AIAssistant *materials* do NOT use this — each gets its own collection (aiassist_{id}).
+        // AIAssistant *materials* do NOT use this — each gets its own collection (aiassist_{id}_{tenant}).
         // Per-tenant scoping keeps tenants from sharing one global collection (which would expose
         // documents across tenants through the chatbot).
         public string? DefaultAICollection { get; set; }

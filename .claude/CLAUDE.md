@@ -306,7 +306,7 @@ public class ChatbotMaterial : Material
 // DataLens-backed RAG assistant (document Q&A; multi-asset, status tracking, sessions)
 public class AIAssistantMaterial : Material
 {
-    public string? CollectionName { get; set; }       // DataLens collection (defaults to its own aiassist_{id})
+    public string? CollectionName { get; set; }       // DataLens collection (defaults to its own aiassist_{id}_{tenant})
     public string AIAssistantStatus { get; set; }     // notready | process | ready
     public string? AIAssistantAssetIds { get; set; }  // JSON array of asset IDs
 }

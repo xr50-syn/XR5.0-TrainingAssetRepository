@@ -154,8 +154,8 @@ npm run test:verbose
 Smoke coverage for the AI Assistant material + DataLens integration. Two modes:
 
 - **Mode B** — payload has no assets. The material gets its own collection
-  (`aiassist_{id}`, derived from the material id) unless an explicit `collectionName`
-  is supplied. No uploads happen; `aiAssistantStatus` stays `"notready"` until
+  (`aiassist_{id}_{tenant}`, derived from the material id and tenant) unless an explicit
+  `collectionName` is supplied. No uploads happen; `aiAssistantStatus` stays `"notready"` until
   something triggers processing. Materials never share a collection by default.
 - **Mode A** — payload has assets. Three accepted shapes, all with `id` as number or
   numeric string:
@@ -170,9 +170,11 @@ Tests also assert the deploy-safety contract on the `CreateMaterialResponse`:
   assert on these to fail loudly on bad deploys instead of silently creating
   materials that never process.
 
-**Fixture asset:** the Mode A tests need an existing asset in the tenant. The suite
-auto-discovers one via `GET /assets` (preferring `pdf`). If the tenant has no assets,
-Mode A tests are skipped with a log message — Mode B and the validation test still run.
+**Fixture asset:** the suite uploads a generated PDF in `beforeAll`, so Mode A always runs.
+Each Mode A material binds to its own tenant-scoped collection (`aiassist_{id}_{tenant}`),
+and the suite asserts that binding: the forced delete of the fixture asset in `afterAll`
+removes only such owned collections, never a legacy or explicitly named one. A 500 is tolerated
+only when `GET /ai-assistant/health` reports DataLens unavailable.
 
 **Required config for the DataLens side of these tests:**
 
@@ -181,8 +183,8 @@ Mode A tests are skipped with a log message — Mode B and the validation test s
 | `ChatbotApi__BaseUrl` | app env (compose) | Points at DataLens v1.1.0 (`https://datalens.xr50.work`) |
 | `CHATBOT_API_BEARER_TOKEN` | `.env` | Admin token; required to create per-material and per-tenant collections |
 
-Each AI Assistant material gets its own per-material collection (`aiassist_{id}`) by
-default; an explicit `collectionName` overrides it. There is no global shared default,
+Each AI Assistant material gets its own per-material, per-tenant collection
+(`aiassist_{id}_{tenant}`) by default; an explicit `collectionName` overrides it. There is no global shared default,
 and the collection is created in DataLens on first use.
 
 ## Debugging
