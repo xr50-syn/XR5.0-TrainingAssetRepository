@@ -15,7 +15,7 @@ Use these skills for common tasks:
 
 This is the **XR5.0 Training Asset Repository**, a research prototype developed for the Horizon Europe XR5.0 project (Grant Agreement No. 101135209). It provides multi-tenant, cloud-agnostic storage for Extended Reality (XR) training materials.
 
-**Status**: Research prototype. JWT authentication + RBAC are enforced (see Authentication & Authorization below); the production identity provider is TBD (Keycloak is the development stand-in), and local password storage / IAM user provisioning are deferred until the platform's IAM server is decided.
+**Status**: Research prototype. Authentication + RBAC are enforced (see Authentication & Authorization below). The production identity provider is the XR5.0 Hub; Keycloak is a Development-only stand-in.
 
 ### Technology Stack
 - **Framework**: ASP.NET Core 8.0
@@ -71,23 +71,59 @@ public interface IStorageService
 
 ### Authentication & Authorization
 
-JWT Bearer (OIDC discovery) + policy-based RBAC with tenant binding. The building blocks live in
-`Infrastructure/Auth/` (`IamOptions`, `ClaimsPrincipalExtensions`, requirements/handlers); policies
-are registered in `Program.cs`.
+Authentication resolves a request to a principal with a tenant claim and roles; policy-based RBAC
+with tenant binding does the rest. Building blocks are in `Infrastructure/Auth/`; schemes and
+policies are registered in `Program.cs`. Full reference: `docs/guides/authentication.md`.
+
+**Credentials** (the `XR50AuthSelector` policy scheme routes each request via `HubTokenReader`):
+
+| Credential | Sent as | Validated by | Environments |
+|---|---|---|---|
+| Hub login JWT (from Hub `POST /api/v1/auth/authenticate`) | `Authorization: Bearer <jwt>` | Hub `GET /api/v1/user/limited-info` (`HubUserTokenService`) | all |
+| Hub session token (partner spec) | `HL-Hub-Session-Token`, or a non-JWT `Authorization: Bearer` | Hub decrypt API + `XR50Hub:SharedSecret` (`HubSessionTokenService`) | all |
+| Keycloak JWT | `Authorization: Bearer <jwt>` with `iss` = `IAM:Issuer` | JWT bearer, OIDC discovery | Development only |
+
+- **Production is Hub-only.** TPAT and other screens embedded in the Hub frontend send the Hub login
+  JWT. IL cannot verify its signature (HS256, the Hub's key), so the Hub validates it. IL only peeks
+  at `exp` (to reject expired tokens without a call and to bound the cache) and `iss` (routing).
+- **Routing:** `HL-Hub-Session-Token` wins; an opaque bearer is a session token; a JWT bearer is a Hub
+  login token, except in Development when its `iss` equals `IAM:Issuer`, which keeps Keycloak tokens
+  on the JWT scheme and never sends them to the Hub.
+- **Hub failures:** a rejected token is `401`; the Hub unreachable or erroring is `503`. Hub answers are
+  cached by token SHA-256 for `XR50Hub:CacheSeconds` (60s), never past `exp`. Never log the token.
+
+**Where identity comes from differs by credential:**
+
+| | Hub (both credentials) | Keycloak (Development) |
+|---|---|---|
+| User | Hub user GUID (`id` / `userId`) | `preferred_username` |
+| Tenant | Hub tenant GUID mapped to an IL tenant via `XR50TenantRegistry.HubTenantId` (`HubIdentityEnricher`) | `tenantName` claim is the IL tenant name |
+| Roles | IL database: `TenantAdmins` (tenant admin), `Users.admin` (system admin) | `role` claim in the token |
+| Users | Auto-provisioned as plain members on first request (`XR50Hub:AutoProvisionUsers`) | Not provisioned |
+
+Operationally, for Hub users: set a tenant's Hub mapping with `PUT xr50/trainingAssetRepository/Tenants/{name}/hub-tenant`
+(SystemAdmin), or authenticated users get `403` on its routes (an unmapped result is cached for up to
+60s). Grant authoring with `PUT api/{tenant}/users/{user}/role` (`tenantadmin`). Role grants take
+effect immediately.
 
 **Policies** (attributes AND together — controller-level `TenantMember` + action-level `TenantAdmin`):
 
 | Policy | Grants | Applied to |
 |---|---|---|
-| `TenantMember` | Token's tenant claim matches the `{tenantName}` route segment (system admins exempt) | Controller-level on all tenant-scoped controllers; learner-facing POSTs (quiz submit, chat, mark-complete) |
+| `TenantMember` | Principal's tenant claim matches the `{tenantName}` route segment (system admins exempt) | Controller-level on all tenant-scoped controllers; learner-facing POSTs (quiz submit, chat, mark-complete) |
 | `TenantAdmin` | Tenant match + role in `IAM:TenantAdminRoles` | Content-management mutations (create/update/delete of materials, assets, users, programs, paths, ingestion config) |
-| `SystemAdmin` | Role in `IAM:SystemAdminRoles` | Tenant provisioning/deletion, list-all-tenants, troubleshooting controller |
+| `SystemAdmin` | Role in `IAM:SystemAdminRoles` | Tenant deletion, list-all-tenants, Hub mapping, troubleshooting controller |
+| `TenantCreator` | System admin, or a Hub user creating the tenant for their own Hub tenant (self-service, enforced in the controller) | Tenant creation |
 | *(fallback)* | Any authenticated principal | Every endpoint without an explicit attribute (`FallbackPolicy`). `/health` and `/api/test` are `[AllowAnonymous]` |
 
-**Provider-agnostic claims**: the production IAM is TBD, so claim names/role values are configured
-under `IAM` (`TenantClaim`, `RoleClaim`, `TenantAdminRoles`, `SystemAdminRoles`); defaults match the
-bundled Keycloak realm (`keycloak-config/xr50-realm.json`). Extract user identity with
-`User.GetUserId()` (`ClaimsPrincipalExtensions`) — do not hand-roll claim fallback chains.
+**Claim names** the policies read are configured under `IAM` (`TenantClaim`, `RoleClaim`,
+`TenantAdminRoles`, `SystemAdminRoles`); the Hub handler emits those same names, so policies do not
+care which credential authenticated. Extract user identity with `User.GetUserId()`
+(`ClaimsPrincipalExtensions`) — do not hand-roll claim fallback chains.
+
+**Configuration** (`.env` → compose): `XR50HUB_BASE_URL`, `XR50HUB_SHARED_SECRET`, `XR50HUB_DEV_TOKEN`
+(a fixed session token honoured only in Development), `XR50HUB_AUTO_PROVISION_USERS`; Keycloak via the
+`KEYCLOAK_*` variables. Secrets arrive out of band and are never committed.
 
 **Development bypass**: `IAM:AllowAnonymousInDevelopment=true` + Development environment allows
 anonymous requests (evaluated in one place: `XR50AuthorizationHandler`). `NO_AUTH=true` Jest runs
@@ -97,12 +133,16 @@ default sandbox run enforces auth (authenticate against the bundled Keycloak: re
 `systemadmin` and is what the Jest harness uses by default, since per-run test tenants
 require the tenant-binding exemption).
 
-**Hermetic tests** authenticate via `TestAuthHandler` (`tests/.../Fixtures/TestAuthHandler.cs`):
+**Hermetic tests**: most suites authenticate via `TestAuthHandler` (`tests/.../Fixtures/TestAuthHandler.cs`):
 default principal is a systemadmin; override per request with `X-Test-User`/`X-Test-Roles`/
-`X-Test-Tenant`, or `X-Test-Anonymous: true` for 401 paths. See `Integration/AuthorizationTests.cs`.
+`X-Test-Tenant`, or `X-Test-Anonymous: true` for 401 paths (see `Integration/AuthorizationTests.cs`).
+Hub authentication keeps the real schemes and fakes only the Hub calls and the enricher
+(`HubAuthWebApplicationFixture`; see `Integration/HubAuthenticationTests.cs`,
+`Services/HubUserTokenServiceTests.cs`, `Services/HubSessionTokenServiceTests.cs`).
 
-**Deferred** until the platform IAM is decided: local `User.Password` hashing/removal, IAM user
-provisioning, and wiring the `TenantAdmins` DB table into authorization (roles come from the token only).
+**Still open**: local `User.Password` is stored unhashed and no credential authenticates against it;
+it is only mirrored into OwnCloud accounts on OwnCloud-backed tenants (hashing or removal pending).
+Per-tenant DataLens credentials await the DataLens team.
 
 ## Directory Structure
 
