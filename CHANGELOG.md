@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-20
 
+### Added - Hub session token accepted as `Authorization: Bearer`
+
+The Training Programs Authoring Tool runs inside the Hub frontend and attaches the Hub session token as `Authorization: Bearer <token>`, while the API only looked for it in `HL-Hub-Session-Token`, so those requests were routed to JWT validation and rejected. A non-JWT bearer value is now validated as a Hub session token, exactly like the header (decrypt API, tenant mapping, database roles). The header still takes precedence, and JWT-shaped bearers keep going to the JWT scheme, so they are never forwarded to the Hub. Additive: existing header-based callers and Development Keycloak tokens are unaffected. Affected: `Infrastructure/Auth/XR50HubOptions.cs` (`HubSessionTokenDefaults.TryGetToken`), `Infrastructure/Auth/HubSessionTokenAuthenticationHandler.cs`, `Program.cs`, `tests/.../Integration/HubAuthenticationTests.cs`, `docs/guides/authentication.md`.
+
 ### Fixed - DataLens ingestion and tenant isolation of AI Assistant collections
 
 - **Collections are tenant-scoped.** Every tenant reaches DataLens through the one `ChatbotApi` connection, and material ids restart in each tenant database, so the default per-material collection `aiassist_{id}` was the same collection for material 10 of every tenant: an assistant could answer from another tenant's documents, and deleting an asset could drop another tenant's collection. New materials bind to `aiassist_{id}_{tenant}` (`Services/Materials/AIAssistantCollections.cs`). Existing bindings are not renamed.

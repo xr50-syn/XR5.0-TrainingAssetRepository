@@ -9,7 +9,8 @@ using XR50TrainingAssetRepo.Services;
 namespace XR50TrainingAssetRepo.Infrastructure.Auth
 {
     /// <summary>
-    /// Authenticates requests carrying an XR5.0 Hub session token (HL-Hub-Session-Token header).
+    /// Authenticates requests carrying an XR5.0 Hub session token (HL-Hub-Session-Token header, or a
+    /// non-JWT Authorization: Bearer value; see <see cref="HubSessionTokenDefaults.TryGetToken"/>).
     /// The opaque token is validated through the Hub decrypt API and the returned claims are
     /// projected onto the claim names the authorization handlers already consume
     /// (preferred_username / tenantName / role). The token is a bearer credential and must
@@ -47,12 +48,11 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
 
         protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
         {
-            if (!Request.Headers.TryGetValue(HubSessionTokenDefaults.HeaderName, out var headerValues))
+            if (!HubSessionTokenDefaults.TryGetToken(Request, out var token))
             {
                 return AuthenticateResult.NoResult();
             }
 
-            var token = headerValues.ToString();
             if (string.IsNullOrWhiteSpace(token))
             {
                 return AuthenticateResult.Fail("Empty Hub session token");

@@ -7,7 +7,7 @@ namespace XR50TrainingAssetRepo.Tests.Integration;
 
 /// <summary>
 /// Exercises the XR5.0 Hub session token authentication path end-to-end through the HTTP
-/// pipeline: header-based scheme selection, decrypt outcomes (valid / invalid / secret rejected /
+/// pipeline: scheme selection (HL-Hub-Session-Token header or non-JWT Authorization: Bearer), decrypt outcomes (valid / invalid / secret rejected /
 /// unavailable), tenant scoping via the enricher, DB-derived roles, and the Development-only
 /// dev-token short-circuit. The decrypt client and enricher are fakes; everything else is real.
 /// </summary>
@@ -73,6 +73,65 @@ public class HubAuthenticationTests : IClassFixture<HubAuthWebApplicationFixture
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         response.Headers.WwwAuthenticate.ToString().Should().Contain("Bearer");
+    }
+
+    // --- Authorization: Bearer transport ---
+    // Clients embedded in the Hub frontend (TPAT) attach the session token as a standard bearer
+    // credential rather than in HL-Hub-Session-Token.
+
+    private const string JwtShapedToken = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl";
+
+    private static HttpRequestMessage BearerRequest(HttpMethod method, string uri, string token)
+    {
+        var request = new HttpRequestMessage(method, uri);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return request;
+    }
+
+    [Fact]
+    public async Task ValidToken_AsAuthorizationBearer_Returns200()
+    {
+        var token = RegisterToken(HubDecryptResult.ValidToken(ClaimsFor(MappedTenantId)));
+
+        var response = await _client.SendAsync(BearerRequest(HttpMethod.Get, $"/api/{Tenant}/materials", token));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task InvalidToken_AsAuthorizationBearer_Returns401_FromHubScheme()
+    {
+        var token = RegisterToken(HubDecryptResult.InvalidToken("EXPIRED"));
+
+        var response = await _client.SendAsync(BearerRequest(HttpMethod.Get, $"/api/{Tenant}/materials", token));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        response.Headers.WwwAuthenticate.ToString().Should().Contain(HubSessionTokenDefaults.HeaderName);
+    }
+
+    [Fact]
+    public async Task JwtShapedBearer_InDevelopment_GoesToJwtScheme_AndIsNeverSentToTheHub()
+    {
+        var callsBefore = _factory.TokenService.DecryptCallCount;
+
+        var response = await _client.SendAsync(BearerRequest(HttpMethod.Get, $"/api/{Tenant}/materials", JwtShapedToken));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        response.Headers.WwwAuthenticate.ToString().Should().Contain("Bearer");
+        _factory.TokenService.DecryptCallCount.Should().Be(callsBefore);
+    }
+
+    [Fact]
+    public async Task HubHeader_TakesPrecedenceOverAuthorizationBearer()
+    {
+        var headerToken = RegisterToken(HubDecryptResult.ValidToken(ClaimsFor(MappedTenantId)));
+        var bearerToken = RegisterToken(HubDecryptResult.InvalidToken("EXPIRED"));
+
+        var request = Request(HttpMethod.Get, $"/api/{Tenant}/materials", headerToken);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", bearerToken);
+        var response = await _client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     // --- Valid tokens ---
@@ -305,6 +364,44 @@ public class HubAuthenticationProductionTests : IClassFixture<HubAuthProductionF
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         response.Headers.WwwAuthenticate.ToString().Should().Contain(HubSessionTokenDefaults.HeaderName);
+    }
+
+    [Fact]
+    public async Task ValidToken_AsAuthorizationBearer_InProduction_Returns200()
+    {
+        var hubTenantId = Guid.NewGuid();
+        _factory.Enricher.SetIdentity(hubTenantId, new HubLocalIdentity(Tenant, "hubuser", false, false));
+        var token = $"tok-{Guid.NewGuid():N}";
+        _factory.TokenService.SetResult(token, HubDecryptResult.ValidToken(new HubClaims
+        {
+            Version = 1,
+            UserId = Guid.NewGuid(),
+            TenantId = hubTenantId,
+            SessionId = Guid.NewGuid(),
+            ApplicationId = Guid.NewGuid(),
+            User = new HubUser { Email = "hubuser@example.com" },
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds(),
+        }));
+
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/{Tenant}/materials");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        var response = await _client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task JwtShapedBearer_InProduction_Returns401_WithoutReachingTheHub()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/{Tenant}/materials");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+            "Bearer", "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl");
+
+        var callsBefore = _factory.TokenService.DecryptCallCount;
+        var response = await _client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        _factory.TokenService.DecryptCallCount.Should().Be(callsBefore);
     }
 
     [Fact]

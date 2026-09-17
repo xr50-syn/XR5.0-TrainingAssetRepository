@@ -4,8 +4,13 @@ The XR50 Training API accepts two authentication schemes, selected per request:
 
 | Scheme | Header | Environments |
 |--------|--------|--------------|
-| XR5.0 Hub session token | `HL-Hub-Session-Token` | all (the only scheme outside Development) |
-| Keycloak JWT bearer | `Authorization: Bearer` | Development only |
+| XR5.0 Hub session token | `HL-Hub-Session-Token`, or `Authorization: Bearer` with a non-JWT value | all (the only scheme outside Development) |
+| Keycloak JWT bearer | `Authorization: Bearer` with a JWT | Development only |
+
+A request is routed to the Hub scheme when it carries `HL-Hub-Session-Token`, or an
+`Authorization: Bearer` value that is not JWT-shaped (three dot-separated segments). The header
+wins when both are present. JWTs never reach the Hub scheme, so a Keycloak or third-party token
+is not forwarded to the Hub decrypt API.
 
 > This page describes current behaviour. The two schemes disagree about where roles come from —
 > the Hub path reads them from our database, the JWT path from token claims — and the JWT path
@@ -34,12 +39,13 @@ route segment; system administrators are exempt from that match.
 
 Every request from the XR5.0 Hub to this service carries an encrypted, opaque session token in
 the `HL-Hub-Session-Token` header (spec: *XR5.0 Hub Session Token — External Service
-Integration*). The token is a **bearer credential**: accept it only over TLS, never log it, and
+Integration*). Clients embedded in the Hub frontend, such as the Training Programs Authoring Tool,
+may instead attach the same token as `Authorization: Bearer <token>`; it is validated identically. The token is a **bearer credential**: accept it only over TLS, never log it, and
 never place it in a URL.
 
 ### Validation flow
 
-1. `HubSessionTokenAuthenticationHandler` reads the header and calls the Hub decrypt API
+1. `HubSessionTokenAuthenticationHandler` reads the token (`HubSessionTokenDefaults.TryGetToken`) and calls the Hub decrypt API
    (`POST {XR50Hub:BaseUrl}/api/v1/session-token/decrypt`) through `HubSessionTokenService`,
    authenticating with the shared secret (`hl-hub-external-service-secret` header, from
    `XR50Hub:SharedSecret`).

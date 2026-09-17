@@ -68,9 +68,10 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 
-// Authentication: XR5.0 Hub session tokens (HL-Hub-Session-Token header) are accepted in every
-// environment; the Keycloak/JWT bearer scheme is a Development-only stand-in, so the production
-// auth surface is Hub-only. The selector routes by header presence.
+// Authentication: XR5.0 Hub session tokens are accepted in every environment, in the
+// HL-Hub-Session-Token header or as a non-JWT Authorization: Bearer value (clients embedded in the
+// Hub frontend); the Keycloak/JWT bearer scheme is a Development-only stand-in, so the production
+// auth surface is Hub-only. The selector routes on whether the request carries a Hub token.
 var authenticationBuilder = builder.Services.AddAuthentication(options =>
     {
         options.DefaultScheme = "XR50AuthSelector";
@@ -79,7 +80,7 @@ var authenticationBuilder = builder.Services.AddAuthentication(options =>
     {
         options.ForwardDefaultSelector = context =>
         {
-            if (context.Request.Headers.ContainsKey(HubSessionTokenDefaults.HeaderName))
+            if (HubSessionTokenDefaults.TryGetToken(context.Request, out _))
             {
                 return HubSessionTokenDefaults.SchemeName;
             }
