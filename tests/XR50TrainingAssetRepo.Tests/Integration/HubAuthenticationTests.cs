@@ -7,7 +7,7 @@ namespace XR50TrainingAssetRepo.Tests.Integration;
 
 /// <summary>
 /// Exercises the XR5.0 Hub session token authentication path end-to-end through the HTTP
-/// pipeline: scheme selection (HL-Hub-Session-Token header or non-JWT Authorization: Bearer), decrypt outcomes (valid / invalid / secret rejected /
+/// pipeline: scheme selection (HL-Hub-Session-Token header, non-JWT bearer, Hub login JWT bearer), decrypt and limited-info outcomes (valid / invalid / secret rejected /
 /// unavailable), tenant scoping via the enricher, DB-derived roles, and the Development-only
 /// dev-token short-circuit. The decrypt client and enricher are fakes; everything else is real.
 /// </summary>
@@ -79,8 +79,6 @@ public class HubAuthenticationTests : IClassFixture<HubAuthWebApplicationFixture
     // Clients embedded in the Hub frontend (TPAT) attach the session token as a standard bearer
     // credential rather than in HL-Hub-Session-Token.
 
-    private const string JwtShapedToken = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl";
-
     private static HttpRequestMessage BearerRequest(HttpMethod method, string uri, string token)
     {
         var request = new HttpRequestMessage(method, uri);
@@ -110,15 +108,66 @@ public class HubAuthenticationTests : IClassFixture<HubAuthWebApplicationFixture
     }
 
     [Fact]
-    public async Task JwtShapedBearer_InDevelopment_GoesToJwtScheme_AndIsNeverSentToTheHub()
+    public async Task KeycloakIssuedJwt_InDevelopment_GoesToJwtScheme_AndIsNeverSentToTheHub()
     {
-        var callsBefore = _factory.TokenService.DecryptCallCount;
+        // The fixture's IAM:Issuer is "test-issuer"; such a JWT belongs to the Development JWT scheme.
+        var decryptBefore = _factory.TokenService.DecryptCallCount;
+        var validateBefore = _factory.UserTokenService.ValidateCallCount;
 
-        var response = await _client.SendAsync(BearerRequest(HttpMethod.Get, $"/api/{Tenant}/materials", JwtShapedToken));
+        var response = await _client.SendAsync(BearerRequest(HttpMethod.Get, $"/api/{Tenant}/materials", HubJwt.For("test-issuer")));
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         response.Headers.WwwAuthenticate.ToString().Should().Contain("Bearer");
-        _factory.TokenService.DecryptCallCount.Should().Be(callsBefore);
+        _factory.TokenService.DecryptCallCount.Should().Be(decryptBefore);
+        _factory.UserTokenService.ValidateCallCount.Should().Be(validateBefore);
+    }
+
+    // --- Hub login JWT (validated through GET /api/v1/user/limited-info) ---
+
+    [Fact]
+    public async Task HubLoginJwt_AsBearer_ValidatedByTheHub_Returns200()
+    {
+        var jwt = HubJwt.For("https://hub.test");
+        _factory.UserTokenService.SetResult(jwt, HubDecryptResult.ValidToken(ClaimsFor(MappedTenantId)));
+        var decryptBefore = _factory.TokenService.DecryptCallCount;
+
+        var response = await _client.SendAsync(BearerRequest(HttpMethod.Get, $"/api/{Tenant}/materials", jwt));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        _factory.TokenService.DecryptCallCount.Should().Be(decryptBefore, "a JWT is never sent to the session-token decrypt API");
+    }
+
+    [Fact]
+    public async Task HubLoginJwt_RejectedByTheHub_Returns401()
+    {
+        var response = await _client.SendAsync(BearerRequest(HttpMethod.Get, $"/api/{Tenant}/materials", HubJwt.For("https://hub.test")));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        response.Headers.WwwAuthenticate.ToString().Should().Contain(HubSessionTokenDefaults.HeaderName);
+    }
+
+    [Fact]
+    public async Task HubLoginJwt_HubUnavailable_Returns503()
+    {
+        var jwt = HubJwt.For("https://hub.test");
+        _factory.UserTokenService.SetResult(jwt, HubDecryptResult.Unavailable());
+
+        var response = await _client.SendAsync(BearerRequest(HttpMethod.Get, $"/api/{Tenant}/materials", jwt));
+
+        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+    }
+
+    [Fact]
+    public async Task HubLoginJwt_TenantAdminFromDb_PassesTenantAdminPolicy_AndOtherTenantIsForbidden()
+    {
+        var jwt = HubJwt.For("https://hub.test");
+        _factory.UserTokenService.SetResult(jwt, HubDecryptResult.ValidToken(ClaimsFor(AdminTenantId)));
+
+        var write = await _client.SendAsync(BearerRequest(HttpMethod.Delete, $"/api/{Tenant}/materials/999999", jwt));
+        var otherTenant = await _client.SendAsync(BearerRequest(HttpMethod.Get, "/api/otherTenant/materials", jwt));
+
+        write.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized).And.NotBe(HttpStatusCode.Forbidden);
+        otherTenant.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
@@ -391,17 +440,28 @@ public class HubAuthenticationProductionTests : IClassFixture<HubAuthProductionF
     }
 
     [Fact]
-    public async Task JwtShapedBearer_InProduction_Returns401_WithoutReachingTheHub()
+    public async Task HubLoginJwt_InProduction_IsValidatedByTheHub_NotTheDecryptApi()
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/{Tenant}/materials");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
-            "Bearer", "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl");
+        var hubTenantId = Guid.NewGuid();
+        _factory.Enricher.SetIdentity(hubTenantId, new HubLocalIdentity(Tenant, "hubuser", false, false));
 
-        var callsBefore = _factory.TokenService.DecryptCallCount;
+        // Outside Development there is no JWT scheme, so any JWT - even one naming the Keycloak
+        // issuer - is a Hub login token.
+        var jwt = HubJwt.For("test-issuer");
+        _factory.UserTokenService.SetResult(jwt, HubDecryptResult.ValidToken(new HubClaims
+        {
+            UserId = Guid.NewGuid(),
+            TenantId = hubTenantId,
+            User = new HubUser { Email = "hubuser@example.com" },
+        }));
+
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/{Tenant}/materials");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", jwt);
+        var decryptBefore = _factory.TokenService.DecryptCallCount;
         var response = await _client.SendAsync(request);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        _factory.TokenService.DecryptCallCount.Should().Be(callsBefore);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        _factory.TokenService.DecryptCallCount.Should().Be(decryptBefore);
     }
 
     [Fact]
@@ -417,5 +477,18 @@ public class HubAuthenticationProductionTests : IClassFixture<HubAuthProductionF
         // decrypt flow (where the fake rejects it) instead of short-circuiting.
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         _factory.TokenService.DecryptCallCount.Should().BeGreaterThan(callsBefore);
+    }
+}
+
+/// <summary>Builds unsigned JWT-shaped strings for routing tests; validation is faked.</summary>
+internal static class HubJwt
+{
+    public static string For(string issuer)
+    {
+        static string Segment(string json) => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+        var exp = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds();
+        return $"{Segment("{\"alg\":\"HS256\",\"typ\":\"JWT\"}")}.{Segment($"{{\"iss\":\"{issuer}\",\"exp\":{exp},\"jti\":\"{Guid.NewGuid():N}\"}}")}.c2ln";
     }
 }

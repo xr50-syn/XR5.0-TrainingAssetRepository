@@ -68,10 +68,11 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 
-// Authentication: XR5.0 Hub session tokens are accepted in every environment, in the
-// HL-Hub-Session-Token header or as a non-JWT Authorization: Bearer value (clients embedded in the
-// Hub frontend); the Keycloak/JWT bearer scheme is a Development-only stand-in, so the production
-// auth surface is Hub-only. The selector routes on whether the request carries a Hub token.
+// Authentication: XR5.0 Hub credentials are accepted in every environment - the session token
+// (HL-Hub-Session-Token header, or a non-JWT Authorization: Bearer value) and the user's Hub login
+// JWT (Authorization: Bearer, as sent by screens embedded in the Hub frontend). The Keycloak/JWT
+// bearer scheme is a Development-only stand-in, so the production auth surface is Hub-only.
+// HubTokenReader decides which credential a request carries; the selector routes on it.
 var authenticationBuilder = builder.Services.AddAuthentication(options =>
     {
         options.DefaultScheme = "XR50AuthSelector";
@@ -80,7 +81,7 @@ var authenticationBuilder = builder.Services.AddAuthentication(options =>
     {
         options.ForwardDefaultSelector = context =>
         {
-            if (HubSessionTokenDefaults.TryGetToken(context.Request, out _))
+            if (context.RequestServices.GetRequiredService<HubTokenReader>().TryRead(context.Request, out _, out _))
             {
                 return HubSessionTokenDefaults.SchemeName;
             }
@@ -183,6 +184,8 @@ builder.Services.Configure<XR50HubOptions>(builder.Configuration.GetSection(XR50
 // (registry tenant mapping + tenant-DB roles), and the decrypt-result cache.
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<IHubSessionTokenService, HubSessionTokenService>();
+builder.Services.AddHttpClient<IHubUserTokenService, HubUserTokenService>();
+builder.Services.AddSingleton<HubTokenReader>();
 builder.Services.AddScoped<IHubIdentityEnricher, HubIdentityEnricher>();
 builder.Services.AddSingleton<IAuthorizationHandler, TenantMemberHandler>();
 builder.Services.AddSingleton<IAuthorizationHandler, TenantAdminHandler>();

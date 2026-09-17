@@ -4,9 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-20
 
-### Added - Hub session token accepted as `Authorization: Bearer`
+### Added - Hub credentials accepted as `Authorization: Bearer` (Hub login JWT and session token)
 
-The Training Programs Authoring Tool runs inside the Hub frontend and attaches the Hub session token as `Authorization: Bearer <token>`, while the API only looked for it in `HL-Hub-Session-Token`, so those requests were routed to JWT validation and rejected. A non-JWT bearer value is now validated as a Hub session token, exactly like the header (decrypt API, tenant mapping, database roles). The header still takes precedence, and JWT-shaped bearers keep going to the JWT scheme, so they are never forwarded to the Hub. Additive: existing header-based callers and Development Keycloak tokens are unaffected. Affected: `Infrastructure/Auth/XR50HubOptions.cs` (`HubSessionTokenDefaults.TryGetToken`), `Infrastructure/Auth/HubSessionTokenAuthenticationHandler.cs`, `Program.cs`, `tests/.../Integration/HubAuthenticationTests.cs`, `docs/guides/authentication.md`.
+The Training Programs Authoring Tool runs inside the Hub frontend and sends the JWT the browser got from the Hub's `POST /api/v1/auth/authenticate` as `Authorization: Bearer`. The API only accepted Hub credentials in `HL-Hub-Session-Token`, so those requests went to JWT validation (Keycloak, Development only) and were rejected.
+
+- **Hub login JWT**: a JWT bearer is validated by presenting it to the Hub's `GET /api/v1/user/limited-info`; a 200 yields the Hub user id and tenant id (`HubUserTokenService`). No new credential or shared secret is involved. Rejected tokens are 401, Hub failures 503; answers are cached by token hash for `XR50Hub:CacheSeconds`, never beyond the token's `exp`.
+- **Session token as bearer**: a non-JWT bearer value is treated as a Hub session token and validated through the decrypt API, like the header.
+- **Routing** (`HubTokenReader`, shared by the scheme selector and the handler): the `HL-Hub-Session-Token` header wins; in Development a JWT whose `iss` is `IAM:Issuer` stays with the Keycloak scheme and is never sent to the Hub. Both credentials use the same identity mapping (tenant via `HubTenantId`, roles from the database).
+- Additive: header-based callers and Development Keycloak tokens are unaffected. Affected: `Infrastructure/Auth/HubTokenReader.cs` (new), `Services/HubUserTokenService.cs` (new), `Infrastructure/Auth/HubSessionTokenAuthenticationHandler.cs`, `Program.cs`, tests (`HubUserTokenServiceTests`, `HubAuthenticationTests`, `HubAuthWebApplicationFixture`), `docs/guides/authentication.md`.
 
 ### Fixed - DataLens ingestion and tenant isolation of AI Assistant collections
 

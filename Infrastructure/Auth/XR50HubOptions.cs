@@ -59,42 +59,5 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
         /// failure was Hub unavailability (503) rather than a rejected token (401).</summary>
         public const string FailureKindItem = "XR50Hub.FailureKind";
         public const string FailureKindUnavailable = "unavailable";
-
-        private const string BearerPrefix = "Bearer ";
-
-        /// <summary>
-        /// Reads a Hub session token from the request. The <see cref="HeaderName"/> header is the
-        /// spec's transport and wins when present (even if empty, so the handler can reject it).
-        /// Otherwise an <c>Authorization: Bearer</c> value is taken as a Hub session token when it
-        /// is not JWT-shaped: clients embedded in the Hub frontend (TPAT) attach the session token
-        /// as a standard bearer credential. A JWT (three dot-separated segments) is left to the JWT
-        /// bearer scheme, both because that is what it is and because forwarding it to the Hub
-        /// decrypt API would hand a foreign credential to a third party. Hub session tokens are
-        /// opaque and carry no dots.
-        /// </summary>
-        public static bool TryGetToken(HttpRequest request, out string token)
-        {
-            if (request.Headers.TryGetValue(HeaderName, out var headerValues))
-            {
-                token = headerValues.ToString();
-                return true;
-            }
-
-            var authorization = request.Headers.Authorization.ToString();
-            if (authorization.StartsWith(BearerPrefix, StringComparison.OrdinalIgnoreCase))
-            {
-                var bearer = authorization[BearerPrefix.Length..].Trim();
-                if (bearer.Length > 0 && !IsJwtShaped(bearer))
-                {
-                    token = bearer;
-                    return true;
-                }
-            }
-
-            token = string.Empty;
-            return false;
-        }
-
-        private static bool IsJwtShaped(string value) => value.Count(c => c == '.') == 2;
     }
 }

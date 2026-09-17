@@ -19,6 +19,7 @@ public class HubAuthWebApplicationFixture : WebApplicationFactory<Program>
     private readonly string _databaseName = $"TestDatabase_{Guid.NewGuid()}";
 
     public FakeHubSessionTokenService TokenService { get; } = new();
+    public FakeHubUserTokenService UserTokenService { get; } = new();
     public FakeHubIdentityEnricher Enricher { get; } = new();
 
     protected virtual string EnvironmentName => "Development";
@@ -58,6 +59,14 @@ public class HubAuthWebApplicationFixture : WebApplicationFactory<Program>
             }
             services.AddSingleton<IHubSessionTokenService>(TokenService);
 
+            var userTokenServiceDescriptor = services.SingleOrDefault(
+                d => d.ServiceType == typeof(IHubUserTokenService));
+            if (userTokenServiceDescriptor != null)
+            {
+                services.Remove(userTokenServiceDescriptor);
+            }
+            services.AddSingleton<IHubUserTokenService>(UserTokenService);
+
             var enricherDescriptor = services.SingleOrDefault(
                 d => d.ServiceType == typeof(IHubIdentityEnricher));
             if (enricherDescriptor != null)
@@ -93,6 +102,25 @@ public class FakeHubSessionTokenService : IHubSessionTokenService
         return Task.FromResult(_results.TryGetValue(token, out var result)
             ? result
             : HubDecryptResult.InvalidToken("MALFORMED"));
+    }
+}
+
+/// <summary>Programmable stand-in for the Hub limited-info validation of user login JWTs.
+/// Unknown tokens are rejected, as the Hub would.</summary>
+public class FakeHubUserTokenService : IHubUserTokenService
+{
+    private readonly Dictionary<string, HubDecryptResult> _results = new();
+
+    public int ValidateCallCount { get; private set; }
+
+    public void SetResult(string token, HubDecryptResult result) => _results[token] = result;
+
+    public Task<HubDecryptResult> ValidateAsync(string token, CancellationToken cancellationToken = default)
+    {
+        ValidateCallCount++;
+        return Task.FromResult(_results.TryGetValue(token, out var result)
+            ? result
+            : HubDecryptResult.InvalidToken("REJECTED"));
     }
 }
 
