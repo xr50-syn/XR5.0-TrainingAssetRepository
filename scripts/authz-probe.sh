@@ -121,10 +121,10 @@ ROWS=(
 "TenantAdmin     |DELETE|/api/TENANT/innov-chatbot/1/history                          |401      |403      |authz-ok |authz-ok"
 "SystemAdmin     |GET   |/xr50/trainingAssetRepository/Tenants                         |401      |403      |403      |authz-ok"
 "TenantCreator   |POST  |/xr50/trainingAssetRepository/Tenants                         |401      |403      |403      |authz-ok"
-"SystemAdmin     |DELETE|/xr50/trainingAssetRepository/Tenants/nonexistent_probe       |401      |403      |403      |authz-ok"
+"SystemAdmin     |DELETE|/xr50/trainingAssetRepository/Tenants/nonexistent_probe       |401      |403      |403      |404"
 "SystemAdmin     |GET   |/api/troubleshooting/health-check                            |401      |403      |403      |authz-ok"
 "SystemAdmin     |GET   |/api/troubleshooting/migration-status                        |401      |403      |403      |authz-ok"
-"cross-tenant    |GET   |/api/OTHER/materials                                         |401      |403      |403      |authz-ok"
+"cross-tenant    |GET   |/api/OTHER/materials                                         |401      |403      |403      |404"
 )
 
 for who in anonymous testuser tenantadmin sysadmin; do

@@ -68,9 +68,11 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 
-// Authentication: XR5.0 Hub session tokens (HL-Hub-Session-Token header) are accepted in every
-// environment; the Keycloak/JWT bearer scheme is a Development-only stand-in, so the production
-// auth surface is Hub-only. The selector routes by header presence.
+// Authentication: XR5.0 Hub credentials are accepted in every environment - the session token
+// (HL-Hub-Session-Token header, or a non-JWT Authorization: Bearer value) and the user's Hub login
+// JWT (Authorization: Bearer, as sent by screens embedded in the Hub frontend). The Keycloak/JWT
+// bearer scheme is a Development-only stand-in, so the production auth surface is Hub-only.
+// HubTokenReader decides which credential a request carries; the selector routes on it.
 var authenticationBuilder = builder.Services.AddAuthentication(options =>
     {
         options.DefaultScheme = "XR50AuthSelector";
@@ -79,7 +81,7 @@ var authenticationBuilder = builder.Services.AddAuthentication(options =>
     {
         options.ForwardDefaultSelector = context =>
         {
-            if (context.Request.Headers.ContainsKey(HubSessionTokenDefaults.HeaderName))
+            if (context.RequestServices.GetRequiredService<HubTokenReader>().TryRead(context.Request, out _, out _))
             {
                 return HubSessionTokenDefaults.SchemeName;
             }
@@ -182,6 +184,8 @@ builder.Services.Configure<XR50HubOptions>(builder.Configuration.GetSection(XR50
 // (registry tenant mapping + tenant-DB roles), and the decrypt-result cache.
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<IHubSessionTokenService, HubSessionTokenService>();
+builder.Services.AddHttpClient<IHubUserTokenService, HubUserTokenService>();
+builder.Services.AddSingleton<HubTokenReader>();
 builder.Services.AddScoped<IHubIdentityEnricher, HubIdentityEnricher>();
 builder.Services.AddSingleton<IAuthorizationHandler, TenantMemberHandler>();
 builder.Services.AddSingleton<IAuthorizationHandler, TenantAdminHandler>();
@@ -664,6 +668,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IXR50SchemaMigrator, XR50SchemaMigrator>();
         services.AddScoped<ILearningPathService, LearningPathService>();
         services.AddScoped<IAssetService, AssetService>();
+        services.AddScoped<IAssetContentReader, AssetContentReader>();
 
         // New specialized material services
         services.AddScoped<XR50TrainingAssetRepo.Services.Materials.IMaterialServiceBase, XR50TrainingAssetRepo.Services.Materials.MaterialServiceBase>();

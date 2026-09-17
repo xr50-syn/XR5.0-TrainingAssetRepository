@@ -23,6 +23,21 @@ namespace XR50TrainingAssetRepo.Services
         Task<string> SubmitDocumentAsync(int assetId, string assetUrl, string filetype, string collectionName, string documentName);
 
         /// <summary>
+        /// Submits a document whose bytes the caller already holds, for AI processing in a
+        /// specific collection. Prefer this for files the repository stores itself: the asset URL
+        /// is built for clients, may not resolve from inside the API container, and points at a
+        /// private bucket that an unsigned request cannot read.
+        /// Automatically uses PUT if the document already exists.
+        /// </summary>
+        /// <param name="assetId">The asset ID being submitted (used for logging)</param>
+        /// <param name="content">The document content</param>
+        /// <param name="filetype">The file type/extension (e.g., "pdf", "docx")</param>
+        /// <param name="collectionName">The DataLens collection name</param>
+        /// <param name="documentName">The name to file the document under (see <see cref="SubmitDocumentAsync"/>)</param>
+        /// <returns>The job ID from the API</returns>
+        Task<string> SubmitDocumentContentAsync(int assetId, Stream content, string filetype, string collectionName, string documentName);
+
+        /// <summary>
         /// Gets the status of a submitted job within a collection.
         /// </summary>
         /// <param name="jobId">The job ID</param>

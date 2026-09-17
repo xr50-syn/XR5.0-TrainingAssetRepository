@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-20
 
+### Added - Hub credentials accepted as `Authorization: Bearer` (Hub login JWT and session token)
+
+The Training Programs Authoring Tool runs inside the Hub frontend and sends the JWT the browser got from the Hub's `POST /api/v1/auth/authenticate` as `Authorization: Bearer`. The API only accepted Hub credentials in `HL-Hub-Session-Token`, so those requests went to JWT validation (Keycloak, Development only) and were rejected.
+
+- **Hub login JWT**: a JWT bearer is validated by presenting it to the Hub's `GET /api/v1/user/limited-info`; a 200 yields the Hub user id and tenant id (`HubUserTokenService`). No new credential or shared secret is involved. Rejected tokens are 401, Hub failures 503; answers are cached by token hash for `XR50Hub:CacheSeconds`, never beyond the token's `exp`.
+- **Session token as bearer**: a non-JWT bearer value is treated as a Hub session token and validated through the decrypt API, like the header.
+- **Routing** (`HubTokenReader`, shared by the scheme selector and the handler): the `HL-Hub-Session-Token` header wins; in Development a JWT whose `iss` is `IAM:Issuer` stays with the Keycloak scheme and is never sent to the Hub. Both credentials use the same identity mapping (tenant via `HubTenantId`, roles from the database).
+- Additive: header-based callers and Development Keycloak tokens are unaffected. Affected: `Infrastructure/Auth/HubTokenReader.cs` (new), `Services/HubUserTokenService.cs` (new), `Infrastructure/Auth/HubSessionTokenAuthenticationHandler.cs`, `Program.cs`, tests (`HubUserTokenServiceTests`, `HubAuthenticationTests`, `HubAuthWebApplicationFixture`), `docs/guides/authentication.md`.
+
+### Fixed - DataLens ingestion and tenant isolation of AI Assistant collections
+
+- **Collections are tenant-scoped.** Every tenant reaches DataLens through the one `ChatbotApi` connection, and material ids restart in each tenant database, so the default per-material collection `aiassist_{id}` was the same collection for material 10 of every tenant: an assistant could answer from another tenant's documents, and deleting an asset could drop another tenant's collection. New materials bind to `aiassist_{id}_{tenant}` (`Services/Materials/AIAssistantCollections.cs`). Existing bindings are not renamed.
+- **Asset deletion only drops collections the material owns.** When the last asset of an AI Assistant is deleted, the collection is removed only if it is the material's own tenant-scoped one; for a legacy `aiassist_{id}` or an explicitly supplied `collectionName` only the document is removed. Legacy per-material collections are therefore left in DataLens as possibly-shared data.
+- **Stored assets are ingested from storage.** AI Assistant, standalone asset and INNOV ingestion read an uploaded file through `IStorageService` (`IAssetContentReader`) instead of downloading `asset.URL`, which is built for clients from `S3Settings:PublicEndpoint`, may not resolve inside the container, and is unsigned against a private bucket. Only reference-only assets are still fetched by URL.
+- Per-tenant DataLens credentials (as INNOV already has) are pending agreement with the DataLens operators.
+
 ### Changed - Database schema is owned by EF Core migrations
 
 #### Summary

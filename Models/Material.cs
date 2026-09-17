@@ -228,7 +228,8 @@ namespace XR50TrainingAssetRepo.Models
 
         /// <summary>
         /// DataLens collection name for this AI Assistant material.
-        /// Each material gets its own collection (e.g., "aiassist_42").
+        /// Defaults to the material's own tenant-scoped collection (e.g., "aiassist_42_acme");
+        /// materials bound before tenant scoping keep their legacy "aiassist_42" name.
         /// </summary>
         [StringLength(255)]
         public string? CollectionName { get; set; }

@@ -8,6 +8,7 @@ class ApiClient {
   constructor() {
     this.token = null;
     this.tokenExpiry = null;
+    this.tracked = { programs: [], learningPaths: [], materials: [], assets: [], users: [] };
 
     this.client = axios.create({
       timeout: config.REQUEST_TIMEOUT,
@@ -299,8 +300,10 @@ class ApiClient {
     });
   }
 
-  async deleteAsset(id) {
-    return this.delete(`${config.ASSETS_API_URL}/${id}`);
+  // force: also delete an asset that materials still use, cascading to those materials and to
+  // the DataLens documents/collections they created. Without it the API answers 409.
+  async deleteAsset(id, { force = false } = {}) {
+    return this.delete(`${config.ASSETS_API_URL}/${id}${force ? '?force=true' : ''}`);
   }
 
   // Program operations
@@ -349,6 +352,62 @@ class ApiClient {
 
   async deleteUser(userName) {
     return this.delete(`${config.USERS_API_URL}/${userName}`);
+  }
+
+  async deleteLearningPath(id) {
+    return this.delete(`${config.LEARNING_PATHS_API_URL}/${id}`);
+  }
+
+  // Resource tracking
+  //
+  // Jest gives every suite file its own module registry, so this singleton is per suite. A
+  // suite tracks what it creates and calls cleanupTracked() in afterAll. That matters when the
+  // run targets EXISTING_TENANT: nothing drops that tenant afterwards, so anything a suite
+  // does not delete itself stays behind.
+
+  track(kind, id) {
+    if (!this.tracked[kind]) {
+      throw new Error(`Unknown resource kind for tracking: ${kind}`);
+    }
+    if (id !== undefined && id !== null) {
+      this.tracked[kind].push(id);
+    }
+    return id;
+  }
+
+  /**
+   * Deletes every tracked resource, dependents first (programs and learning paths before the
+   * materials they reference). A 404 counts as already cleaned up, since a test may have
+   * deleted the resource itself. Returns the resources that could not be deleted.
+   */
+  async cleanupTracked() {
+    if (config.SKIP_CLEANUP) {
+      return [];
+    }
+
+    const deleters = [
+      ['programs', id => this.deleteProgram(id)],
+      ['learningPaths', id => this.deleteLearningPath(id)],
+      ['materials', id => this.deleteMaterial(id)],
+      ['assets', id => this.deleteAsset(id)],
+      ['users', name => this.deleteUser(name)]
+    ];
+
+    const failures = [];
+    for (const [kind, del] of deleters) {
+      for (const id of [...this.tracked[kind]].reverse()) {
+        try {
+          const response = await del(id);
+          if (![200, 204, 404].includes(response.status)) {
+            failures.push(`${kind}/${id}: ${response.status}`);
+          }
+        } catch (error) {
+          failures.push(`${kind}/${id}: ${error.message}`);
+        }
+      }
+      this.tracked[kind] = [];
+    }
+    return failures;
   }
 }
 

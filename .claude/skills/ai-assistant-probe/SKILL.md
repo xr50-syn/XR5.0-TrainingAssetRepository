@@ -16,10 +16,11 @@ This is a scenario probe (Layer 4). If the same check recurs, promote it to a Je
 
 ## How the pipeline works (so you can interpret results)
 
-- Create AI Assistant material with assets -> `SubmitForProcessingAsync` calls `EnsureCollectionExistsAsync` (GET collection; if 404, POST-create), then for each asset `ChatbotApiService.SubmitDocumentAsync` **downloads `asset.URL` via HttpClient** and uploads the bytes to DataLens, storing an `AIAssistantMaterialAssetJob` row (status `pending`, with the DataLens `jobId`).
+- Create AI Assistant material with assets -> `SubmitForProcessingAsync` calls `EnsureCollectionExistsAsync` (GET collection; if 404, POST-create), then for each asset reads the bytes and uploads them to DataLens, storing an `AIAssistantMaterialAssetJob` row (status `pending`, with the DataLens `jobId`).
+- Where the bytes come from: an asset the repository stores (uploaded file) is read through `IStorageService` by `IAssetContentReader` and sent with `SubmitDocumentContentAsync`, so `asset.URL` and `S3_PUBLIC_ENDPOINT` play no part. Only a reference-only asset (no stored file) is downloaded from its URL with `SubmitDocumentAsync`. The same split applies to standalone asset submission and INNOV chatbot ingestion.
 - The background `AiStatusSyncService` polls every **15s when active** (5 min idle), calls `GetJobStatusAsync` per in-flight job, and recomputes the material's aggregate `AIAssistantStatus`: `notready` -> `process` -> `ready`/`failed`.
 - Material-level status vocabulary: `notready | process | ready`. Per-document job vocabulary (on `/ai-assistant/{id}/documents`): `pending | processing | completed | failed`.
-- Collection: an AI Assistant material binds to `collectionName` if supplied, else its own per-material collection `aiassist_{id}` (derived from the material id). The tenant's `DefaultAICollection` is only used by the generic Chat API / default endpoint, not by AI Assistant materials.
+- Collection: an AI Assistant material binds to `collectionName` if supplied, else its own per-material collection `aiassist_{id}_{tenant}` (derived from the material id and the sanitized, lowercased tenant name). Materials bound before tenant scoping keep a legacy `aiassist_{id}`. The tenant's `DefaultAICollection` is only used by the generic Chat API / default endpoint, not by AI Assistant materials.
 
 ## Preconditions — always do these first
 
@@ -47,9 +48,9 @@ Set `BASE=http://localhost:5286` and `T=<tenant>`. With auth bypassed in Develop
    curl -s -X POST "$BASE/api/$T/assets" \
      -F "File=@probe.pdf;type=application/pdf" -F "Filetype=pdf" -F "Description=probe"
    ```
-   - **Critical check:** the `url` must be `http(s)://...`. If it is `s3://...`, ingestion WILL fail with `"The 's3' scheme is not supported"` (HttpClient can't download `s3://`). Fix: set `S3_PUBLIC_ENDPOINT` to a host reachable **both** by the API container and clients (a LAN IP like `http://192.168.1.35:9000`, NOT `localhost:9000`, which the API container resolves to itself). Then re-upload (existing assets keep their old URL).
+   - The `url` does not affect ingestion of an uploaded file: its bytes are read from storage. (Before that change the API downloaded `url` itself, which failed with `Connection refused (localhost:10000)` or a 403 from the private bucket; if a warning says `Could not download asset ... from its URL`, the asset is reference-only or the running image predates the change.)
 
-2. **Create the AI Assistant material** with that asset id (this triggers ensure-collection + submit). Optionally add `"collectionName":"<name>"` to target a specific collection instead of the auto-assigned `aiassist_{id}`:
+2. **Create the AI Assistant material** with that asset id (this triggers ensure-collection + submit). Optionally add `"collectionName":"<name>"` to target a specific collection instead of the auto-assigned `aiassist_{id}_{tenant}`:
    ```bash
    curl -s -X POST "$BASE/api/$T/materials" -H "Content-Type: application/json" -d '{
      "name":"DataLens probe assistant","type":"ai_assistant",

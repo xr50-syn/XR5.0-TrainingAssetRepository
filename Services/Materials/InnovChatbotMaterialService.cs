@@ -19,6 +19,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
         private readonly IChatbotChatProvider _chatProvider;
         private readonly IXR50TenantService _tenantService;
         private readonly IXR50TenantManagementService _tenantManagementService;
+        private readonly IAssetContentReader _assetContentReader;
         private readonly ILogger<InnovChatbotMaterialService> _logger;
 
         public InnovChatbotMaterialService(
@@ -26,9 +27,11 @@ namespace XR50TrainingAssetRepo.Services.Materials
             IEnumerable<IChatbotProvider> providers,
             IXR50TenantService tenantService,
             IXR50TenantManagementService tenantManagementService,
+            IAssetContentReader assetContentReader,
             ILogger<InnovChatbotMaterialService> logger)
         {
             _dbContextFactory = dbContextFactory;
+            _assetContentReader = assetContentReader;
             _tenantService = tenantService;
             _tenantManagementService = tenantManagementService;
             _logger = logger;
@@ -397,14 +400,17 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     continue;
                 }
 
-                if (string.IsNullOrEmpty(asset.URL))
-                {
-                    failedAssets.Add((asset.Id, "asset has no URL"));
-                    continue;
-                }
-
                 try
                 {
+                    // A stored file is passed inline; only a reference-only asset is fetched from
+                    // its URL (see IAssetContentReader for why).
+                    await using var storedContent = await _assetContentReader.OpenStoredContentAsync(asset);
+                    if (storedContent == null && string.IsNullOrEmpty(asset.URL))
+                    {
+                        failedAssets.Add((asset.Id, "asset has no stored file and no URL"));
+                        continue;
+                    }
+
                     var result = await _ingestionProvider.IngestDocumentAsync(new ChatbotIngestRequest
                     {
                         Connection = connection,
@@ -412,7 +418,8 @@ namespace XR50TrainingAssetRepo.Services.Materials
                         FileName = asset.Filename ?? $"asset-{asset.Id}",
                         ContentType = null,
                         Filetype = asset.Filetype,
-                        SourceUrl = asset.URL,
+                        Content = storedContent,
+                        SourceUrl = storedContent == null ? asset.URL : null,
                         DocType = asset.Filetype,
                         DocTitle = asset.Filename
                     });

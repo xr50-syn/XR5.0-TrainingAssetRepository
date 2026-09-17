@@ -6,31 +6,25 @@ const config = require('../config');
  * Tenant Management Tests
  *
  * Verifies tenant CRUD operations and S3 storage validation.
+ *
+ * Tenant provisioning, listing and deletion are SystemAdmin-gated, so this suite runs as the
+ * system admin rather than ADMIN_USER (which may be a tenant admin) and a 403 is a failure.
  */
 
 describe('Tenant Management', () => {
   let testTenantName;
 
   beforeAll(async () => {
-    // Authenticate before tenant tests
-    try {
-      await apiClient.authenticate(config.ADMIN_USER, config.ADMIN_PASSWORD);
-    } catch (error) {
-      console.warn('Could not authenticate as admin, using test user');
-      await apiClient.authenticate(config.TEST_USER, config.TEST_PASSWORD);
-    }
+    await apiClient.authenticate(config.SYSADMIN_USER, config.SYSADMIN_PASSWORD);
 
     testTenantName = `verify_tenant_${Date.now()}`;
   });
 
   afterAll(async () => {
-    // Cleanup: try to delete test tenant
     if (testTenantName && !config.SKIP_CLEANUP) {
-      try {
-        await apiClient.deleteTenant(testTenantName);
-      } catch (error) {
-        // Ignore cleanup errors
-      }
+      const response = await apiClient.deleteTenant(testTenantName);
+      // 404: creation failed earlier, so there is nothing to remove.
+      expect([200, 204, 404]).toContain(response.status);
     }
   });
 
@@ -38,11 +32,8 @@ describe('Tenant Management', () => {
     test('can list existing tenants', async () => {
       const response = await apiClient.listTenants();
 
-      expect([200, 403]).toContain(response.status);
-
-      if (response.status === 200) {
-        expect(Array.isArray(response.data)).toBe(true);
-      }
+      expect(response.status).toBe(200);
+      expect(Array.isArray(response.data)).toBe(true);
     });
   });
 
@@ -65,12 +56,7 @@ describe('Tenant Management', () => {
       // 201 Created or 200 OK
       expect([200, 201]).toContain(response.status);
 
-      if (response.status === 201 || response.status === 200) {
-        // Track for cleanup
-        global.__TEST_CONFIG__?.createdResources?.tenants?.push(testTenantName);
-
-        expect(response.data).toHaveProperty('tenantName', testTenantName);
-      }
+      expect(response.data).toHaveProperty('tenantName', testTenantName);
     });
 
     test('can retrieve created tenant', async () => {
@@ -114,14 +100,19 @@ describe('Tenant Management', () => {
     test('returns 404 for non-existent tenant', async () => {
       const response = await apiClient.getTenant('non-existent-tenant-xyz');
 
-      if (response.status === 500) {
-        console.log('\n--- GET NON-EXISTENT TENANT RETURNED 500 ---');
-        apiClient.logResponse(response, 'GET TENANT');
-        console.log('---\n');
-      }
+      expect(response.status).toBe(404);
+    });
 
-      // API should return 404, but may return 500 if service throws exception
-      expect([404, 500]).toContain(response.status);
+    test('returns 404 when deleting a non-existent tenant', async () => {
+      const response = await apiClient.deleteTenant('non_existent_tenant_xyz');
+
+      expect(response.status).toBe(404);
+    });
+
+    test('returns 404 for tenant-scoped routes of a non-existent tenant', async () => {
+      const response = await apiClient.get(`${config.API_BASE_URL}/api/non_existent_tenant_xyz/materials`);
+
+      expect(response.status).toBe(404);
     });
 
     test('validates tenant name format', async () => {
@@ -138,9 +129,9 @@ describe('Tenant Management', () => {
       }
       console.log('---\n');
 
-      // API may not validate tenant name format strictly
-      // Accept 400/422 (validation error) or 200 (if API accepts it)
-      expect([200, 400, 422]).toContain(response.status);
+      // Tenant names become database names, so anything beyond letters, digits, '_' and '-'
+      // is rejected.
+      expect([400, 422]).toContain(response.status);
     });
   });
 
@@ -157,9 +148,9 @@ describe('Tenant Management', () => {
       const deleteResponse = await apiClient.deleteTenant(deleteTenantName);
       expect([200, 204]).toContain(deleteResponse.status);
 
-      // Verify it's gone (may return 404 or 500 if service throws exception)
+      // Verify it's gone
       const getResponse = await apiClient.getTenant(deleteTenantName);
-      expect([404, 410, 500]).toContain(getResponse.status);
+      expect([404, 410]).toContain(getResponse.status);
     });
   });
 });

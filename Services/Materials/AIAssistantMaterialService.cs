@@ -14,22 +14,30 @@ namespace XR50TrainingAssetRepo.Services.Materials
     {
         private readonly IXR50TenantDbContextFactory _dbContextFactory;
         private readonly IChatbotApiService _chatbotApiService;
+        private readonly IAssetContentReader _assetContentReader;
+        private readonly IXR50TenantService _tenantService;
         private readonly ILogger<AIAssistantMaterialService> _logger;
 
         public AIAssistantMaterialService(
             IXR50TenantDbContextFactory dbContextFactory,
             IChatbotApiService chatbotApiService,
+            IAssetContentReader assetContentReader,
+            IXR50TenantService tenantService,
             ILogger<AIAssistantMaterialService> logger)
         {
             _dbContextFactory = dbContextFactory;
             _chatbotApiService = chatbotApiService;
+            _assetContentReader = assetContentReader;
+            _tenantService = tenantService;
             _logger = logger;
         }
 
-        // Each AI Assistant material gets its own DataLens collection, named "aiassist_{id}"
-        // from the material's persisted id. A per-material collection keeps one material's
-        // documents from surfacing in another's answers and avoids tenants sharing a collection.
-        private static string CollectionNameFor(int materialId) => "aiassist_" + materialId.ToString();
+        // Each AI Assistant material gets its own DataLens collection, derived from the tenant and
+        // the material's persisted id (see AIAssistantCollections). A per-material, per-tenant
+        // collection keeps one material's documents from surfacing in another's answers, within a
+        // tenant and across tenants.
+        private string CollectionNameFor(int materialId) =>
+            AIAssistantCollections.OwnCollectionFor(_tenantService.GetCurrentTenant(), materialId);
 
         #region CRUD Operations
 
@@ -66,7 +74,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
             context.Materials.Add(aiAssistant);
             await context.SaveChangesAsync();
 
-            // No explicit collection → give the material its own collection (aiassist_{id}).
+            // No explicit collection → give the material its own collection (aiassist_{id}_{tenant}).
             // Needs the persisted id, so this runs after the first save.
             if (string.IsNullOrEmpty(aiAssistant.CollectionName))
             {
@@ -156,7 +164,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
             await context.SaveChangesAsync();
 
             // Resolve target collection. Honour an explicitly supplied CollectionName; otherwise
-            // give the material its own collection (aiassist_{id}) so its documents stay isolated.
+            // give the material its own collection (aiassist_{id}_{tenant}) so its documents stay isolated.
             if (string.IsNullOrEmpty(aiAssistant.CollectionName))
             {
                 aiAssistant.CollectionName = CollectionNameFor(aiAssistant.id);
@@ -358,7 +366,7 @@ namespace XR50TrainingAssetRepo.Services.Materials
             }
 
             // Resolve collection name; if somehow unset (e.g. a legacy row), give the material
-            // its own collection (aiassist_{id}) to match the create paths.
+            // its own collection (aiassist_{id}_{tenant}) to match the create paths.
             var collectionName = aiAssistant.CollectionName;
             if (string.IsNullOrEmpty(collectionName))
             {
@@ -395,16 +403,29 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     continue;
                 }
 
-                if (string.IsNullOrEmpty(asset.URL))
-                {
-                    failedAssets.Add((asset.Id, "asset has no URL"));
-                    continue;
-                }
-
                 try
                 {
-                    var jobId = await _chatbotApiService.SubmitDocumentAsync(
-                        asset.Id, asset.URL, asset.Filetype ?? "pdf", collectionName, asset.Filename);
+                    // A stored file is read through storage; only a reference-only asset is
+                    // fetched from its URL (see IAssetContentReader for why).
+                    string jobId;
+                    await using (var storedContent = await _assetContentReader.OpenStoredContentAsync(asset))
+                    {
+                        if (storedContent != null)
+                        {
+                            jobId = await _chatbotApiService.SubmitDocumentContentAsync(
+                                asset.Id, storedContent, asset.Filetype ?? "pdf", collectionName, asset.Filename);
+                        }
+                        else if (!string.IsNullOrEmpty(asset.URL))
+                        {
+                            jobId = await _chatbotApiService.SubmitDocumentAsync(
+                                asset.Id, asset.URL, asset.Filetype ?? "pdf", collectionName, asset.Filename);
+                        }
+                        else
+                        {
+                            failedAssets.Add((asset.Id, "asset has no stored file and no URL"));
+                            continue;
+                        }
+                    }
 
                     if (existingJob == null)
                     {
@@ -434,7 +455,9 @@ namespace XR50TrainingAssetRepo.Services.Materials
 
                     successCount++;
                 }
-                catch (ChatbotApiException ex)
+                // Not only ChatbotApiException: reading the stored file can fail in storage, and one
+                // asset's failure must not abort the rest of the batch.
+                catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Failed to submit asset {AssetId} for material {AIAssistantId}", asset.Id, aiAssistantId);
                     failedAssets.Add((asset.Id, ex.Message));

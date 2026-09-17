@@ -6,7 +6,7 @@ const config = require('../config');
  * AI Assistant Material Tests
  *
  * Smoke coverage for the AI Assistant create flow:
- *  - Mode B (empty assets) → material gets its own aiassist_{id} DataLens collection,
+ *  - Mode B (empty assets) → material gets its own aiassist_{id}_{tenant} DataLens collection,
  *    no upload happens, status stays "notready" until something triggers processing.
  *  - Mode A (assets present, multiple accepted payload shapes) → assets persisted to
  *    AIAssistantAssetIds, DataLens collection ensured, submit attempted.
@@ -16,52 +16,82 @@ const config = require('../config');
  *    and flips status to "partial" so deploy-time smoke tests fail loudly when the
  *    chatbot side is misconfigured (bad base url, missing bearer, etc).
  *
- * These tests tolerate 500 so the suite still runs in environments without a live
- * DataLens backend. They deliberately do NOT tolerate 401/403: an authorization
- * outcome must fail the suite loudly. Tolerating it made refused requests pass as
- * successes, which hid authorization regressions on every endpoint here.
+ * The suite uploads its own PDF fixture, so Mode A always runs instead of depending on
+ * whatever assets the tenant happens to hold.
+ *
+ * A 500 is tolerated only when the AI assistant health check reports DataLens unavailable,
+ * so the suite still runs in environments without a DataLens backend. With DataLens up, a
+ * 500 is a failure. 401/403 are never tolerated: an authorization outcome must fail the
+ * suite loudly.
  */
 
 const OK_STATUSES = [200, 201];
-const TOLERATED_STATUSES = [200, 201, 500];
+
+// Mode A materials bind to their default collection, aiassist_{id}_{tenant}. The forced asset
+// delete in afterAll removes a collection only when it is the material's own tenant-scoped one,
+// so each create asserts that binding: the cleanup can then never remove a collection the suite
+// did not get from its own tenant. (Residual risk while DataLens is shared: another deployment
+// with a tenant of the same name and a material of the same id. Per-tenant DataLens credentials
+// would remove it.)
+const ownCollectionFor = (materialId) =>
+  `aiassist_${materialId}_${config.getEffectiveTenant().replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase()}`;
 
 describe('AI Assistant Material', () => {
-  let createdMaterialIds = [];
-  let fixtureAssetId = null;
+  let fixtureAssetId;
+  let dataLensAvailable = false;
+
+  // Accepted statuses for calls that reach DataLens.
+  const reachableStatuses = () => (dataLensAvailable ? OK_STATUSES : [...OK_STATUSES, 500]);
+
+  const createTracked = async (payload) => {
+    const response = await apiClient.createMaterial(payload);
+    if (!OK_STATUSES.includes(response.status)) {
+      apiClient.logResponse(response, 'CREATE AI ASSISTANT');
+    }
+    expect(reachableStatuses()).toContain(response.status);
+    if (OK_STATUSES.includes(response.status)) {
+      apiClient.track('materials', response.data.id);
+      expect(response.data.collectionName).toBe(ownCollectionFor(response.data.id));
+    }
+    return response;
+  };
 
   beforeAll(async () => {
-    try {
-      await apiClient.authenticate(config.ADMIN_USER, config.ADMIN_PASSWORD);
-    } catch (_) {
-      await apiClient.authenticate(config.TEST_USER, config.TEST_PASSWORD);
+    await apiClient.authenticate(config.ADMIN_USER, config.ADMIN_PASSWORD);
+
+    const health = await apiClient.get(`${config.API_BASE_URL}/api/${config.getEffectiveTenant()}/ai-assistant/health`);
+    expect(health.status).toBe(200);
+    dataLensAvailable = health.data.available === true;
+    if (!dataLensAvailable) {
+      console.log('DataLens reports unavailable: tolerating 500 on calls that reach it.');
     }
 
-    // Try to surface an existing asset id from the tenant so Mode A tests have
-    // something real to attach. If the tenant is empty, skip the Mode A tests.
-    try {
-      const listResponse = await apiClient.listAssets();
-      if (OK_STATUSES.includes(listResponse.status) && Array.isArray(listResponse.data) && listResponse.data.length > 0) {
-        const asset = listResponse.data.find(a => (a.filetype || '').toLowerCase() === 'pdf') || listResponse.data[0];
-        fixtureAssetId = asset.id || asset.Id;
-      }
-    } catch (_) {
-      // ignore — we'll just skip the with-assets tests
+    const pdf = testData.createTestPdfFile();
+    const upload = await apiClient.uploadBuffer(config.ASSETS_API_URL, pdf.buffer, pdf.filename, {
+      description: 'AI Assistant fixture document',
+      filetype: 'pdf'
+    });
+    if (!OK_STATUSES.includes(upload.status)) {
+      apiClient.logResponse(upload, 'UPLOAD PDF FIXTURE');
     }
+    expect(OK_STATUSES).toContain(upload.status);
+    fixtureAssetId = apiClient.track('assets', upload.data.id);
   });
 
   afterAll(async () => {
-    if (config.SKIP_CLEANUP) return;
-    for (const id of createdMaterialIds) {
-      try { await apiClient.deleteMaterial(id); } catch (_) { /* ignore */ }
+    // Force-delete the fixture asset first, while the AI Assistant materials still reference
+    // it: that cascade is what removes the materials' DataLens documents and collections.
+    // Deleting the materials first would leave them behind in DataLens.
+    if (fixtureAssetId && !config.SKIP_CLEANUP) {
+      const response = await apiClient.deleteAsset(fixtureAssetId, { force: true });
+      expect([200, 204, 404]).toContain(response.status);
     }
+    expect(await apiClient.cleanupTracked()).toEqual([]);
   });
 
   describe('Mode B — empty assets, per-material collection', () => {
     test('creates a material with no assets and returns success', async () => {
-      const payload = testData.createAIAssistantMaterialEmpty('empty');
-      const response = await apiClient.createMaterial(payload);
-
-      expect(TOLERATED_STATUSES).toContain(response.status);
+      const response = await createTracked(testData.createAIAssistantMaterialEmpty('empty'));
       if (!OK_STATUSES.includes(response.status)) return;
 
       expect(response.data).toHaveProperty('id');
@@ -71,18 +101,14 @@ describe('AI Assistant Material', () => {
       expect(response.data.assetIds ?? []).toEqual([]);
       // Warnings should be absent/null in the happy path.
       expect(response.data.warnings ?? null).toBeNull();
-
-      createdMaterialIds.push(response.data.id);
     });
 
     test('GET after Mode B create returns "notready" status and no assets', async () => {
-      const payload = testData.createAIAssistantMaterialEmpty('empty-read');
-      const createResponse = await apiClient.createMaterial(payload);
+      const createResponse = await createTracked(testData.createAIAssistantMaterialEmpty('empty-read'));
       if (!OK_STATUSES.includes(createResponse.status)) return;
-      createdMaterialIds.push(createResponse.data.id);
 
       const detail = await apiClient.getMaterialDetail(createResponse.data.id);
-      if (!OK_STATUSES.includes(detail.status)) return;
+      expect(detail.status).toBe(200);
 
       expect(detail.data).toHaveProperty('type', 'ai_assistant');
       expect(detail.data).toHaveProperty('aiAssistantStatus', 'notready');
@@ -92,65 +118,39 @@ describe('AI Assistant Material', () => {
   });
 
   describe('Mode A — assets provided', () => {
-    const skipIfNoAsset = (testName) => {
-      if (!fixtureAssetId) {
-        console.log(`Skipping "${testName}": no fixture asset available in this tenant`);
-        return true;
-      }
-      return false;
-    };
-
     test('accepts config.assets[].id with numeric-string id', async () => {
-      if (skipIfNoAsset('config.assets shape')) return;
-
-      const payload = testData.createAIAssistantMaterialWithConfigAssets(fixtureAssetId, 'config');
-      const response = await apiClient.createMaterial(payload);
-
-      expect(TOLERATED_STATUSES).toContain(response.status);
+      const response = await createTracked(
+        testData.createAIAssistantMaterialWithConfigAssets(fixtureAssetId, 'config'));
       if (!OK_STATUSES.includes(response.status)) return;
 
       expect(response.data).toHaveProperty('type', 'ai_assistant');
       expect(Array.isArray(response.data.assetIds)).toBe(true);
       expect(response.data.assetIds).toEqual([String(fixtureAssetId)]);
-      createdMaterialIds.push(response.data.id);
     });
 
     test('accepts top-level assets[].id with numeric-string id', async () => {
-      if (skipIfNoAsset('top-level assets shape')) return;
-
-      const payload = testData.createAIAssistantMaterialWithTopLevelAssets(fixtureAssetId, 'toplevel');
-      const response = await apiClient.createMaterial(payload);
-
-      expect(TOLERATED_STATUSES).toContain(response.status);
+      const response = await createTracked(
+        testData.createAIAssistantMaterialWithTopLevelAssets(fixtureAssetId, 'toplevel'));
       if (!OK_STATUSES.includes(response.status)) return;
 
       expect(response.data.assetIds).toEqual([String(fixtureAssetId)]);
-      createdMaterialIds.push(response.data.id);
     });
 
     test('accepts legacy assetIds[] flat number array', async () => {
-      if (skipIfNoAsset('legacy assetIds shape')) return;
-
-      const payload = testData.createAIAssistantMaterialWithLegacyIds(fixtureAssetId, 'legacy');
-      const response = await apiClient.createMaterial(payload);
-
-      expect(TOLERATED_STATUSES).toContain(response.status);
+      const response = await createTracked(
+        testData.createAIAssistantMaterialWithLegacyIds(fixtureAssetId, 'legacy'));
       if (!OK_STATUSES.includes(response.status)) return;
 
       expect(response.data.assetIds).toEqual([String(fixtureAssetId)]);
-      createdMaterialIds.push(response.data.id);
     });
 
     test('GET after Mode A create exposes the linked asset', async () => {
-      if (skipIfNoAsset('GET after Mode A')) return;
-
-      const payload = testData.createAIAssistantMaterialWithConfigAssets(fixtureAssetId, 'config-read');
-      const createResponse = await apiClient.createMaterial(payload);
+      const createResponse = await createTracked(
+        testData.createAIAssistantMaterialWithConfigAssets(fixtureAssetId, 'config-read'));
       if (!OK_STATUSES.includes(createResponse.status)) return;
-      createdMaterialIds.push(createResponse.data.id);
 
       const detail = await apiClient.getMaterialDetail(createResponse.data.id);
-      if (!OK_STATUSES.includes(detail.status)) return;
+      expect(detail.status).toBe(200);
 
       expect(Array.isArray(detail.data.assets)).toBe(true);
       expect(detail.data.assets.length).toBeGreaterThanOrEqual(1);
@@ -161,26 +161,20 @@ describe('AI Assistant Material', () => {
   });
 
   describe('Failure surfacing', () => {
-    // These tests deliberately do NOT assert that the call fails — a healthy DataLens
-    // deployment makes them pass with status "success". They document the contract:
+    // This test deliberately does NOT assert that the call fails — a healthy DataLens
+    // deployment makes it pass with status "success". It documents the contract:
     // when DataLens is unreachable or misconfigured, the response carries the
     // information needed for a deploy smoke to fail loudly.
     test('response shape carries Warnings and "partial" status when chatbot side breaks', async () => {
-      if (!fixtureAssetId) {
-        console.log('Skipping: no fixture asset available');
-        return;
-      }
-
-      const payload = testData.createAIAssistantMaterialWithConfigAssets(fixtureAssetId, 'failure-shape');
-      const response = await apiClient.createMaterial(payload);
-
+      const response = await createTracked(
+        testData.createAIAssistantMaterialWithConfigAssets(fixtureAssetId, 'failure-shape'));
       if (!OK_STATUSES.includes(response.status)) return;
-      createdMaterialIds.push(response.data.id);
 
       // status must be one of the documented values
       expect(['success', 'partial']).toContain(response.data.status);
 
       if (response.data.status === 'partial') {
+        console.log('AI Assistant create reported partial:', JSON.stringify(response.data.warnings));
         // warnings[] MUST be populated so CI can grep for chatbot failures
         expect(Array.isArray(response.data.warnings)).toBe(true);
         expect(response.data.warnings.length).toBeGreaterThan(0);
@@ -196,7 +190,8 @@ describe('AI Assistant Material', () => {
         type: 'ai_assistant',
         description: 'missing name'
       });
-      expect([400, 422, 500]).toContain(response.status);
+      // Name validation runs before any DataLens call, so no 500 tolerance is needed here.
+      expect([400, 422]).toContain(response.status);
     });
   });
 });

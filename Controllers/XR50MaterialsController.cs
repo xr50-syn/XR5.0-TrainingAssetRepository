@@ -1802,7 +1802,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
             if (!TryGetPropertyCaseInsensitive(materialData, "name", out var nameProp) ||
                 string.IsNullOrWhiteSpace(nameProp.GetString()))
             {
-                _logger.LogWarning("Material creation failed: name is required");
+                _logger.LogWarning("Material validation failed: name is required");
                 return "Material name is required";
             }
 
@@ -1812,7 +1812,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var typeValue = typeProp.GetString();
                 if (!string.IsNullOrEmpty(typeValue) && !ValidMaterialTypes.Contains(typeValue))
                 {
-                    _logger.LogWarning("Material creation failed: invalid type '{Type}'", typeValue);
+                    _logger.LogWarning("Material validation failed: invalid type '{Type}'", typeValue);
                     return $"Invalid material type: '{typeValue}'. Valid types are: {string.Join(", ", ValidMaterialTypes)}";
                 }
             }
@@ -1823,7 +1823,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 var discValue = discProp.GetString()?.Replace("Material", "");
                 if (!string.IsNullOrEmpty(discValue) && !ValidMaterialTypes.Contains(discValue))
                 {
-                    _logger.LogWarning("Material creation failed: invalid discriminator '{Discriminator}'", discValue);
+                    _logger.LogWarning("Material validation failed: invalid discriminator '{Discriminator}'", discValue);
                     return $"Invalid material discriminator: '{discValue}'. Valid types are: {string.Join(", ", ValidMaterialTypes)}";
                 }
             }
@@ -2618,7 +2618,7 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 // Honor an explicit target collection. A tenant may keep distinct document sets
                 // (e.g. different document types) in separate DataLens collections and want this
                 // assistant to ingest into / chat against a chosen one. When omitted, the service
-                // gives the material its own collection (aiassist_{id}; see CreateAsync/CreateWithAssetsAsync).
+                // gives the material its own collection (aiassist_{id}_{tenant}; see AIAssistantCollections).
                 if (TryGetPropertyCaseInsensitive(jsonElement, "collectionName", out var collectionProp) ||
                     TryGetPropertyCaseInsensitive(jsonElement, "collection_name", out collectionProp))
                 {
@@ -3925,6 +3925,14 @@ private async Task<object?> GetBasicMaterialDetails(int materialId)
                 if (existingMaterial == null)
                 {
                     return this.ProblemNotFound($"Material {materialId} was not found.");
+                }
+
+                // PUT replaces the material, so a body without a name would null the stored one.
+                // Apply the same required-field and type rules as create.
+                var validationError = ValidateMaterialData(jsonElement);
+                if (validationError != null)
+                {
+                    return this.ProblemBadRequest(validationError);
                 }
 
                 // Parse the material from JSON, using existing material's type as fallback

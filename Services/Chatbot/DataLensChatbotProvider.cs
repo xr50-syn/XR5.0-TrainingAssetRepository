@@ -29,19 +29,30 @@ namespace XR50TrainingAssetRepo.Services.Chatbot
 
         public async Task<ChatbotIngestResult> IngestDocumentAsync(ChatbotIngestRequest request)
         {
-            if (string.IsNullOrEmpty(request.SourceUrl))
+            string jobId;
+            if (request.Content != null)
             {
-                // The DataLens client ingests by downloading from an asset URL; inline content
-                // is not supported by this backend.
-                throw new NotSupportedException("DataLens ingestion requires a downloadable SourceUrl.");
+                // Inline content takes precedence over SourceUrl, per the request contract.
+                jobId = await _chatbotApiService.SubmitDocumentContentAsync(
+                    assetId: 0,
+                    content: request.Content,
+                    filetype: request.Filetype ?? "pdf",
+                    collectionName: request.Grouping,
+                    documentName: request.FileName);
             }
-
-            var jobId = await _chatbotApiService.SubmitDocumentAsync(
-                assetId: 0,
-                assetUrl: request.SourceUrl,
-                filetype: request.Filetype ?? "pdf",
-                collectionName: request.Grouping,
-                documentName: request.FileName);
+            else if (!string.IsNullOrEmpty(request.SourceUrl))
+            {
+                jobId = await _chatbotApiService.SubmitDocumentAsync(
+                    assetId: 0,
+                    assetUrl: request.SourceUrl,
+                    filetype: request.Filetype ?? "pdf",
+                    collectionName: request.Grouping,
+                    documentName: request.FileName);
+            }
+            else
+            {
+                throw new InvalidOperationException("DataLens ingestion requires either inline Content or a SourceUrl.");
+            }
 
             return new ChatbotIngestResult
             {

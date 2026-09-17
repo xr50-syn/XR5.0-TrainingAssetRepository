@@ -9,7 +9,10 @@ using XR50TrainingAssetRepo.Services;
 namespace XR50TrainingAssetRepo.Infrastructure.Auth
 {
     /// <summary>
-    /// Authenticates requests carrying an XR5.0 Hub session token (HL-Hub-Session-Token header).
+    /// Authenticates requests carrying an XR5.0 Hub credential: a session token (HL-Hub-Session-Token
+    /// header, or a non-JWT Authorization: Bearer value), validated through the Hub decrypt API, or
+    /// the user's Hub login JWT, validated through GET /api/v1/user/limited-info. Which one a request
+    /// carries is decided by <see cref="HubTokenReader"/>; both end in the same identity mapping.
     /// The opaque token is validated through the Hub decrypt API and the returned claims are
     /// projected onto the claim names the authorization handlers already consume
     /// (preferred_username / tenantName / role). The token is a bearer credential and must
@@ -22,6 +25,8 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
         private static readonly Guid DevTenantId = Guid.Parse("976092b0-0ca8-404d-99b8-30a8c755719c");
 
         private readonly IHubSessionTokenService _tokenService;
+        private readonly IHubUserTokenService _userTokenService;
+        private readonly HubTokenReader _tokenReader;
         private readonly IHubIdentityEnricher _identityEnricher;
         private readonly IWebHostEnvironment _environment;
         private readonly XR50HubOptions _hubOptions;
@@ -32,6 +37,8 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
             ILoggerFactory logger,
             UrlEncoder encoder,
             IHubSessionTokenService tokenService,
+            IHubUserTokenService userTokenService,
+            HubTokenReader tokenReader,
             IHubIdentityEnricher identityEnricher,
             IWebHostEnvironment environment,
             IOptions<XR50HubOptions> hubOptions,
@@ -39,6 +46,8 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
             : base(options, logger, encoder)
         {
             _tokenService = tokenService;
+            _userTokenService = userTokenService;
+            _tokenReader = tokenReader;
             _identityEnricher = identityEnricher;
             _environment = environment;
             _hubOptions = hubOptions.Value;
@@ -47,19 +56,18 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
 
         protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
         {
-            if (!Request.Headers.TryGetValue(HubSessionTokenDefaults.HeaderName, out var headerValues))
+            if (!_tokenReader.TryRead(Request, out var token, out var kind))
             {
                 return AuthenticateResult.NoResult();
             }
 
-            var token = headerValues.ToString();
             if (string.IsNullOrWhiteSpace(token))
             {
                 return AuthenticateResult.Fail("Empty Hub session token");
             }
 
             HubClaims claims;
-            if (IsDevelopmentToken(token))
+            if (kind == HubTokenKind.SessionToken && IsDevelopmentToken(token))
             {
                 // The fixed identity still flows through the normal tenant-mapping and role
                 // lookup so local development exercises the production code path.
@@ -68,15 +76,17 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
             }
             else
             {
-                var result = await _tokenService.DecryptAsync(token, Context.RequestAborted);
+                var result = kind == HubTokenKind.UserToken
+                    ? await _userTokenService.ValidateAsync(token, Context.RequestAborted)
+                    : await _tokenService.DecryptAsync(token, Context.RequestAborted);
                 switch (result.Outcome)
                 {
                     case HubDecryptOutcome.Valid:
                         claims = result.Claims!;
                         break;
                     case HubDecryptOutcome.Invalid:
-                        Logger.LogDebug("Hub session token rejected: {Reason}", result.Reason ?? "unknown");
-                        return AuthenticateResult.Fail($"Hub session token rejected: {result.Reason ?? "invalid"}");
+                        Logger.LogDebug("Hub {TokenKind} rejected: {Reason}", kind, result.Reason ?? "unknown");
+                        return AuthenticateResult.Fail($"Hub {kind} rejected: {result.Reason ?? "invalid"}");
                     case HubDecryptOutcome.SecretRejected:
                         // Our misconfiguration, but the caller's token cannot be proven valid: fail closed.
                         return AuthenticateResult.Fail("Hub integration misconfigured");
@@ -145,10 +155,18 @@ namespace XR50TrainingAssetRepo.Infrastructure.Auth
             {
                 new(ClaimTypes.NameIdentifier, hubClaims.UserId.ToString("D")),
                 new("sub", hubClaims.UserId.ToString("D")),
-                new(HubSessionTokenDefaults.SessionIdClaim, hubClaims.SessionId.ToString("D")),
-                new(HubSessionTokenDefaults.ApplicationIdClaim, hubClaims.ApplicationId.ToString("D")),
                 new(HubSessionTokenDefaults.HubTenantIdClaim, hubClaims.TenantId.ToString("D")),
             };
+
+            // Session and application ids exist only on session tokens; a Hub login JWT has neither.
+            if (hubClaims.SessionId != Guid.Empty)
+            {
+                claims.Add(new Claim(HubSessionTokenDefaults.SessionIdClaim, hubClaims.SessionId.ToString("D")));
+            }
+            if (hubClaims.ApplicationId != Guid.Empty)
+            {
+                claims.Add(new Claim(HubSessionTokenDefaults.ApplicationIdClaim, hubClaims.ApplicationId.ToString("D")));
+            }
 
             // preferred_username heads the GetUserId() fallback chain; prefer the matched local
             // user name so progress records keep keying on the same ids as the rest of the app.

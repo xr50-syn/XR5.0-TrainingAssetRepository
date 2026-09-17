@@ -162,6 +162,10 @@ controller at `/api/{tenantName}/ai-assistant` (`/{id}/ask`, `/{id}/documents`, 
 `/{id}/session/invalidate`, …). Asset ingest status — including the DataLens-reported
 `document_name` — is surfaced per asset in the material detail response
 (`GET /api/{tenantName}/materials/{id}/detail`). Each AI Assistant material gets its own
-DataLens collection (`aiassist_{id}`) unless an explicit `collectionName` is supplied, so one
-material's documents never surface in another's answers. (Supplying an explicit `collectionName`
+DataLens collection (`aiassist_{id}_{tenant}`) unless an explicit `collectionName` is supplied, so one
+material's documents never surface in another's answers. The tenant is part of the name because every
+tenant reaches DataLens through the same connection and material ids restart in each tenant; materials
+bound before that change keep their legacy `aiassist_{id}` name. Deleting a material's last asset drops
+its collection only when it is the material's own tenant-scoped one; for a legacy or explicitly supplied
+collection, which may be shared, only the document is removed. (Supplying an explicit `collectionName`
 lets several assistants share a curated collection when that is intended.)

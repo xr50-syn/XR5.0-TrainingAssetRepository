@@ -1,11 +1,41 @@
 # Authentication
 
-The XR50 Training API accepts two authentication schemes, selected per request:
+The XR50 Training API accepts these credentials, selected per request:
 
-| Scheme | Header | Environments |
-|--------|--------|--------------|
-| XR5.0 Hub session token | `HL-Hub-Session-Token` | all (the only scheme outside Development) |
-| Keycloak JWT bearer | `Authorization: Bearer` | Development only |
+| Credential | Header | Validated by | Environments |
+|------------|--------|--------------|--------------|
+| XR5.0 Hub session token | `HL-Hub-Session-Token`, or `Authorization: Bearer` with a non-JWT value | Hub decrypt API | all |
+| XR5.0 Hub login JWT | `Authorization: Bearer` with a JWT | Hub `GET /api/v1/user/limited-info` | all |
+| Keycloak JWT | `Authorization: Bearer` with a JWT whose `iss` is `IAM:Issuer` | JWT bearer (OIDC discovery) | Development only |
+
+Both Hub credentials use the `XR50Hub` scheme and the same identity mapping; outside Development
+they are the only way in. Routing (`HubTokenReader`):
+
+1. `HL-Hub-Session-Token` present: session token. It wins over any `Authorization` header.
+2. `Authorization: Bearer` that is not JWT-shaped (three dot-separated segments): session token.
+3. `Authorization: Bearer` with a JWT: the user's Hub login JWT, except in Development when the
+   token's `iss` equals `IAM:Issuer` - then it is a Keycloak token for the JWT bearer scheme and is
+   never sent to the Hub. The issuer is read without validation, only to choose the scheme.
+
+## XR5.0 Hub login JWT (embedded Hub screens)
+
+Screens embedded in the Hub frontend, such as the Training Programs Authoring Tool, send the JWT the
+browser obtained from the Hub's `POST /api/v1/auth/authenticate`, as `Authorization: Bearer`. No
+separate credential is issued for this service.
+
+`HubUserTokenService` presents that token to the Hub's `GET {XR50Hub:BaseUrl}/api/v1/user/limited-info`:
+
+- `200`: valid. The body's `id` becomes the Hub user id and `tenantId` the Hub tenant; `email`,
+  `firstName` and `lastName` are used when present. A 200 without a usable `id` fails closed (401).
+  A missing `tenantId` still authenticates but maps to no tenant, so tenant routes return 403.
+- `401`/`403`: invalid token, `401`. Any other status, a timeout or an unreadable body: `503`.
+- A token whose `exp` has passed is rejected without calling the Hub. Answers are cached by the
+  token's SHA-256 hash for `XR50Hub:CacheSeconds`, never beyond `exp`, so a token revoked on the Hub
+  stays usable here for at most that long.
+
+From there the flow is identical to the session token: tenant mapping through `HubTenantId`,
+roles from the local database, just-in-time user provisioning. A login JWT has no session or
+application id, so those claims are absent.
 
 > This page describes current behaviour. The two schemes disagree about where roles come from —
 > the Hub path reads them from our database, the JWT path from token claims — and the JWT path
@@ -34,12 +64,13 @@ route segment; system administrators are exempt from that match.
 
 Every request from the XR5.0 Hub to this service carries an encrypted, opaque session token in
 the `HL-Hub-Session-Token` header (spec: *XR5.0 Hub Session Token — External Service
-Integration*). The token is a **bearer credential**: accept it only over TLS, never log it, and
+Integration*). Clients embedded in the Hub frontend, such as the Training Programs Authoring Tool,
+may instead attach the same token as `Authorization: Bearer <token>`; it is validated identically. The token is a **bearer credential**: accept it only over TLS, never log it, and
 never place it in a URL.
 
 ### Validation flow
 
-1. `HubSessionTokenAuthenticationHandler` reads the header and calls the Hub decrypt API
+1. `HubSessionTokenAuthenticationHandler` reads the token (`HubSessionTokenDefaults.TryGetToken`) and calls the Hub decrypt API
    (`POST {XR50Hub:BaseUrl}/api/v1/session-token/decrypt`) through `HubSessionTokenService`,
    authenticating with the shared secret (`hl-hub-external-service-secret` header, from
    `XR50Hub:SharedSecret`).

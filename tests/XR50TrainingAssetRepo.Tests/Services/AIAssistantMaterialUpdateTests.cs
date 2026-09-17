@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using XR50TrainingAssetRepo.Models;
 using XR50TrainingAssetRepo.Services.Materials;
+using XR50TrainingAssetRepo.Tests.Fixtures;
 
 namespace XR50TrainingAssetRepo.Tests.Services;
 
@@ -39,6 +40,8 @@ public class AIAssistantMaterialUpdateTests
         var aiAssistantService = new AIAssistantMaterialService(
             factory,
             chatbotApi,
+            NoStoredFiles(),
+            new StubTenantService("test_tenant"),
             NullLogger<AIAssistantMaterialService>.Instance);
 
         await aiAssistantService.SubmitForProcessingAsync(10);
@@ -100,6 +103,8 @@ public class AIAssistantMaterialUpdateTests
         var aiAssistantMaterialService = new AIAssistantMaterialService(
             factory,
             new RecordingChatbotApiService(),
+            NoStoredFiles(),
+            new StubTenantService("test_tenant"),
             NullLogger<AIAssistantMaterialService>.Instance);
 
         var service = new AIAssistantService(
@@ -125,6 +130,52 @@ public class AIAssistantMaterialUpdateTests
         docs[1].JobId.Should().BeNull();
         docs[1].Status.Should().Be("notready");
     }
+
+    [Fact]
+    public async Task Submit_StoredAsset_SendsStoredBytes_NotItsUrl()
+    {
+        var options = new DbContextOptionsBuilder<XR50TrainingContext>()
+            .UseInMemoryDatabase($"ai-assistant-stored-{Guid.NewGuid()}")
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        var factory = new NewContextFactory(options);
+
+        var storage = new MockStorageService();
+        var storedBytes = "%PDF-1.4 stored"u8.ToArray();
+        await storage.UploadFileAsync("test_tenant", "hash-1", new FormFile(new MemoryStream(storedBytes), 0, storedBytes.Length, "file", "stored.pdf"));
+
+        using (var context = factory.CreateDbContext())
+        {
+            // An uploaded asset (storage key set) and a reference-only asset (no stored file).
+            // The stored asset's URL is unreachable on purpose: it must not be used.
+            context.Assets.AddRange(
+                new Asset { Id = 1, Filename = "stored.pdf", Filetype = "pdf", Type = AssetType.PDF, StorageKey = "hash-1", URL = "http://localhost:10000/bucket/hash-1" },
+                new Asset { Id = 2, Filename = "linked.pdf", Filetype = "pdf", Type = AssetType.PDF, URL = "https://example.test/linked.pdf" });
+
+            var material = new AIAssistantMaterial { id = 30, Name = "Stored content", AIAssistantStatus = "notready", CollectionName = "stored_collection" };
+            material.SetAssetIdsList(new List<int> { 1, 2 });
+            context.Materials.Add(material);
+            await context.SaveChangesAsync();
+        }
+
+        var chatbotApi = new RecordingChatbotApiService();
+        var service = new AIAssistantMaterialService(
+            factory,
+            chatbotApi,
+            new AssetContentReader(storage, new StubTenantService("test_tenant"), NullLogger<AssetContentReader>.Instance),
+            new StubTenantService("test_tenant"),
+            NullLogger<AIAssistantMaterialService>.Instance);
+
+        await service.SubmitForProcessingAsync(30);
+
+        chatbotApi.SubmittedContent.Keys.Should().Equal(1);
+        chatbotApi.SubmittedContent[1].Should().Equal(storedBytes);
+        chatbotApi.SubmittedUrls.Should().Equal(new Dictionary<int, string> { [2] = "https://example.test/linked.pdf" });
+    }
+
+    // A reader over empty storage: every asset is reference-only, so submission uses the URL.
+    private static AssetContentReader NoStoredFiles() =>
+        new(new MockStorageService(), new StubTenantService("test_tenant"), NullLogger<AssetContentReader>.Instance);
 
     private static async Task SeedAssistantWithCompletedAssetJobsAsync(IXR50TenantDbContextFactory factory)
     {
@@ -211,11 +262,23 @@ public class AIAssistantMaterialUpdateTests
     private sealed class RecordingChatbotApiService : IChatbotApiService
     {
         public List<int> SubmittedAssetIds { get; } = new();
+        public Dictionary<int, string> SubmittedUrls { get; } = new();
+        public Dictionary<int, byte[]> SubmittedContent { get; } = new();
 
         public Task<string> SubmitDocumentAsync(int assetId, string assetUrl, string filetype, string collectionName, string documentName)
         {
             SubmittedAssetIds.Add(assetId);
+            SubmittedUrls[assetId] = assetUrl;
             return Task.FromResult($"job-new-{assetId}");
+        }
+
+        public async Task<string> SubmitDocumentContentAsync(int assetId, Stream content, string filetype, string collectionName, string documentName)
+        {
+            SubmittedAssetIds.Add(assetId);
+            using var buffer = new MemoryStream();
+            await content.CopyToAsync(buffer);
+            SubmittedContent[assetId] = buffer.ToArray();
+            return $"job-new-{assetId}";
         }
 
         public Task<ChatbotJobStatus> GetJobStatusAsync(string jobId, string collectionName)
