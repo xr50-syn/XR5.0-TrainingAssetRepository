@@ -392,6 +392,40 @@ function createTestTextFile(content = 'Test file content for verification') {
 /**
  * Generate test image buffer (1x1 PNG)
  */
+/**
+ * Generate a minimal single-page PDF with one line of extractable text. The xref offsets are
+ * computed rather than hard-coded, so the file stays valid if the text changes.
+ */
+function createTestPdfFile(text = 'XR5.0 functional test document') {
+  const stream = `BT /F1 12 Tf 72 720 Td (${text}) Tj ET`;
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
+  ];
+
+  let body = '%PDF-1.4\n';
+  const offsets = [];
+  objects.forEach((obj, i) => {
+    offsets.push(body.length);
+    body += `${i + 1} 0 obj\n${obj}\nendobj\n`;
+  });
+  const xrefOffset = body.length;
+  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.forEach(offset => {
+    body += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  });
+  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+
+  return {
+    buffer: Buffer.from(body, 'latin1'),
+    filename: `test-document-${timestamp}.pdf`,
+    mimeType: 'application/pdf'
+  };
+}
+
 function createTestImageFile() {
   // Minimal valid PNG (1x1 transparent pixel)
   const pngBuffer = Buffer.from([
@@ -486,6 +520,7 @@ module.exports = {
   createAdminUser,
   createTestTextFile,
   createTestImageFile,
+  createTestPdfFile,
   TestResourceTracker,
   STORAGE_TYPE
 };

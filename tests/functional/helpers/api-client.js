@@ -300,8 +300,10 @@ class ApiClient {
     });
   }
 
-  async deleteAsset(id) {
-    return this.delete(`${config.ASSETS_API_URL}/${id}`);
+  // force: also delete an asset that materials still use, cascading to those materials and to
+  // the DataLens documents/collections they created. Without it the API answers 409.
+  async deleteAsset(id, { force = false } = {}) {
+    return this.delete(`${config.ASSETS_API_URL}/${id}${force ? '?force=true' : ''}`);
   }
 
   // Program operations
