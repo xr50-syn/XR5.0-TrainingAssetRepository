@@ -27,6 +27,16 @@ const config = require('../config');
 
 const OK_STATUSES = [200, 201];
 
+// DataLens is shared with other deployments, and collections are named aiassist_{materialId}
+// by default, so a test material can land on a collection another tenant already uses. Every
+// Mode A material therefore names its own collection, unique to this run: the tests never write
+// into, or (through the forced asset delete in afterAll) remove, a collection they did not create.
+const RUN_ID = Date.now();
+const withOwnCollection = (payload, testCase) => ({
+  ...payload,
+  collectionName: `functest_${RUN_ID}_${testCase.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`
+});
+
 describe('AI Assistant Material', () => {
   let fixtureAssetId;
   let dataLensAvailable = false;
@@ -42,6 +52,10 @@ describe('AI Assistant Material', () => {
     expect(reachableStatuses()).toContain(response.status);
     if (OK_STATUSES.includes(response.status)) {
       apiClient.track('materials', response.data.id);
+      if (payload.collectionName) {
+        // The cleanup is only safe if the material really is bound to the run-unique collection.
+        expect(response.data.collectionName).toBe(payload.collectionName);
+      }
     }
     return response;
   };
@@ -110,7 +124,7 @@ describe('AI Assistant Material', () => {
   describe('Mode A — assets provided', () => {
     test('accepts config.assets[].id with numeric-string id', async () => {
       const response = await createTracked(
-        testData.createAIAssistantMaterialWithConfigAssets(fixtureAssetId, 'config'));
+        withOwnCollection(testData.createAIAssistantMaterialWithConfigAssets(fixtureAssetId, 'config'), 'config'));
       if (!OK_STATUSES.includes(response.status)) return;
 
       expect(response.data).toHaveProperty('type', 'ai_assistant');
@@ -120,7 +134,7 @@ describe('AI Assistant Material', () => {
 
     test('accepts top-level assets[].id with numeric-string id', async () => {
       const response = await createTracked(
-        testData.createAIAssistantMaterialWithTopLevelAssets(fixtureAssetId, 'toplevel'));
+        withOwnCollection(testData.createAIAssistantMaterialWithTopLevelAssets(fixtureAssetId, 'toplevel'), 'toplevel'));
       if (!OK_STATUSES.includes(response.status)) return;
 
       expect(response.data.assetIds).toEqual([String(fixtureAssetId)]);
@@ -128,7 +142,7 @@ describe('AI Assistant Material', () => {
 
     test('accepts legacy assetIds[] flat number array', async () => {
       const response = await createTracked(
-        testData.createAIAssistantMaterialWithLegacyIds(fixtureAssetId, 'legacy'));
+        withOwnCollection(testData.createAIAssistantMaterialWithLegacyIds(fixtureAssetId, 'legacy'), 'legacy'));
       if (!OK_STATUSES.includes(response.status)) return;
 
       expect(response.data.assetIds).toEqual([String(fixtureAssetId)]);
@@ -136,7 +150,7 @@ describe('AI Assistant Material', () => {
 
     test('GET after Mode A create exposes the linked asset', async () => {
       const createResponse = await createTracked(
-        testData.createAIAssistantMaterialWithConfigAssets(fixtureAssetId, 'config-read'));
+        withOwnCollection(testData.createAIAssistantMaterialWithConfigAssets(fixtureAssetId, 'config-read'), 'config-read'));
       if (!OK_STATUSES.includes(createResponse.status)) return;
 
       const detail = await apiClient.getMaterialDetail(createResponse.data.id);
@@ -157,7 +171,7 @@ describe('AI Assistant Material', () => {
     // information needed for a deploy smoke to fail loudly.
     test('response shape carries Warnings and "partial" status when chatbot side breaks', async () => {
       const response = await createTracked(
-        testData.createAIAssistantMaterialWithConfigAssets(fixtureAssetId, 'failure-shape'));
+        withOwnCollection(testData.createAIAssistantMaterialWithConfigAssets(fixtureAssetId, 'failure-shape'), 'failure-shape'));
       if (!OK_STATUSES.includes(response.status)) return;
 
       // status must be one of the documented values
