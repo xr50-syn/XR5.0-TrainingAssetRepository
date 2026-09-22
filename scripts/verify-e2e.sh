@@ -20,8 +20,8 @@
 #   ./scripts/verify-e2e.sh --with-authz     # also run the authorization matrix sweep
 #   ./scripts/verify-e2e.sh --down           # stop the stack and exit
 #
-# This script never drops volumes and never deletes tenants. Bringing the stack up with --up
-# leaves it running so you can probe it afterwards; --down stops containers but keeps data.
+# This wrapper never drops volumes; functional suites create and delete test fixtures/tenants.
+# --up leaves the stack running for probes; --down stops containers but keeps volumes.
 
 set -uo pipefail
 

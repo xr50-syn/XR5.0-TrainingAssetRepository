@@ -2,8 +2,8 @@
 
 How to verify a change to this repository, from a one-line fix to a change that crosses the
 database and storage boundaries. This guide is vendor-neutral: every step is an ordinary
-command that a human or any coding agent can run. Agent adapters under `.claude/skills/` and
-`.agents/skills/` are thin pointers to this document and add nothing of their own.
+command that a human or any coding agent can run. Verification adapters under
+`.claude/skills/` and `.agents/skills/` point here and add no separate procedure.
 
 The short version of the rules lives in [AGENTS.md](../../AGENTS.md) under "Verification".
 
@@ -31,7 +31,10 @@ one problem instead of a cascade.
 ./scripts/verify-e2e.sh --down           # stop the stack (volumes preserved)
 ```
 
-It never drops volumes and never deletes tenants.
+The wrapper never drops volumes. Its functional suites create and delete test
+tenants and other fixtures; running them is not read-only. Use an authorized test
+stack, verify teardown, and report any leftovers. Do not infer ownership from a
+tenant's name or delete another run's fixtures.
 
 ## Choosing rungs
 
@@ -46,7 +49,7 @@ It never drops volumes and never deletes tenants.
 ## Bringing up a stack
 
 ```bash
-cp .env.sandbox.example .env     # then replace every change_me value
+test -e .env || cp .env.sandbox.example .env  # preserve existing config; fill missing values securely
 ./scripts/verify-e2e.sh --up
 ```
 
@@ -74,6 +77,12 @@ covers yet, so it needs its own probe. Probes are throwaway scripts run against 
 keep them outside the repository (a scratch directory) unless you are promoting one to a suite.
 
 Five rules make a probe trustworthy.
+
+For focused HTTP requests, authentication and safe fixture setup, follow
+[API Probe](api-probe.md). For the DataLens ingestion/status scenario, use
+[AI Assistant / DataLens Probe](ai-assistant-probe.md). A diagnosis starts with
+read-only checks; creating fixtures or modifying a remote deployment requires an
+authorized live-test scope.
 
 **1. Derive the cases from the diff, not from the commit message.** Read what the code now
 accepts, rejects, and derives. A probe written from the description tests the intent; a probe
@@ -133,8 +142,10 @@ state it was found in and what was applied. Afterwards check:
   identical schemas: dump both with the queries below and diff the output. Only
   `__EFMigrationsHistory` and the legacy-only `TenantDirectories` table may differ.
 - The pre-existing tenant still answers `GET /api/{tenant}/materials`.
-- A tenant with a mixed-case name (`Probe_Mixed`) appears in `SCHEMATA` as
-  `xr50_tenant_Probe_Mixed` and in `migration-status`; database names keep their case.
+- A tenant with a mixed-case name (`Probe_Mixed`) appears in `SCHEMATA` and in
+  `migration-status` according to the server's `lower_case_table_names` mode.
+  Assert through the naming/collision rules in AGENTS.md; do not assume every
+  server preserves case.
 
 ```sql
 SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, EXTRA, CHARACTER_SET_NAME, COLLATION_NAME
@@ -157,7 +168,8 @@ ORDER BY 1, 2;
 
 ## Interpreting failures
 
-- **Failed for the control too** — your assertion is wrong, not the code.
+- **Failed for the control too** — investigate the assertion and shared baseline;
+  this may be a bad expectation or a pre-existing/shared defect, not a new regression.
 - **Passes hermetically, fails functionally** — the difference is real infrastructure: a
   stubbed database hides identifier handling, collation, and connection-string derivation.
 - **Fails only on a second run** — the first run leaked state. Check teardown before

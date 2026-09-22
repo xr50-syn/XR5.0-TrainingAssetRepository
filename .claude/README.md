@@ -1,24 +1,13 @@
 # Claude Code adapter
 
-Optional local tooling. Everything authoritative lives in vendor-neutral form:
+[AGENTS.md](../AGENTS.md) is the shared project entrypoint. Procedures live in
+`docs/guides/`; no project knowledge is maintained only in this directory.
 
-- [AGENTS.md](../AGENTS.md) — architecture constraints, coding conventions, verification rules
-- [docs/guides/verification-workflow.md](../docs/guides/verification-workflow.md) — the
-  verification ladder and how to write a targeted probe
-- `scripts/verify-e2e.sh` — the executable ladder
+Both `.claude/skills/` and `.agents/skills/` package the same six workflows:
+`e2e-verify`, `e2e-probe`, `api-probe`, `ai-assistant-probe`, `material-type`, and
+`run-tests`. Each has a `<name>/SKILL.md` entrypoint with matching instructions.
+The old flat `material-type.md` and `run-tests.md` paths are compatibility links.
 
-The skills here are thin pointers to those documents. They add trigger conditions and a short
-checklist; they do not add project knowledge of their own. If a skill and AGENTS.md ever
-disagree, AGENTS.md wins and the skill is the thing to fix.
-
-| Skill | Use for |
-|---|---|
-| `e2e-verify` | Running the verification ladder against a change |
-| `e2e-probe` | Proving a specific change works, where no suite covers it yet |
-
-Contributors using other agents are not expected to install this. See
-[docs/design/agent-skill-portability.md](../docs/design/agent-skill-portability.md) for how the
-same capability is offered to other tools.
-
-`settings.local.json` is gitignored; personal overrides belong there rather than in a tracked
-file.
+See [Agent Skill Portability](../docs/design/agent-skill-portability.md) for the
+shared workflow map and maintenance rules. Personal overrides belong in the
+ignored `settings.local.json`, not in the tracked adapter or team settings.

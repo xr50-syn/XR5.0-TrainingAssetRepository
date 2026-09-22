@@ -63,6 +63,42 @@ Adding a material type usually requires coordinated updates to:
 - dependency injection in `Program.cs`
 - the material test factory and focused tests
 
+Follow [Material Type Changes](docs/guides/material-type.md) for the dispatch
+checklist and external-provider patterns. Stored uploads are ingested through
+`IAssetContentReader`/`IStorageService`; only reference-only assets use their URL.
+AI Assistant collections default to `aiassist_{id}_{tenant}` through
+`AIAssistantCollections`, not the tenant's `DefaultAICollection`. Preserve explicit
+bindings and legacy collections on existing materials.
+
+## Authentication and authorization
+
+Read [Authentication](docs/guides/authentication.md) before changing credential
+routing, identity mapping, or permissions. The implementation is in
+`Infrastructure/Auth/` and `Program.cs`.
+
+- Production is Hub-only. Hub login JWTs use `Authorization: Bearer` and are
+  validated by the Hub limited-info API; decoding a JWT does not validate it.
+- Hub session tokens use `HL-Hub-Session-Token` or a non-JWT bearer value and the
+  Hub decrypt API. The explicit Hub header takes precedence, even when invalid.
+- Keycloak JWTs are Development-only, routed by `IAM:Issuer`; never forward them
+  to the Hub. Rejected credentials return 401; Hub unavailability returns 503.
+- Hub tenant GUIDs map through `XR50TenantRegistry.HubTenantId`. Hub roles come
+  from local `TenantAdmins` and `Users.admin`; new users auto-provision as plain
+  members. Keycloak identities use token claims. Use `User.GetUserId()` rather
+  than inventing claim fallback chains.
+- Tenant controllers require `TenantMember`; authoring mutations additionally
+  require `TenantAdmin`. Tenant deletion, mapping, and troubleshooting require
+  `SystemAdmin`. `TenantCreator` permits Hub self-service only for the caller's
+  own Hub tenant, as enforced by the controller.
+- Keep the default sandbox authenticated. Do not enable anonymous bypass to
+  obtain a green verification result. Never log credentials or commit secrets.
+
+Most hermetic tests use `TestAuthHandler` (systemadmin by default). Auth changes
+also need `Integration/HubAuthenticationTests.cs` and
+`Services/HubUserTokenServiceTests.cs` / `HubSessionTokenServiceTests.cs` under the
+test project: these keep the real schemes and fake the external Hub calls.
+The Jest Keycloak suites alone do not verify the production Hub path.
+
 ## Schema migrations
 
 The committed EF Core migrations under `Migrations/` are the schema. `XR50TrainingContext`
@@ -143,10 +179,14 @@ tenant, material, asset, or external collection created by a live probe.
   else. Deleting every adapter directory must lose no information, and an agent
   with no adapter at all still finds the workflow through this file.
 
-  | Adapter | Status |
+  | Skill in both `.claude/skills/` and `.agents/skills/` | Shared procedure |
   |---|---|
-  | `.claude/skills/` (`e2e-verify`, `e2e-probe`) | Present |
-  | `.agents/skills/` (`e2e-verify`, `e2e-probe`) | Present for Codex |
+  | `e2e-verify` | [Verification Workflow](docs/guides/verification-workflow.md) |
+  | `e2e-probe` | [Targeted probes](docs/guides/verification-workflow.md#writing-a-targeted-probe) |
+  | `api-probe` | [API Probe](docs/guides/api-probe.md) |
+  | `ai-assistant-probe` | [AI Assistant / DataLens Probe](docs/guides/ai-assistant-probe.md) |
+  | `material-type` | [Material Type Changes](docs/guides/material-type.md) |
+  | `run-tests` | [Testing](docs/guides/testing.md) |
 
 - When behavior or commands change, update this guide and the relevant project
   documentation together. A change to `.claude/` or `.agents/skills/` that does not touch

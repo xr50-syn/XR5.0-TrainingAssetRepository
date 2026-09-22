@@ -57,7 +57,20 @@ dotnet test --filter "FullyQualifiedName~TenantDatabaseNaming"
 
 # With coverage
 dotnet test --collect:"XPlat Code Coverage"
+
+# Machine-readable results when console output is incomplete (for example on Windows)
+dotnet test tests/XR50TrainingAssetRepo.Tests/XR50TrainingAssetRepo.Tests.csproj --logger "trx;LogFileName=run.trx"
 ```
+
+Most in-process API suites use `Fixtures/TestAuthHandler.cs`, with a systemadmin
+principal by default. Override per request with `X-Test-User`, `X-Test-Roles`,
+`X-Test-Tenant`, or `X-Test-Anonymous: true` for denial paths. Hub-specific tests
+use `HubAuthWebApplicationFixture` to retain the real authentication schemes
+while faking external Hub calls and identity enrichment. For authentication
+changes, include `Integration/HubAuthenticationTests.cs`,
+`Services/HubUserTokenServiceTests.cs`, and `Services/HubSessionTokenServiceTests.cs`.
+The functional harness authenticates with Development Keycloak; its green result
+does not establish that production Hub routing works.
 
 If `dotnet test` fails with **MSB3030** about a missing `MvcTestingAppManifest.json` under a deeply
 nested path, the test project's build output has been copied into itself. Delete the artifacts and
@@ -94,7 +107,10 @@ tests/functional/
 ```
 
 Each run provisions its own tenant (`test_<timestamp>`) in `setup.js` and deletes it in
-`teardown.js`. A leftover `test_*` tenant means a run was aborted; remove it before the next run.
+`teardown.js`. If a run leaves resources, verify their ownership from its state
+and results before cleanup; a `test_*` name alone is not permission to delete it.
+Use an authorized disposable stack. `EXISTING_TENANT` skips tenant creation/deletion,
+but suites can still mutate that tenant's contents.
 
 ### Running
 

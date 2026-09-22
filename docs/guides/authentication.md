@@ -17,6 +17,11 @@ they are the only way in. Routing (`HubTokenReader`):
    token's `iss` equals `IAM:Issuer` - then it is a Keycloak token for the JWT bearer scheme and is
    never sent to the Hub. The issuer is read without validation, only to choose the scheme.
 
+The Hub login JWT uses the Hub's HS256 signing key, which this service does not
+hold. Decoding its claims is not signature verification: only the Hub limited-info
+response authenticates it. The explicit Hub header takes precedence even if it is
+empty or invalid; do not fall back to a bearer credential on rejection.
+
 ## XR5.0 Hub login JWT (embedded Hub screens)
 
 Screens embedded in the Hub frontend, such as the Training Programs Authoring Tool, send the JWT the
@@ -99,6 +104,8 @@ The Hub authenticates the user; **authorization stays grounded in our own regist
   Set the mapping per tenant with `PUT xr50/trainingAssetRepository/Tenants/{tenantName}/hub-tenant`
   (SystemAdmin) or at tenant creation (`hubTenantId` field). An unmapped `tenantId` still
   authenticates but carries no `tenantName`, so tenant-scoped endpoints return `403`.
+  Mapping results, including an unmapped result, are cached for `CacheSeconds`
+  (default 60 seconds). A newly configured mapping may take that long to appear.
 - **Self-service tenant provisioning**: any Hub-authenticated user may `POST Tenants` to create
   the tenant for their *own* Hub tenant (`TenantCreator` policy). The new tenant is force-bound
   to the caller's token `tenantId` (any caller-supplied `hubTenantId` is ignored), at most one
@@ -144,10 +151,20 @@ tenant boundaries, and any Hub user can provision their own tenant and become it
 system administrator can set that flag, through `POST`/`PUT api/{tenantName}/users`. Deleting a
 user also drops their role grants, so a re-provisioned Hub user id never inherits an old one.
 
+Role lookup is performed on each request, independently of the Hub token and
+tenant-mapping caches, so role grants take effect on the next request.
+
 Pre-provisioning ahead of first login works too: `POST api/{tenantName}/users` with
 `userName` = the Hub `userId`. A password is only required for OwnCloud-backed tenants, which
 mirror users into their own account store; Hub-authenticated identities (service accounts in
 particular) never need one.
+
+### Known credential limitation
+
+Local `User.Password` is still stored unhashed and mirrored to OwnCloud for
+OwnCloud-backed tenants. It is not used to authenticate API requests. Hashing or
+removal remains follow-up work; do not log it, expose it in responses, or treat it
+as an alternative to Hub/Keycloak authentication.
 
 ### Configuration
 

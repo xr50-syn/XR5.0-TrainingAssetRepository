@@ -2,125 +2,47 @@
 
 **Status:** Adopted
 
-How this repository offers its verification workflow to coding agents without requiring any
-particular one. Written when the Claude Code adapter under `.claude/` was added, to keep that
-from becoming the privileged path.
+## Neutral core, thin adapters
 
-## The problem
+[AGENTS.md](../../AGENTS.md) owns shared project rules and links every workflow.
+Procedures live in ordinary Markdown under `docs/guides/`; executable helpers
+live under `scripts/`. An agent or contributor needs no vendor adapter to use them.
 
-Agent vendors discover packaged instructions from different locations — Claude Code uses
-`.claude/skills/`, while Codex discovers repository skills from `.agents/skills/`. Others have
-rules files or no adapter mechanism at all. Encoding the verification workflow in one vendor's
-location makes contributors using a different tool second-class, and makes the workflow itself
-invisible to anyone reading the repository without an agent.
+The repository tracks matching `.claude/skills/<name>/SKILL.md` and
+`.agents/skills/<name>/SKILL.md` entrypoints. Each carries a name, trigger description,
+and pointers to the shared procedure, not its own copy of project instructions.
+The Claude entrypoint imports AGENTS.md. Removing the adapter directories must
+not remove project knowledge.
 
-[AGENTS.md](../../AGENTS.md) already commits us against this: *"Do not require a particular
-model, agent vendor, IDE, or proprietary tool"* and *"Vendor adapters ... are optional local
-configuration and should point back to this file."*
+## Workflow map
 
-## Principle: neutral core, thin adapters
+| Skill in both directories | Shared procedure |
+|---|---|
+| `e2e-verify` | [Verification Workflow](../guides/verification-workflow.md), using `scripts/verify-e2e.sh` |
+| `e2e-probe` | [Verification Workflow: targeted probes](../guides/verification-workflow.md#writing-a-targeted-probe) |
+| `api-probe` | [API Probe](../guides/api-probe.md), the focused HTTP variant of a targeted probe |
+| `ai-assistant-probe` | [AI Assistant / DataLens Probe](../guides/ai-assistant-probe.md) |
+| `material-type` | [Material Type Changes](../guides/material-type.md) |
+| `run-tests` | [Testing](../guides/testing.md), with the verification guide for rung selection |
 
-```
-docs/guides/verification-workflow.md   <- the procedure, in prose
-scripts/verify-e2e.sh                  <- the procedure, executable
-AGENTS.md                              <- the rules, and pointers to both
-        |
-        +-- .claude/skills/*/SKILL.md        thin adapter: triggers + checklist
-        +-- .agents/skills/*/SKILL.md        thin Codex adapter: triggers + checklist
-        +-- (no adapter)                     still works: AGENTS.md points at the guide
-```
+The old `.claude/skills/material-type.md` and `run-tests.md` files only redirect
+existing links. Discoverable skills use the directory-based layout above.
 
-An adapter may contain trigger conditions, a short checklist, and a pointer. It may **not**
-contain project knowledge that exists nowhere else. The test: delete every adapter directory
-and the repository must lose no information.
+## Maintenance contract
 
-The bottom row matters most. An agent with no adapter at all should still reach the right
-procedure, because `AGENTS.md` is read natively by most tools and names the guide explicitly.
-Adapters are an ergonomic improvement, never the mechanism.
+- Change rules in AGENTS.md and procedures in the relevant shared guide. Adapters
+  change when task routing, discovery descriptions, or packaging changes.
+- Keep the skill names, descriptions, and pointers paired across both directories.
+  Resolve links relative to each Markdown file; run commands from the repository root.
+- Shared guides win over adapters on any disagreement. Repair the adapter instead
+  of introducing vendor-specific project behavior.
+- Keep team adapters tracked and personal settings, plans, and session state ignored.
+  Do not change tool permissions merely to make a skill runnable.
+- A workflow does not grant authority to mutate live systems. Diagnosis stays
+  read-only unless the requested task authorizes a live probe or implementation.
+- Review new workflows for the zero-adapter path: each must be reachable from
+  AGENTS.md, with no required reference back into a vendor directory.
 
-## Adapter contract
-
-Any adapter, for any vendor, must:
-
-1. **Point to `docs/guides/verification-workflow.md`** as authoritative, and say that the guide
-   wins on any disagreement.
-2. **Invoke `scripts/verify-e2e.sh`** rather than restating its commands, so flags and rungs
-   cannot drift.
-3. **Carry the honesty rules verbatim in substance**: a skipped rung is reported as skipped;
-   the anonymous-bypass gate is never disabled to make a run finish; the image is rebuilt after
-   application code changes; probes clean up and verify the cleanup.
-4. **Add no project facts of its own.** New knowledge goes in the guide or AGENTS.md, and the
-   adapter references it.
-5. **Keep personal configuration untracked** — `settings.local.json` and equivalents stay
-   gitignored.
-
-## Codex adapter
-
-Codex reads `AGENTS.md` natively and supports repository-scoped agent skills. That makes it a
-good second adapter and proof that the neutral core is genuinely neutral.
-
-### Mechanism confirmed
-
-The original proposal assumed project prompt files under `.codex/prompts/`. That assumption was
-checked before implementation and was no longer current. Codex CLI 0.148.0, the installed
-release when this adapter was adopted, follows the agent skills mechanism documented in the
-[official Codex skill documentation](https://learn.chatgpt.com/codex/build-skills):
-
-- repository skills live under `.agents/skills/<name>/SKILL.md`;
-- Codex scans from the current directory up to the repository root without a project config
-  entry;
-- users can invoke a skill explicitly as `$e2e-verify` or `$e2e-probe`;
-- Codex can select either skill implicitly from its frontmatter description.
-
-The packaging changed; the vendor-neutral workflow did not.
-
-### Zero-adapter path
-
-The zero-adapter path was verified before adding `.agents/skills/`: Codex read `AGENTS.md`,
-followed its pointer to the verification guide, and ran `scripts/verify-e2e.sh`. The adapter is
-therefore a convenience and stays minimal.
-
-If that path ever stops working, make the pointer in `AGENTS.md` more prominent rather than
-compensating with project knowledge inside a Codex-specific file.
-
-### Files
-
-The Codex adapter mirrors the two Claude Code skills:
-
-| File | Mirrors | Content |
-|---|---|---|
-| `.agents/skills/e2e-verify/SKILL.md` | `.claude/skills/e2e-verify/SKILL.md` | ladder invocation + non-negotiables |
-| `.agents/skills/e2e-probe/SKILL.md` | `.claude/skills/e2e-probe/SKILL.md` | probe procedure + assertion checklist |
-
-The adapters use Codex's required `name` and `description` frontmatter. They need no scripts,
-assets, generated metadata or repository-local configuration.
-
-## Other agents
-
-Cursor (`.cursor/rules/`), Aider (`CONVENTIONS.md`), Copilot
-(`.github/copilot-instructions.md`) and Continue (`.continuerules`) all take a single
-instructions file. For each, the entire adapter is a few lines pointing at `AGENTS.md` and the
-verification guide. Add one when a contributor actually uses that tool — speculative adapters
-rot silently because nobody runs them.
-
-## Keeping adapters from drifting
-
-Drift is the real risk: adapters are duplicated prose, and duplicated prose diverges.
-
-- **The guide is the only place a procedure changes.** Adapters change only when the *set* of
-  skills changes.
-- **Adapters must not restate command syntax.** They name `scripts/verify-e2e.sh`; the script's
-  own `--help` is the interface.
-- **When behavior changes, update the guide and AGENTS.md together** — already an AGENTS.md
-  rule, extended here to cover adapters.
-- **Review rule:** a pull request touching `.claude/` or `.agents/skills/` without touching
-  `docs/guides/` is either adapter packaging or trigger wording only, or it is a mistake. Ask
-  which.
-
-## What this deliberately does not do
-
-- **No CI enforcement of adapter parity.** Two adapters do not justify a checker; revisit at
-  four.
-- **No generated adapters.** A generator is more machinery than the few files it would emit.
-- **No vendor-specific behavior.** If an agent needs different *instructions* rather than a
-  different *file format*, that is a signal the guide is underspecified — fix the guide.
+Before merging packaging changes, compare the skill-name sets and paired files,
+check frontmatter and local links, and verify Git does not ignore the adapters.
+No generator or tool-specific execution dependency is required.

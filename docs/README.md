@@ -14,11 +14,14 @@ This documentation is organized for **frontend developers** integrating with the
 
 | Document | Description |
 |----------|-------------|
-| [Authentication](guides/authentication.md) | Keycloak JWT authentication setup and token usage |
+| [Authentication](guides/authentication.md) | Hub login/session tokens, tenant mapping and roles; Development-only Keycloak |
 | [Usage Examples](guides/usage-examples.md) | Complete workflow examples for common scenarios |
 | [AI Voice Processing](guides/ai-voice-processing.md) | Voice material and asset AI processing integration |
 | [Testing](guides/testing.md) | Running and writing unit and functional tests |
 | [Verification Workflow](guides/verification-workflow.md) | The verification ladder, `scripts/verify-e2e.sh`, and how to write a targeted end-to-end probe |
+| [API Probe](guides/api-probe.md) | Focused authenticated requests, safe fixtures, assertions and cleanup |
+| [AI Assistant / DataLens Probe](guides/ai-assistant-probe.md) | Ingestion, tenant-scoped collections, job reconciliation and material-bound chat |
+| [Material Type Changes](guides/material-type.md) | Model, dispatch, provider, EF migration and testing checklist |
 
 ## Setup
 
@@ -38,7 +41,7 @@ This documentation is organized for **frontend developers** integrating with the
 | Document | Status | Description |
 |----------|--------|-------------|
 | [Identity and Authorization Direction](design/identity-and-authorization-direction.md) | Proposed | Where roles should live, configuration-driven deployment modes, and how a non-Hub install bootstraps — with a staged, backward-compatible migration path |
-| [Agent Skill Portability](design/agent-skill-portability.md) | Adopted | Keeping the verification workflow vendor-neutral with thin Claude Code and Codex adapters |
+| [Agent Skill Portability](design/agent-skill-portability.md) | Adopted | Six shared workflows with matching thin agent adapters |
 
 ## Quick Links
 
@@ -57,13 +60,10 @@ All endpoints are scoped to a tenant:
 ```
 
 ### Authentication
-JWT tokens from Keycloak. See [Authentication Guide](guides/authentication.md).
-
-User ID is extracted from token claims in this order:
-1. `preferred_username`
-2. `name`
-3. `email`
-4. `sub` (UUID fallback)
+Hub login JWTs and session tokens authenticate in every environment; Keycloak is
+Development-only. Hub tenant IDs map through the local registry and Hub roles
+come from the local database. Use `User.GetUserId()` for caller identity. See the
+[Authentication Guide](guides/authentication.md) for routing and authorization.
 
 ### Material Types
 - `quiz` - Questions with scoring
