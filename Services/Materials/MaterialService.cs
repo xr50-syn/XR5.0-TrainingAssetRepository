@@ -381,9 +381,6 @@ namespace XR50TrainingAssetRepo.Services.Materials
 
                 await DeleteChildEntriesAsync(context, material.id, existing.GetType());
 
-                context.Materials.Remove(existing);
-                await context.SaveChangesAsync();
-
                 material.id = existing.id;
                 material.Created_at = createdAt;
                 material.Updated_at = DateTime.UtcNow;
@@ -395,7 +392,11 @@ namespace XR50TrainingAssetRepo.Services.Materials
                     SetAssetId(material, existingAssetId.Value);
                 }
 
-                context.Materials.Add(material);
+                // A material may be referenced by subcomponent relationships, program
+                // materials, and progress rows. Deleting and reinserting it cascades those
+                // references even if the replacement uses the same ID.
+                context.Entry(existing).CurrentValues.SetValues(material);
+                AddChildEntries(context, material);
                 await context.SaveChangesAsync();
 
                 await ProcessChildEntitiesAsync(context, material);
@@ -440,6 +441,43 @@ namespace XR50TrainingAssetRepo.Services.Materials
             if (!string.IsNullOrWhiteSpace(updated.CollectionName))
             {
                 existing.CollectionName = updated.CollectionName;
+            }
+        }
+
+        private static void AddChildEntries(XR50TrainingContext context, Material material)
+        {
+            switch (material)
+            {
+                case ChecklistMaterial checklist:
+                    foreach (var entry in checklist.Entries)
+                        entry.ChecklistMaterialId = material.id;
+                    context.Entries.AddRange(checklist.Entries);
+                    break;
+                case WorkflowMaterial workflow:
+                    foreach (var step in workflow.WorkflowSteps)
+                        step.WorkflowMaterialId = material.id;
+                    context.WorkflowSteps.AddRange(workflow.WorkflowSteps);
+                    break;
+                case VideoMaterial video:
+                    foreach (var timestamp in video.Timestamps)
+                        timestamp.VideoMaterialId = material.id;
+                    context.Timestamps.AddRange(video.Timestamps);
+                    break;
+                case QuestionnaireMaterial questionnaire:
+                    foreach (var entry in questionnaire.QuestionnaireEntries)
+                        entry.QuestionnaireMaterialId = material.id;
+                    context.QuestionnaireEntries.AddRange(questionnaire.QuestionnaireEntries);
+                    break;
+                case QuizMaterial quiz:
+                    foreach (var question in quiz.Questions)
+                        question.QuizMaterialId = material.id;
+                    context.QuizQuestions.AddRange(quiz.Questions);
+                    break;
+                case ImageMaterial image:
+                    foreach (var annotation in image.ImageAnnotations)
+                        annotation.ImageMaterialId = material.id;
+                    context.ImageAnnotations.AddRange(image.ImageAnnotations);
+                    break;
             }
         }
 

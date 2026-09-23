@@ -110,6 +110,50 @@ public class SubcomponentRelatedMaterialsTests : IClassFixture<WebApplicationFix
     }
 
     [Fact]
+    public async Task PUT_ImageWithNewAnnotation_PreservesChecklistEntryRelationship()
+    {
+        var imageId = await CreateMaterialAsync(new
+        {
+            name = "Related image",
+            type = "image",
+            annotations = new[] { new { id = "first", text = "First", x = 10, y = 20 } }
+        });
+        var checklistId = await CreateMaterialAsync(new
+        {
+            name = "Checklist with image",
+            type = "checklist",
+            entries = new[]
+            {
+                MaterialFactory.CreateChecklistEntryWithRelated("Entry", "Related image", new List<int> { imageId })
+            }
+        });
+
+        var before = await GetMaterialDetailAsync(checklistId);
+        before.GetProperty("config").GetProperty("entries")[0].GetProperty("related")[0]
+            .GetProperty("id").GetString().Should().Be(imageId.ToString());
+
+        var update = await _client.PutAsJsonAsync($"/api/{TenantName}/materials/{imageId}", new
+        {
+            name = "Related image",
+            type = "image",
+            annotations = new[]
+            {
+                new { id = "first", text = "First", x = 10, y = 20 },
+                new { id = "second", text = "Second", x = 30, y = 40 }
+            }
+        });
+        update.EnsureSuccessStatusCode();
+
+        var image = await GetMaterialDetailAsync(imageId);
+        image.GetProperty("config").GetProperty("annotations").GetArrayLength().Should().Be(2);
+
+        var after = await GetMaterialDetailAsync(checklistId);
+        var related = after.GetProperty("config").GetProperty("entries")[0].GetProperty("related");
+        related.GetArrayLength().Should().Be(1);
+        related[0].GetProperty("id").GetString().Should().Be(imageId.ToString());
+    }
+
+    [Fact]
     public async Task PUT_ChecklistWithRelatedMaterials_UpdatesRelationships()
     {
         // Arrange - Create initial checklist without related materials

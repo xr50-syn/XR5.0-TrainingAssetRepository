@@ -38,6 +38,9 @@ Start with `README.md` and `docs/README.md`. Architecture details are in
 - Use structured logging with semantic placeholders. Do not add emoji to logs
   or source comments.
 - Wrap multi-step persistence changes in a transaction and roll back on failure.
+- Keep the parent row in place in `MaterialServiceBase.UpdateAsync`. Deleting and
+  reinserting it cascades incoming subcomponent relationships, program assignments,
+  and progress records even when the replacement uses the same material ID.
 - Reset seekable upload streams after inspecting magic bytes.
 - Check material hierarchies for cycles before adding relationships.
 - Address stored files by `Asset.ResolvedStorageKey`, never by `Asset.Filename`.

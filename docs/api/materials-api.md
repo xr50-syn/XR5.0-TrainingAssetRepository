@@ -79,6 +79,8 @@ When updating a material with a file:
 ## PUT /api/{tenantName}/materials/{id}
 
 Updates an existing material. The material object should be sent **directly** in the request body (not wrapped).
+Relationships that refer to this material remain attached when it is updated, including
+Checklist Entry `related` links when an Image's annotations change.
 
 ### Common Properties (All Types)
 
