@@ -682,8 +682,8 @@ namespace XR50TrainingAssetRepo.Services.Materials
 
         protected async Task ProcessChildEntitiesAsync(XR50TrainingContext context, Material material)
         {
-            // Child entities are saved via EF Core navigation property cascading
-            // when context.Materials.Add(material) is called before this method.
+            // Child entities are saved before this method: through navigation property
+            // cascading on create, and through AddChildEntries on update.
             // This method logs the child entity counts for diagnostics.
             switch (material)
             {

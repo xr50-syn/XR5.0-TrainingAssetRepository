@@ -13,7 +13,6 @@ namespace XR50TrainingAssetRepo.Services.Materials
         Task<QuizMaterial?> GetWithQuestionsAsync(int id);
         Task<QuizMaterial> CreateAsync(QuizMaterial quiz);
         Task<QuizMaterial> CreateWithQuestionsAsync(QuizMaterial quiz, IEnumerable<QuizQuestion>? questions = null);
-        Task<QuizMaterial> UpdateAsync(QuizMaterial quiz);
         Task<bool> DeleteAsync(int id);
 
         // Question Operations

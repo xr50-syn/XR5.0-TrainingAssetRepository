@@ -13,7 +13,6 @@ namespace XR50TrainingAssetRepo.Services.Materials
         Task<WorkflowMaterial?> GetWithStepsAsync(int id);
         Task<WorkflowMaterial> CreateAsync(WorkflowMaterial workflow);
         Task<WorkflowMaterial> CreateWithStepsAsync(WorkflowMaterial workflow, IEnumerable<WorkflowStep>? steps = null);
-        Task<WorkflowMaterial> UpdateAsync(WorkflowMaterial workflow);
         Task<bool> DeleteAsync(int id);
 
         // Step Operations

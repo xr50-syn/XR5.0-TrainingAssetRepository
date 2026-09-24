@@ -13,7 +13,6 @@ namespace XR50TrainingAssetRepo.Services.Materials
         Task<ImageMaterial?> GetWithAnnotationsAsync(int id);
         Task<ImageMaterial> CreateAsync(ImageMaterial image);
         Task<ImageMaterial> CreateWithAnnotationsAsync(ImageMaterial image, IEnumerable<ImageAnnotation>? annotations = null);
-        Task<ImageMaterial> UpdateAsync(ImageMaterial image);
         Task<bool> DeleteAsync(int id);
 
         // Annotation Operations

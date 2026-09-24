@@ -13,7 +13,6 @@ namespace XR50TrainingAssetRepo.Services.Materials
         Task<ChecklistMaterial?> GetWithEntriesAsync(int id);
         Task<ChecklistMaterial> CreateAsync(ChecklistMaterial checklist);
         Task<ChecklistMaterial> CreateWithEntriesAsync(ChecklistMaterial checklist, IEnumerable<ChecklistEntry>? entries = null);
-        Task<ChecklistMaterial> UpdateAsync(ChecklistMaterial checklist);
         Task<bool> DeleteAsync(int id);
 
         // Entry Operations

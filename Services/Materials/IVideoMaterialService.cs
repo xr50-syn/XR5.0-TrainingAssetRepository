@@ -13,7 +13,6 @@ namespace XR50TrainingAssetRepo.Services.Materials
         Task<VideoMaterial?> GetWithTimestampsAsync(int id);
         Task<VideoMaterial> CreateAsync(VideoMaterial video);
         Task<VideoMaterial> CreateWithTimestampsAsync(VideoMaterial video, IEnumerable<VideoTimestamp>? timestamps = null);
-        Task<VideoMaterial> UpdateAsync(VideoMaterial video);
         Task<bool> DeleteAsync(int id);
 
         // Timestamp Operations
